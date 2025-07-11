@@ -5,6 +5,8 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { connectDB } from './config/database';
 import productRoutes from './routes/productRoutes';
+import authRoutes from './routes/auth';
+import orderRoutes from './routes/orderRoutes';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -37,8 +39,10 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
-// Rutas de la API
+// Rutas
 app.use('/api/products', productRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/orders', orderRoutes);
 
 // Ruta raíz
 app.get('/', (req: Request, res: Response) => {

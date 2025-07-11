@@ -1,10 +1,11 @@
 export interface IProduct {
   id: number;
   name: string;
-  price: number | null;
+  price: number;
   discount: number;
   rating: number | null;
   reviews: number | null;
+  stock: number;
   image: {
     light: string;
     dark: string;
@@ -19,6 +20,7 @@ export interface IProductCreate {
   discount: number;
   rating: number | null;
   reviews: number | null;
+  stock: number;
   image: {
     light: string;
     dark: string;

@@ -1,17 +1,18 @@
 import { Router } from 'express';
 import { ProductController } from '../controllers/productController';
+import { protect, adminOnly } from '../middleware/auth';
 
 const router: Router = Router();
 
-// Ruta de búsqueda debe ir antes que /:id para evitar conflictos
-router.get('/search', ProductController.searchProducts);
+// Rutas públicas (sin autenticación)
+router.get('/search', ProductController.searchProducts);  // Buscar productos
+router.get('/', ProductController.getAllProducts);        // Ver todos los productos
+router.get('/:id', ProductController.getProductById);    // Ver producto específico
 
-// Rutas CRUD básicas
-router.get('/', ProductController.getAllProducts);
-router.get('/:id', ProductController.getProductById);
-router.post('/', ProductController.createProduct);
-router.put('/:id', ProductController.updateProduct);
-router.patch('/:id', ProductController.patchProduct);
-router.delete('/:id', ProductController.deleteProduct);
+// Rutas protegidas (solo administradores)
+router.post('/', protect, adminOnly, ProductController.createProduct);     // Crear producto
+router.put('/:id', protect, adminOnly, ProductController.updateProduct);   // Actualizar producto completo
+router.patch('/:id', protect, adminOnly, ProductController.patchProduct);  // Actualización parcial
+router.delete('/:id', protect, adminOnly, ProductController.deleteProduct);// Eliminar producto
 
 export default router;
