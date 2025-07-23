@@ -17,6 +17,12 @@ export enum PaymentMethod {
 	CASH = 'cash'
 }
 
+// Enum para tipos de envío
+export enum ShippingType {
+	PICKUP = 'pickup',
+	HOME_DELIVERY = 'home_delivery'
+}
+
 // Enum para estados de pago
 export enum PaymentStatus {
 	PENDING = 'Pendiente',
@@ -44,6 +50,17 @@ export interface IShippingAddress {
 	phone?: string;
 }
 
+// Interface para información de envío
+export interface IShippingInfo {
+	type: ShippingType;
+	pickupPoint?: {
+		name: string;
+		address: string;
+	};
+	shippingAddress?: IShippingAddress;
+	cost: number;
+}
+
 // Interface para información de pago
 export interface IPaymentInfo {
 	method: PaymentMethod;
@@ -57,7 +74,7 @@ export interface IPaymentInfo {
 export interface IOrder extends Document {
 	user: mongoose.Types.ObjectId;
 	items: IOrderItem[];
-	shippingAddress: IShippingAddress;
+	shippingInfo: IShippingInfo;
 	paymentInfo: IPaymentInfo;
 	status: OrderStatus;
 	subtotal: number;
@@ -139,6 +156,36 @@ const shippingAddressSchema = new Schema<IShippingAddress>({
 	}
 });
 
+// Schema para información de envío
+const shippingInfoSchema = new Schema<IShippingInfo>({
+	type: {
+		type: String,
+		enum: Object.values(ShippingType),
+		required: true
+	},
+	pickupPoint: {
+		name: {
+			type: String,
+			trim: true
+		},
+		address: {
+			type: String,
+			trim: true
+		}
+	},
+	shippingAddress: {
+		type: shippingAddressSchema,
+		required: function() {
+			return this.type === ShippingType.HOME_DELIVERY;
+		}
+	},
+	cost: {
+		type: Number,
+		required: true,
+		min: 0
+	}
+});
+
 // Schema para información de pago
 const paymentInfoSchema = new Schema<IPaymentInfo>({
 	method: {
@@ -184,8 +231,8 @@ const orderSchema = new Schema<IOrder, IOrderModel>(
 				message: 'La orden debe tener al menos un item'
 			}
 		},
-		shippingAddress: {
-			type: shippingAddressSchema,
+		shippingInfo: {
+			type: shippingInfoSchema,
 			required: true
 		},
 		paymentInfo: {
@@ -250,6 +297,12 @@ orderSchema.pre('save', async function (next) {
 		const random = Math.random().toString(36).substring(2, 8).toUpperCase();
 		this.orderNumber = `EH-${timestamp}-${random}`;
 	}
+	
+	// Validar que el pago en efectivo solo sea permitido con pickup
+	if (this.paymentInfo.method === PaymentMethod.CASH && this.shippingInfo.type !== ShippingType.PICKUP) {
+		return next(new Error('El pago en efectivo solo está disponible para retiro en punto de venta'));
+	}
+	
 	next();
 });
 

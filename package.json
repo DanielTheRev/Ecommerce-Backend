@@ -8,7 +8,8 @@
     "start": "node dist/index.js",
     "build": "tsc",
     "build:watch": "tsc --watch",
-    "seed": "ts-node src/scripts/seedData.ts"
+    "seed": "ts-node src/scripts/seedData.ts",
+    "seedShippingOptions": "ts-node src/scripts/seedShippingOptions.ts"
   },
   "keywords": [
     "nodejs",
