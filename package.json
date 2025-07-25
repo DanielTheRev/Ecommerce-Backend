@@ -9,7 +9,8 @@
     "build": "tsc",
     "build:watch": "tsc --watch",
     "seed": "ts-node src/scripts/seedData.ts",
-    "seedShippingOptions": "ts-node src/scripts/seedShippingOptions.ts"
+    "seedShippingOptions": "ts-node src/scripts/seedShippingOptions.ts",
+    "seedPaymentMethods": "ts-node src/scripts/seedPaymentMethods.ts"
   },
   "keywords": [
     "nodejs",

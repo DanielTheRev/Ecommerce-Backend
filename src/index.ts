@@ -8,6 +8,7 @@ import productRoutes from './routes/productRoutes';
 import authRoutes from './routes/auth';
 import orderRoutes from './routes/orderRoutes';
 import shippingRoutes from './routes/shippingRoutes';
+import paymentMethodRoutes from './routes/paymentMethodRoutes';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -45,6 +46,7 @@ app.use('/api/products', productRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/shipping', shippingRoutes);
+app.use('/api/payment-methods', paymentMethodRoutes);
 
 // Ruta raíz
 app.get('/', (req: Request, res: Response) => {
