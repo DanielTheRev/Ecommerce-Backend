@@ -8,7 +8,7 @@
     "start": "node dist/index.js",
     "build": "tsc",
     "build:watch": "tsc --watch",
-    "seed": "ts-node src/scripts/seedData.ts",
+    "seedProducts": "ts-node src/scripts/seedData.ts",
     "seedShippingOptions": "ts-node src/scripts/seedShippingOptions.ts",
     "seedPaymentMethods": "ts-node src/scripts/seedPaymentMethods.ts"
   },
@@ -29,7 +29,10 @@
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.0.3",
-    "morgan": "^1.10.0"
+    "morgan": "^1.10.0",
+    "ts-lib": "^0.0.5",
+    "tslib": "^2.8.1",
+    "ualabis-nodejs": "^1.0.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

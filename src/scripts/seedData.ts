@@ -177,13 +177,19 @@ const sampleProducts: IProductCreate[] = [
 		features: ['5G', 'Diseño liviano', 'Android 13']
 	}
 ].map((product) => {
-	const dolarHoy = 1280;
-	const comisionMP = 0.922681;
-	const miComision = 10000;
-	product.price = (product.price * dolarHoy + miComision) / comisionMP;
+	const dolarHoy = 1295;
+	const ualaCommission = 0.049;
+	const ualaCommissionWithIVA = ualaCommission * 1.21;
+	const myCommission = 50000;
+
+	const priceInPesos = product.price * dolarHoy;
+	const desiredNeto = priceInPesos + myCommission; // mi monto deseado🫠
+
+	const finalPrice = desiredNeto / (1 - ualaCommissionWithIVA); // Inflamos el precio para que me quede mi monto deseado
+
 	return {
 		...product,
-		price: Math.round(product.price)
+		price: Math.round(finalPrice)
 	};
 });
 

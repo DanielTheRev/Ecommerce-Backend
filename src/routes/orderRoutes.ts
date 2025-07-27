@@ -6,13 +6,15 @@ import {
 	updateOrderStatus,
 	cancelOrder,
 	getAllOrders,
-	getOrderStats
+	getOrderStats,
+	testOrderAndUala
 } from '../controllers/orderController';
 import { protect, adminOnly } from '../middleware/auth';
 
 const router: Router = Router();
 
 // Rutas para usuarios autenticados
+router.post('/test', testOrderAndUala);
 router.post('/', protect, createOrder); // Crear nueva orden
 router.get('/my-orders', protect, getUserOrders); // Obtener órdenes del usuario
 router.get('/:id', protect, getOrderById); // Obtener orden por ID

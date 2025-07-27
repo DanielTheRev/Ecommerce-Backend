@@ -2,6 +2,37 @@ import { Request, Response } from 'express';
 import Order, { OrderStatus, PaymentStatus } from '../models/Order';
 import { Product } from '../models/Product';
 import { AuthRequest } from '../middleware/auth';
+import UalaApiCheckout from 'ualabis-nodejs';
+
+//test
+
+export const testOrderAndUala = async (req: AuthRequest, res: Response) => {
+	const { items, total, shippingMethod, paymentMethod } = req.body as {
+		items: {
+			productId: string;
+			name: string;
+			price: number;
+			quantity: number;
+			image: string;
+		};
+		total: number;
+		shippingMethod: string;
+		paymentMethod: string;
+	};
+	console.log('La compra es de: ', total);
+	const order = await UalaApiCheckout.createOrder({
+		amount: total,
+		callbackSuccess: 'https://www.google.com/search?q=pago+exitoso',
+		callbackFail: 'https://www.google.com/search?q=el+pago+fallo+con+exito',
+		description: 'Orden de prueba'
+		// notificationUrl: 'http://localhost:4200/Checkout'
+	});
+
+	return res.json({
+		message: ' Estamos trabajando en eso',
+		order
+	});
+};
 
 // Crear nueva orden
 export const createOrder = async (req: AuthRequest, res: Response) => {
@@ -88,14 +119,14 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 			.populate('user', 'name email')
 			.populate('items.product', 'name price images');
 
-	return res.status(201).json({
-		message: 'Orden creada exitosamente',
-		order: populatedOrder
-	});
-} catch (error) {
-	console.error('Error al crear orden:', error);
-	return res.status(500).json({ message: 'Error interno del servidor' });
-}
+		return res.status(201).json({
+			message: 'Orden creada exitosamente',
+			order: populatedOrder
+		});
+	} catch (error) {
+		console.error('Error al crear orden:', error);
+		return res.status(500).json({ message: 'Error interno del servidor' });
+	}
 };
 
 // Obtener todas las órdenes del usuario autenticado
@@ -104,17 +135,17 @@ export const getUserOrders = async (req: AuthRequest, res: Response) => {
 		const userId = req.user?.id;
 
 		if (!userId) return res.status(401).json({ message: 'Usuario no autenticado' });
-    
-	const orders = await Order.findByUser(userId);
 
-	return res.json({
-		message: 'Órdenes obtenidas exitosamente',
-		orders
-	});
-} catch (error) {
-	console.error('Error al obtener órdenes del usuario:', error);
-	return res.status(500).json({ message: 'Error interno del servidor' });
-}
+		const orders = await Order.findByUser(userId);
+
+		return res.json({
+			message: 'Órdenes obtenidas exitosamente',
+			orders
+		});
+	} catch (error) {
+		console.error('Error al obtener órdenes del usuario:', error);
+		return res.status(500).json({ message: 'Error interno del servidor' });
+	}
 };
 
 // Obtener una orden específica por ID
@@ -140,14 +171,14 @@ export const getOrderById = async (req: AuthRequest, res: Response) => {
 			return res.status(403).json({ message: 'No tienes permiso para ver esta orden' });
 		}
 
-	return res.json({
-		message: 'Orden obtenida exitosamente',
-		order
-	});
-} catch (error) {
-	console.error('Error al obtener orden por ID:', error);
-	return res.status(500).json({ message: 'Error interno del servidor' });
-}
+		return res.json({
+			message: 'Orden obtenida exitosamente',
+			order
+		});
+	} catch (error) {
+		console.error('Error al obtener orden por ID:', error);
+		return res.status(500).json({ message: 'Error interno del servidor' });
+	}
 };
 
 // Actualizar estado de una orden (solo admin)
@@ -178,14 +209,14 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
 			.populate('user', 'name email')
 			.populate('items.product', 'name price images');
 
-	return res.json({
-		message: 'Estado de orden actualizado exitosamente',
-		order: updatedOrder
-	});
-} catch (error) {
-	console.error('Error al actualizar estado de orden:', error);
-	return res.status(500).json({ message: 'Error interno del servidor' });
-}
+		return res.json({
+			message: 'Estado de orden actualizado exitosamente',
+			order: updatedOrder
+		});
+	} catch (error) {
+		console.error('Error al actualizar estado de orden:', error);
+		return res.status(500).json({ message: 'Error interno del servidor' });
+	}
 };
 
 // Cancelar una orden (solo si está en estado pending)
@@ -233,14 +264,14 @@ export const cancelOrder = async (req: AuthRequest, res: Response) => {
 			.populate('user', 'name email')
 			.populate('items.product', 'name price images');
 
-	return res.json({
-		message: 'Orden cancelada exitosamente',
-		order: updatedOrder
-	});
-} catch (error) {
-	console.error('Error al cancelar orden:', error);
-	return res.status(500).json({ message: 'Error interno del servidor' });
-}
+		return res.json({
+			message: 'Orden cancelada exitosamente',
+			order: updatedOrder
+		});
+	} catch (error) {
+		console.error('Error al cancelar orden:', error);
+		return res.status(500).json({ message: 'Error interno del servidor' });
+	}
 };
 
 // Obtener todas las órdenes (solo admin)
@@ -272,21 +303,21 @@ export const getAllOrders = async (req: AuthRequest, res: Response) => {
 		const totalOrders = await Order.countDocuments(filters);
 		const totalPages = Math.ceil(totalOrders / limitNumber);
 
-	return res.json({
-		message: 'Órdenes obtenidas exitosamente',
-		orders,
-		pagination: {
-			currentPage: pageNumber,
-			totalPages,
-			totalOrders,
-			hasNext: pageNumber < totalPages,
-			hasPrev: pageNumber > 1
-		}
-	});
-} catch (error) {
-	console.error('Error al obtener todas las órdenes:', error);
-	return res.status(500).json({ message: 'Error interno del servidor' });
-}
+		return res.json({
+			message: 'Órdenes obtenidas exitosamente',
+			orders,
+			pagination: {
+				currentPage: pageNumber,
+				totalPages,
+				totalOrders,
+				hasNext: pageNumber < totalPages,
+				hasPrev: pageNumber > 1
+			}
+		});
+	} catch (error) {
+		console.error('Error al obtener todas las órdenes:', error);
+		return res.status(500).json({ message: 'Error interno del servidor' });
+	}
 };
 
 // Obtener estadísticas de órdenes (solo admin)
@@ -318,22 +349,22 @@ export const getOrderStats = async (req: AuthRequest, res: Response) => {
 			])
 		]);
 
-	return res.json({
-		message: 'Estadísticas obtenidas exitosamente',
-		stats: {
-			totalOrders,
-			ordersByStatus: {
-				pending: pendingOrders,
-				processing: processingOrders,
-				shipped: shippedOrders,
-				delivered: deliveredOrders,
-				cancelled: cancelledOrders
-			},
-			totalRevenue: totalRevenue[0]?.total || 0
-		}
-	});
-} catch (error) {
-	console.error('Error al obtener estadísticas:', error);
-	return res.status(500).json({ message: 'Error interno del servidor' });
-}
+		return res.json({
+			message: 'Estadísticas obtenidas exitosamente',
+			stats: {
+				totalOrders,
+				ordersByStatus: {
+					pending: pendingOrders,
+					processing: processingOrders,
+					shipped: shippedOrders,
+					delivered: deliveredOrders,
+					cancelled: cancelledOrders
+				},
+				totalRevenue: totalRevenue[0]?.total || 0
+			}
+		});
+	} catch (error) {
+		console.error('Error al obtener estadísticas:', error);
+		return res.status(500).json({ message: 'Error interno del servidor' });
+	}
 };
