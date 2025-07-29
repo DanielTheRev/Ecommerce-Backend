@@ -3,6 +3,8 @@ import Order, { OrderStatus, PaymentStatus } from '../models/Order';
 import { Product } from '../models/Product';
 import { AuthRequest } from '../middleware/auth';
 import UalaApiCheckout from 'ualabis-nodejs';
+import { IPaymentMethod, PaymentType } from '../models/PaymentMethod';
+import { IShippingOption } from '../models/ShippingOption';
 
 //test
 
@@ -14,17 +16,44 @@ export const testOrderAndUala = async (req: AuthRequest, res: Response) => {
 			price: number;
 			quantity: number;
 			image: string;
-		};
+		}[];
 		total: number;
-		shippingMethod: string;
-		paymentMethod: string;
+		shippingMethod: IShippingOption;
+		paymentMethod: IPaymentMethod;
 	};
-	console.log('La compra es de: ', total);
+
+	const itemsToFind = await Product.find({
+		_id: { $in: items.map((item) => item.productId) }
+	});
+	if (itemsToFind.length <= 0)
+		return res.status(404).json({ message: 'No se encontraron los productos' });
+
+	let amount = 0;
+	let description = '';
+	if (paymentMethod.type == PaymentType.CARD) {
+		itemsToFind.forEach((item) => {
+			amount += item.prices.tarjeta_credito_3_cuotas;
+			const itemInCart = items.find((i) => i.productId === item._id.toString());
+			description += `${item.name} x ${itemInCart?.quantity}, `;
+		});
+	}
+
+	if (
+		paymentMethod.type === PaymentType.ALIAS_TRANSFER ||
+		paymentMethod.type === PaymentType.CASH
+	) {
+		itemsToFind.forEach((item) => {
+			amount += item.prices.efectivo_transferencia;
+			const itemInCart = items.find((i) => i.productId === item._id.toString());
+			description += `${item.name} x ${itemInCart?.quantity}, `;
+		});
+	}
+
 	const order = await UalaApiCheckout.createOrder({
-		amount: total,
+		amount: amount,
 		callbackSuccess: 'https://www.google.com/search?q=pago+exitoso',
 		callbackFail: 'https://www.google.com/search?q=el+pago+fallo+con+exito',
-		description: 'Orden de prueba'
+		description
 		// notificationUrl: 'http://localhost:4200/Checkout'
 	});
 
@@ -73,7 +102,7 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 			const processedItem = {
 				product: product._id,
 				quantity: item.quantity,
-				price: product.price,
+				price: product.prices.efectivo_transferencia,
 				name: product.name,
 				image: product.image
 			};

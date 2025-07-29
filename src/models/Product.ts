@@ -13,11 +13,39 @@ const ProductSchema: Schema = new Schema(
 			trim: true,
 			maxlength: 200
 		},
-		price: {
-			type: Number,
-			required: true,
-			default: 0,
-			min: 10
+		prices: {
+			efectivo_transferencia: {
+				type: Number,
+				required: true,
+				default: 0
+			},
+			tarjeta_credito_debito: {
+				type: Number,
+				required: true,
+				default: 0
+			},
+			tarjeta_credito_3_cuotas: {
+				type: Number,
+				required: true,
+				default: 0
+			},
+			tarjeta_credito_6_cuotas: {
+				type: Number,
+				required: true,
+				default: 0
+			},
+			cuotas: {
+				'3_cuotas_sin_interes': {
+					type: Number,
+					required: true,
+					default: 0
+				},
+				'6_cuotas_sin_interes': {
+					type: Number,
+					required: true,
+					default: 0
+				}
+			}
 		},
 		discount: {
 			type: Number,

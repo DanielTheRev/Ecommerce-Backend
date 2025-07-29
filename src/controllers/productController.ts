@@ -5,13 +5,16 @@ import { IProductCreate, IProductUpdate } from '../types/product.types';
 export class ProductController {
 	// GET /api/products - Obtener todos los productos
 	static async getAllProducts(req: Request, res: Response): Promise<void> {
-		console.log(req.query)
+		console.log(req.query);
 		try {
 			const page = parseInt(req.query.page as string) || 1;
 			const limit = parseInt(req.query.limit as string) || 20;
 			const skip = (page - 1) * limit;
 
-			const products = await Product.find().skip(skip).limit(limit).sort({ createdAt: -1 });
+			const products = await Product.find()
+				.skip(skip)
+				.limit(limit)
+				.sort({ 'prices.efectivo_transferencia': -1 });
 
 			const total = await Product.countDocuments();
 
