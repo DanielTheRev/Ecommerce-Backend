@@ -5,7 +5,7 @@ import { IProductCreate, IProductUpdate } from '../types/product.types';
 export class ProductController {
 	// GET /api/products - Obtener todos los productos
 	static async getAllProducts(req: Request, res: Response): Promise<void> {
-		console.log(req.query);
+		
 		try {
 			const page = parseInt(req.query.page as string) || 1;
 			const limit = parseInt(req.query.limit as string) || 20;
@@ -19,14 +19,14 @@ export class ProductController {
 			const total = await Product.countDocuments();
 
 			// 🔍 Debug: Verificar valores de paginación
-			console.log('📊 Paginación Debug:', {
-				page: page,
-				limit: limit,
-				skip: skip,
-				total: total,
-				totalPages: Math.ceil(total / limit),
-				calculo: `${total} / ${limit} = ${total / limit}`
-			});
+			// console.log('📊 Paginación Debug:', {
+			// 	page: page,
+			// 	limit: limit,
+			// 	skip: skip,
+			// 	total: total,
+			// 	totalPages: Math.ceil(total / limit),
+			// 	calculo: `${total} / ${limit} = ${total / limit}`
+			// });
 
 			res.status(200).json({
 				data: products,
@@ -212,7 +212,6 @@ export class ProductController {
 			if (q) {
 				query.$or = [
 					{ name: { $regex: q, $options: 'i' } },
-					{ features: { $in: [new RegExp(q as string, 'i')] } }
 				];
 			}
 

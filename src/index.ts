@@ -10,6 +10,7 @@ import orderRoutes from './routes/orderRoutes';
 import shippingRoutes from './routes/shippingRoutes';
 import paymentMethodRoutes from './routes/paymentMethodRoutes';
 import { initUalaCheckOut } from './config/ualabis';
+import cookie_parser from 'cookie-parser';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -39,6 +40,7 @@ app.use(
 );
 
 // Middlewares de logging y parsing
+app.use(cookie_parser());
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
