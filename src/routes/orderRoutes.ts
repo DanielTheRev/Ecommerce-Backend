@@ -7,11 +7,16 @@ import {
 	cancelOrder,
 	getAllOrders,
 	getOrderStats,
-	testOrderAndUala
+	testOrderAndUala,
+	ualaWebhook,
+	getNotificationsUala
 } from '../controllers/orderController';
 import { protect, adminOnly } from '../middleware/auth';
 
 const router: Router = Router();
+// uala webhook
+router.post('/ualabis-notification', ualaWebhook);
+router.get('/ualabis-failedNotifications', getNotificationsUala);
 
 // Rutas para usuarios autenticados
 router.post('/test', testOrderAndUala);

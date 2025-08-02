@@ -1,13 +1,22 @@
-import { Request, Response } from 'express';
-import Order, { OrderStatus, PaymentStatus } from '../models/Order';
-import { Product } from '../models/Product';
-import { AuthRequest } from '../middleware/auth';
+import { Response } from 'express';
 import UalaApiCheckout from 'ualabis-nodejs';
-import { IPaymentMethod, PaymentType } from '../models/PaymentMethod';
-import { IShippingOption } from '../models/ShippingOption';
+import { AuthRequest } from '../middleware/auth';
+import Order, { OrderStatus, PaymentStatus } from '../models/Order';
+import { IPaymentMethod } from '../models/PaymentMethod';
+import { Product } from '../models/Product';
+import { IPickupPoint, IShippingOption } from '../models/ShippingOption';
+import { CartService } from '../services/CartService';
 
-//test
+// get notifications uala
 
+export const getNotificationsUala = async (req: AuthRequest, res: Response) => {
+	const notifications = await UalaApiCheckout.getFailedNotifications();
+	return res.json({
+		notifications
+	});
+};
+
+//test uala
 export const testOrderAndUala = async (req: AuthRequest, res: Response) => {
 	const { items, total, shippingMethod, paymentMethod } = req.body as {
 		items: {
@@ -18,49 +27,64 @@ export const testOrderAndUala = async (req: AuthRequest, res: Response) => {
 			image: string;
 		}[];
 		total: number;
-		shippingMethod: IShippingOption;
+		shippingMethod: {
+			type: IShippingOption;
+			pickupPoint: IPickupPoint;
+		};
 		paymentMethod: IPaymentMethod;
 	};
-
 	const itemsToFind = await Product.find({
 		_id: { $in: items.map((item) => item.productId) }
 	});
+
 	if (itemsToFind.length <= 0)
 		return res.status(404).json({ message: 'No se encontraron los productos' });
 
-	let amount = 0;
-	let description = '';
-	if (paymentMethod.type == PaymentType.CARD) {
-		itemsToFind.forEach((item) => {
-			amount += item.prices.tarjeta_credito_3_cuotas;
-			const itemInCart = items.find((i) => i.productId === item._id.toString());
-			description += `${item.name} x ${itemInCart?.quantity}, `;
-		});
-	}
-
-	if (
-		paymentMethod.type === PaymentType.ALIAS_TRANSFER ||
-		paymentMethod.type === PaymentType.CASH
-	) {
-		itemsToFind.forEach((item) => {
-			amount += item.prices.efectivo_transferencia;
-			const itemInCart = items.find((i) => i.productId === item._id.toString());
-			description += `${item.name} x ${itemInCart?.quantity}, `;
-		});
-	}
-
-	const order = await UalaApiCheckout.createOrder({
-		amount: amount,
-		callbackSuccess: 'https://www.google.com/search?q=pago+exitoso',
-		callbackFail: 'https://www.google.com/search?q=el+pago+fallo+con+exito',
-		description
-		// notificationUrl: 'http://localhost:4200/Checkout'
+	const itemsMapped = itemsToFind.map((product) => {
+		const itemInTheCart = items.find((e) => e.productId === product._id.toString());
+		return {
+			data: product,
+			quantity: itemInTheCart?.quantity || 0
+		};
 	});
 
+	let FinalPrice = 0;
+	const isPreferred = CartService.preferredPaymentTypes.includes(paymentMethod.type);
+
+	const PricePreferred = CartService.CalculatePricesWithOutCard(itemsMapped);
+	const PriceWithCard = CartService.CalculatePriceWithCard(itemsMapped);
+	const validate = isPreferred ? PricePreferred : PriceWithCard;
+	FinalPrice = CartService.CalculatePricesWithShipping(validate, shippingMethod.type.cost);
+	console.log({ PricePreferred, PriceWithCard, FinalPrice });
+	const description = CartService.getDescriptionQuantity(itemsMapped);
+
+	console.log(FinalPrice);
+
+	const order = await UalaApiCheckout.createOrder({
+		amount: 10,
+		callbackSuccess:
+			'https://sections-reviewing-relation-spice.trycloudflare.com/compra-completada',
+		callbackFail:
+			'https://www.google.com/search?q=compra+fallida+despegar&rlz=1C1VDKB_esAR1056AR1056&oq=compra+fallida&gs_lcrp=EgZjaHJvbWUqBwgAEAAYgAQyBwgAEAAYgAQyCQgBEEUYORiABDIJCAIQABgKGIAEMgcIAxAAGIAEMgkIBBAAGAoYgAQyCQgFEAAYChiABDIJCAYQABgKGIAEMgkIBxAAGAoYgAQyCQgIEAAYChiABDIJCAkQABgKGIAE0gEIMzEwMmowajeoAgCwAgA&sourceid=chrome&ie=UTF-8',
+		description,
+		notificationUrl:
+			'https://might-darwin-shapes-deeper.trycloudflare.com/api/orders/ualabis-notification'
+	});
+
+	const generatedOrder = await UalaApiCheckout.getOrder(order.uuid);
+
+	console.log(generatedOrder);
 	return res.json({
 		message: ' Estamos trabajando en eso',
 		order
 	});
+};
+
+// Endpoint para que uala me notifique la orden.
+export const ualaWebhook = async (req: AuthRequest, res: Response) => {
+	const data = req.body;
+	console.log('Webhook recibido:', data);
+	return res.sendStatus(200);
 };
 
 // Crear nueva orden

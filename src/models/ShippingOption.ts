@@ -7,7 +7,7 @@ export enum ShippingType {
 }
 
 // Interface para punto de venta
-interface IPickupPoint {
+export interface IPickupPoint {
 	name: string;
 	address: string;
 }

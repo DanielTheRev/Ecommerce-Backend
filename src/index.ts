@@ -23,18 +23,27 @@ const app: Application = express();
 const PORT = process.env.PORT || 3000;
 
 // Middlewares de seguridad
+const allowedOrigins =
+	process.env.NODE_ENV === 'production'
+		? ['https://sections-reviewing-relation-spice.trycloudflare.com']
+		: [
+				'http://localhost:3000',
+				'http://localhost:3001',
+				'http://localhost:5173',
+				'http://localhost:4200',
+				'http://localhost:4000'
+			];
+
 app.use(helmet());
 app.use(
 	cors({
-		origin:
-			process.env.NODE_ENV === 'production'
-				? ['https://tu-dominio.com'] // Cambiar por tu dominio en producción
-				: [
-						'http://localhost:3000',
-						'http://localhost:3001',
-						'http://localhost:5173',
-						'http://localhost:4200'
-				  ], // Puertos comunes para desarrollo
+		origin: (origin, callback) => {
+			if (!origin || allowedOrigins.includes(origin)) {
+				callback(null, true);
+			} else {
+				callback(new Error('ORIGEN NO PERMITIDO POR CORS'));
+			}
+		},
 		credentials: true
 	})
 );
