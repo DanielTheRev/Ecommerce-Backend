@@ -7,7 +7,7 @@ export interface AuthRequest extends Request {
 }
 
 interface JwtPayload {
-	userId: string;
+	userID: string;
 	iat: number;
 	exp: number;
 }
@@ -25,6 +25,7 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
 		else if (req.cookies.token) {
 			token = req.cookies.token;
 		}
+		console.log('El maldito token =>',token)
 
 		// Verificar que existe el token
 		if (!token) {
@@ -37,9 +38,8 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
 		try {
 			// Verificar token
 			const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
-
 			// Buscar usuario actual
-			const user = await User.findById(decoded.userId);
+			const user = await User.findById(decoded.userID);
 
 			if (!user) {
 				return res.status(401).json({
@@ -49,12 +49,12 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
 			}
 
 			// Verificar que el usuario esté activo
-			if (!user.isActive) {
-				return res.status(401).json({
-					success: false,
-					message: 'Usuario inactivo'
-				});
-			}
+			// if (!user.isActive) {
+			// 	return res.status(401).json({
+			// 		success: false,
+			// 		message: 'Usuario inactivo'
+			// 	});
+			// }
 
 			// Agregar usuario a la request
 			req.user = user;
@@ -99,7 +99,7 @@ export const authorize = (...roles: string[]) => {
 export const adminOnly = authorize('admin');
 
 // Middleware para verificar si el usuario es propietario del recurso o admin
-export const ownerOrAdmin = (resourceUserIdField: string = 'userId') => {
+export const ownerOrAdmin = (resourceUserIDField: string = 'userID') => {
 	return (req: AuthRequest, res: Response, next: NextFunction) => {
 		if (!req.user) {
 			return res.status(401).json({
@@ -108,10 +108,10 @@ export const ownerOrAdmin = (resourceUserIdField: string = 'userId') => {
 			});
 		}
 
-		const resourceUserId = req.params[resourceUserIdField] || req.body[resourceUserIdField];
+		const resourceUserID = req.params[resourceUserIDField] || req.body[resourceUserIDField];
 
 		// Si es admin o es el propietario del recurso
-		if (req.user.role === 'admin' || (req.user._id as string).toString() === resourceUserId) {
+		if (req.user.role === 'admin' || (req.user._id as string).toString() === resourceUserID) {
 			return next();
 		}
 
@@ -146,7 +146,7 @@ export const optionalAuth = async (req: AuthRequest, res: Response, next: NextFu
 			const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
 
 			// Buscar usuario actual
-			const user = await User.findById(decoded.userId);
+			const user = await User.findById(decoded.userID);
 
 			if (user && user.isActive) {
 				req.user = user;

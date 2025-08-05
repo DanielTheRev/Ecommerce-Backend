@@ -26,7 +26,6 @@ const getDolarBlue = async () => {
 	}
 };
 
-
 const productsLucho: IProductCreate[] = [
 	// SAMSUNG
 	{
@@ -552,9 +551,12 @@ function createProductsWithPrices(products: IProductCreate[], dolarHoy: number) 
 		const price6Cuotas = priceWithUala * (1 + sixInstallmentsCFT);
 		const cuota3 = price6Cuotas / 3;
 		const cuota6 = price6Cuotas / 6;
+		const discount = basePriceARS - price6Cuotas;
+		const percentage = Math.round((discount / basePriceARS) * 100 * -1);
 
 		return {
 			...product,
+			discount: percentage,
 			prices: {
 				efectivo_transferencia: Math.round(priceWithOutUala),
 				tarjeta_credito_debito: Math.round(price6Cuotas),

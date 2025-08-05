@@ -25,13 +25,14 @@ const PORT = process.env.PORT || 3000;
 // Middlewares de seguridad
 const allowedOrigins =
 	process.env.NODE_ENV === 'production'
-		? ['https://sections-reviewing-relation-spice.trycloudflare.com']
+		? ['https://increasing-contacted-stereo-ou.trycloudflare.com']
 		: [
 				'http://localhost:3000',
 				'http://localhost:3001',
 				'http://localhost:5173',
 				'http://localhost:4200',
-				'http://localhost:4000'
+				'http://localhost:4000',
+				'https://increasing-contacted-stereo-ou.trycloudflare.com'
 			];
 
 app.use(helmet());
@@ -41,6 +42,7 @@ app.use(
 			if (!origin || allowedOrigins.includes(origin)) {
 				callback(null, true);
 			} else {
+				console.log('El origen de la petición => ', origin);
 				callback(new Error('ORIGEN NO PERMITIDO POR CORS'));
 			}
 		},

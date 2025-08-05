@@ -5,7 +5,6 @@ import { IProductCreate, IProductUpdate } from '../types/product.types';
 export class ProductController {
 	// GET /api/products - Obtener todos los productos
 	static async getAllProducts(req: Request, res: Response): Promise<void> {
-		
 		try {
 			const page = parseInt(req.query.page as string) || 1;
 			const limit = parseInt(req.query.limit as string) || 20;
@@ -210,9 +209,7 @@ export class ProductController {
 
 			// Búsqueda por texto
 			if (q) {
-				query.$or = [
-					{ name: { $regex: q, $options: 'i' } },
-				];
+				query.$or = [{ name: { $regex: q, $options: 'i' } }];
 			}
 
 			// Filtros por precio
@@ -227,7 +224,10 @@ export class ProductController {
 				query.rating = { $gte: parseFloat(minRating as string) };
 			}
 
-			const products = await Product.find(query).skip(skip).limit(limit).sort({ createdAt: -1 });
+			const products = await Product.find(query)
+				.skip(skip)
+				.limit(limit)
+				.sort({ 'prices.efectivo_transferencia': -1 });
 
 			const total = await Product.countDocuments(query);
 

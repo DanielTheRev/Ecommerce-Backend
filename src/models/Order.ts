@@ -1,26 +1,14 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema, Document, ObjectId } from 'mongoose';
+import { PaymentType } from './PaymentMethod';
+import { ShippingType } from './ShippingOption';
 
 // Enum para estados de orden
 export enum OrderStatus {
-	PENDING = 'Pendiente',
-	PROCESSING = 'En proceso',
+	PENDING = 'Pendiente de encuentro',
+	PROCESSING_SHIPPING = 'En proceso de envío',
 	SHIPPED = 'Enviado',
 	DELIVERED = 'Entregado',
 	CANCELLED = 'Cancelado'
-}
-
-// Enum para métodos de pago
-export enum PaymentMethod {
-	MERCADOPAGO = 'mercadopago',
-	CREDIT_CARD = 'credit_card',
-	DEBIT_CARD = 'debit_card',
-	CASH = 'cash'
-}
-
-// Enum para tipos de envío
-export enum ShippingType {
-	PICKUP = 'pickup',
-	HOME_DELIVERY = 'home_delivery'
 }
 
 // Enum para estados de pago
@@ -63,7 +51,7 @@ export interface IShippingInfo {
 
 // Interface para información de pago
 export interface IPaymentInfo {
-	method: PaymentMethod;
+	method: PaymentType;
 	status: PaymentStatus;
 	transactionId?: string;
 	paymentDate?: Date;
@@ -77,8 +65,6 @@ export interface IOrder extends Document {
 	shippingInfo: IShippingInfo;
 	paymentInfo: IPaymentInfo;
 	status: OrderStatus;
-	subtotal: number;
-	tax: number;
 	shippingCost: number;
 	total: number;
 	orderNumber: string;
@@ -91,7 +77,7 @@ export interface IOrder extends Document {
 
 // Interface para el modelo con métodos estáticos
 export interface IOrderModel extends mongoose.Model<IOrder> {
-	findByUser(userId: string): Promise<IOrder[]>;
+	findByUser(userId: ObjectId): Promise<IOrder[]>;
 }
 
 // Schema para items de la orden
@@ -173,12 +159,12 @@ const shippingInfoSchema = new Schema<IShippingInfo>({
 			trim: true
 		}
 	},
-	shippingAddress: {
-		type: shippingAddressSchema,
-		required: function() {
-			return this.type === ShippingType.HOME_DELIVERY;
-		}
-	},
+	// shippingAddress: {
+	// 	type: shippingAddressSchema,
+	// 	required: function () {
+	// 		return this.type === ShippingType.HOME_DELIVERY;
+	// 	}
+	// },
 	cost: {
 		type: Number,
 		required: true,
@@ -190,7 +176,7 @@ const shippingInfoSchema = new Schema<IShippingInfo>({
 const paymentInfoSchema = new Schema<IPaymentInfo>({
 	method: {
 		type: String,
-		enum: Object.values(PaymentMethod),
+		enum: Object.values(PaymentType),
 		required: true
 	},
 	status: {
@@ -211,6 +197,19 @@ const paymentInfoSchema = new Schema<IPaymentInfo>({
 		required: true,
 		min: 0
 	}
+});
+paymentInfoSchema.pre('save', function (next) {
+	// Generar transactionId si no existe
+	if (!this.transactionId) {
+		const timestamp = Date.now().toString();
+		const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+		this.transactionId = `TX-${timestamp}-${random}`;
+	}
+	// Guardar la fecha automáticamente si el estado del pago cambia
+	if (this.isModified('status')) {
+		this.paymentDate = new Date();
+	}
+	return next();
 });
 
 // Schema principal de la orden
@@ -242,19 +241,7 @@ const orderSchema = new Schema<IOrder, IOrderModel>(
 		status: {
 			type: String,
 			enum: Object.values(OrderStatus),
-			required: true,
 			default: OrderStatus.PENDING
-		},
-		subtotal: {
-			type: Number,
-			required: true,
-			min: 0
-		},
-		tax: {
-			type: Number,
-			required: true,
-			min: 0,
-			default: 0
 		},
 		shippingCost: {
 			type: Number,
@@ -269,7 +256,6 @@ const orderSchema = new Schema<IOrder, IOrderModel>(
 		},
 		orderNumber: {
 			type: String,
-			required: true,
 			unique: true,
 			trim: true
 		},
@@ -297,12 +283,17 @@ orderSchema.pre('save', async function (next) {
 		const random = Math.random().toString(36).substring(2, 8).toUpperCase();
 		this.orderNumber = `EH-${timestamp}-${random}`;
 	}
-	
+
 	// Validar que el pago en efectivo solo sea permitido con pickup
-	if (this.paymentInfo.method === PaymentMethod.CASH && this.shippingInfo.type !== ShippingType.PICKUP) {
-		return next(new Error('El pago en efectivo solo está disponible para retiro en punto de venta'));
+	if (
+		this.paymentInfo.method === PaymentType.CASH &&
+		this.shippingInfo.type !== ShippingType.PICKUP
+	) {
+		return next(
+			new Error('El pago en efectivo solo está disponible para retiro en punto de venta')
+		);
 	}
-	
+
 	next();
 });
 
@@ -324,10 +315,24 @@ orderSchema.methods.updateStatus = function (newStatus: OrderStatus) {
 };
 
 // Método estático para buscar órdenes por usuario
-orderSchema.statics.findByUser = function (userId: string) {
-	return this.find({ user: userId })
+orderSchema.statics.findByUser = async function (userId: ObjectId, page: number = 1, limit: number = 20) {
+	const skip = (page - 1) * limit;
+	const total = await this.countDocuments();
+	const orders = await this.find({ user: userId })
+		.skip(skip)
+		.limit(limit)
 		.populate('items.product', 'name price images')
 		.sort({ createdAt: -1 });
+		
+		return {
+				data: orders,
+				pagination: {
+					currentPage: page,
+					totalPages: Math.ceil(total / limit),
+					totalItems: total,
+					itemsPerPage: limit
+				}
+			}
 };
 
 export default mongoose.model<IOrder, IOrderModel>('Order', orderSchema) as IOrderModel;

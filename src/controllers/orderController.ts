@@ -1,11 +1,14 @@
 import { Response } from 'express';
+import { ObjectId } from 'mongoose';
 import UalaApiCheckout from 'ualabis-nodejs';
+import { CreateOrderDTO } from '../interfaces/order.interface';
+import { UalaOrderStatus, UalaWebhook } from '../interfaces/ualaWebhook.interface';
 import { AuthRequest } from '../middleware/auth';
 import Order, { OrderStatus, PaymentStatus } from '../models/Order';
-import { IPaymentMethod } from '../models/PaymentMethod';
+import { PaymentType } from '../models/PaymentMethod';
 import { Product } from '../models/Product';
-import { IPickupPoint, IShippingOption } from '../models/ShippingOption';
-import { CartService } from '../services/CartService';
+import { ShippingType } from '../models/ShippingOption';
+import { PaymentService } from '../services/PaymentService';
 
 // get notifications uala
 
@@ -17,102 +20,117 @@ export const getNotificationsUala = async (req: AuthRequest, res: Response) => {
 };
 
 //test uala
-export const testOrderAndUala = async (req: AuthRequest, res: Response) => {
-	const { items, total, shippingMethod, paymentMethod } = req.body as {
-		items: {
-			productId: string;
-			name: string;
-			price: number;
-			quantity: number;
-			image: string;
-		}[];
-		total: number;
-		shippingMethod: {
-			type: IShippingOption;
-			pickupPoint: IPickupPoint;
-		};
-		paymentMethod: IPaymentMethod;
-	};
-	const itemsToFind = await Product.find({
-		_id: { $in: items.map((item) => item.productId) }
-	});
+// export const testOrderAndUala = async (req: AuthRequest, res: Response) => {
+// 	const { items, shippingMethod, paymentMethod } = req.body as {
+// 		items: {
+// 			productId: string;
+// 			name: string;
+// 			price: number;
+// 			quantity: number;
+// 			image: string;
+// 		}[];
+// 		total: number;
+// 		shippingMethod: {
+// 			type: IShippingOption;
+// 			pickupPoint: IPickupPoint;
+// 		};
+// 		paymentMethod: IPaymentMethod;
+// 	};
+// 	const itemsFound = await Product.find({
+// 		_id: { $in: items.map((item) => item.productId) }
+// 	});
 
-	if (itemsToFind.length <= 0)
-		return res.status(404).json({ message: 'No se encontraron los productos' });
+// 	if (itemsFound.length <= 0)
+// 		return res.status(404).json({ message: 'No se encontraron los productos' });
 
-	const itemsMapped = itemsToFind.map((product) => {
-		const itemInTheCart = items.find((e) => e.productId === product._id.toString());
-		return {
-			data: product,
-			quantity: itemInTheCart?.quantity || 0
-		};
-	});
+// 	const itemsMapped = itemsFound.map((product) => {
+// 		const itemInTheCart = items.find((e) => e.productId === product._id.toString());
+// 		return {
+// 			data: product,
+// 			quantity: itemInTheCart?.quantity || 0
+// 		};
+// 	});
 
-	let FinalPrice = 0;
-	const isPreferred = CartService.preferredPaymentTypes.includes(paymentMethod.type);
+// 	const paymentService = new PaymentService(
+// 		itemsMapped,
+// 		paymentMethod.type,
+// 		shippingMethod.type.cost
+// 	);
+// 	const finalCost = paymentService.getFinalCost();
+// 	const description = paymentService.getDescriptionQuantity();
 
-	const PricePreferred = CartService.CalculatePricesWithOutCard(itemsMapped);
-	const PriceWithCard = CartService.CalculatePriceWithCard(itemsMapped);
-	const validate = isPreferred ? PricePreferred : PriceWithCard;
-	FinalPrice = CartService.CalculatePricesWithShipping(validate, shippingMethod.type.cost);
-	console.log({ PricePreferred, PriceWithCard, FinalPrice });
-	const description = CartService.getDescriptionQuantity(itemsMapped);
+// 	const order = await UalaApiCheckout.createOrder({
+// 		amount: 10,
+// 		callbackSuccess:
+// 			'https://sections-reviewing-relation-spice.trycloudflare.com/compra-completada',
+// 		callbackFail:
+// 			'https://www.google.com/search?q=compra+fallida+despegar&rlz=1C1VDKB_esAR1056AR1056&oq=compra+fallida&gs_lcrp=EgZjaHJvbWUqBwgAEAAYgAQyBwgAEAAYgAQyCQgBEEUYORiABDIJCAIQABgKGIAEMgcIAxAAGIAEMgkIBBAAGAoYgAQyCQgFEAAYChiABDIJCAYQABgKGIAEMgkIBxAAGAoYgAQyCQgIEAAYChiABDIJCAkQABgKGIAE0gEIMzEwMmowajeoAgCwAgA&sourceid=chrome&ie=UTF-8',
+// 		description,
+// 		notificationUrl:
+// 			'https://might-darwin-shapes-deeper.trycloudflare.com/api/orders/ualabis-notification'
+// 	});
 
-	console.log(FinalPrice);
+// 	const generatedOrder = await UalaApiCheckout.getOrder(order.uuid);
 
-	const order = await UalaApiCheckout.createOrder({
-		amount: 10,
-		callbackSuccess:
-			'https://sections-reviewing-relation-spice.trycloudflare.com/compra-completada',
-		callbackFail:
-			'https://www.google.com/search?q=compra+fallida+despegar&rlz=1C1VDKB_esAR1056AR1056&oq=compra+fallida&gs_lcrp=EgZjaHJvbWUqBwgAEAAYgAQyBwgAEAAYgAQyCQgBEEUYORiABDIJCAIQABgKGIAEMgcIAxAAGIAEMgkIBBAAGAoYgAQyCQgFEAAYChiABDIJCAYQABgKGIAEMgkIBxAAGAoYgAQyCQgIEAAYChiABDIJCAkQABgKGIAE0gEIMzEwMmowajeoAgCwAgA&sourceid=chrome&ie=UTF-8',
-		description,
-		notificationUrl:
-			'https://might-darwin-shapes-deeper.trycloudflare.com/api/orders/ualabis-notification'
-	});
-
-	const generatedOrder = await UalaApiCheckout.getOrder(order.uuid);
-
-	console.log(generatedOrder);
-	return res.json({
-		message: ' Estamos trabajando en eso',
-		order
-	});
-};
+// 	console.log(generatedOrder);
+// 	return res.json({
+// 		message: ' Estamos trabajando en eso',
+// 		order
+// 	});
+// };
 
 // Endpoint para que uala me notifique la orden.
 export const ualaWebhook = async (req: AuthRequest, res: Response) => {
-	const data = req.body;
-	console.log('Webhook recibido:', data);
+	console.log('Se recibió un notificación de uala biss');
+	const data = req.body as UalaWebhook;
+	const id = req.query.id;
+	const order = await Order.findById(id);
+	if (!order) {
+		console.log('ERROR AL ACTUALIZAR PAGO DE UNA ORDEN, NO SE ENCONTRÓ');
+		console.log('ID de la orden =>', id);
+		return res.status(200);
+	}
+	if (data.status === UalaOrderStatus.Aprobado) {
+		order.paymentInfo.status = PaymentStatus.APPROVED;
+	} else {
+		order.paymentInfo.status = PaymentStatus.REJECTED;
+	}
+	await order.save();
 	return res.sendStatus(200);
 };
 
 // Crear nueva orden
 export const createOrder = async (req: AuthRequest, res: Response) => {
 	try {
-		const { items, shippingAddress, paymentInfo, notes } = req.body;
+		const { items, shippingMethod, paymentMethod } = req.body as CreateOrderDTO;
 		const userId = req.user?.id;
 
 		if (!userId) {
 			return res.status(401).json({ message: 'Usuario no autenticado' });
 		}
 
-		// Validar que los items no estén vacíos
+		// Validar que los items del carrito no estén vacíos
 		if (!items || items.length === 0) {
-			return res.status(400).json({ message: 'La orden debe tener al menos un item' });
+			return res.status(400).json({ message: 'La orden debe tener al menos un producto' });
 		}
 
-		// Validar y procesar items
-		const processedItems = [];
-		let subtotal = 0;
+		// Validar precios y procesar items del carrito
+		let itemsFound = await Product.find({
+			_id: { $in: items.map((item) => item.productId) }
+		});
+
+		if (itemsFound.length <= 0)
+			return res
+				.status(500)
+				.json({ message: 'Hubo un error en el servidor, le pedimos disculpas' });
 
 		for (const item of items) {
 			// Verificar que el producto existe
-			const product = await Product.findById(item.product);
+			const product = await Product.findById(item.productId);
 			if (!product) {
 				return res
 					.status(404)
-					.json({ message: `Producto con ID ${item.product} no encontrado` });
+					.json({ message: `Producto con el nombre ${item.name} no encontrado` });
 			}
 
 			// Verificar stock disponible
@@ -121,45 +139,59 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 					message: `Stock insuficiente para ${product.name}. Disponible: ${product.stock}, Solicitado: ${item.quantity}`
 				});
 			}
-
-			// Crear item procesado con datos actuales del producto
-			const processedItem = {
-				product: product._id,
-				quantity: item.quantity,
-				price: product.prices.efectivo_transferencia,
-				name: product.name,
-				image: product.image
-			};
-
-			processedItems.push(processedItem);
-			subtotal += processedItem.price * processedItem.quantity;
 		}
 
-		// Calcular impuestos y envío (puedes personalizar esta lógica)
-		const tax = subtotal * 0.21; // 21% IVA en Argentina
-		const shippingCost = subtotal > 50000 ? 0 : 5000; // Envío gratis para compras mayores a $50,000
-		const total = subtotal + tax + shippingCost;
+		const itemsFormat = itemsFound.map((product) => {
+			const itemInTheCart = items.find((e) => e.productId === product._id.toString());
+			return {
+				data: product,
+				quantity: itemInTheCart?.quantity || 0
+			};
+		});
+
+		const paymentService = new PaymentService(
+			itemsFormat,
+			paymentMethod.type,
+			shippingMethod.type.cost
+		);
+
+		const status =
+			shippingMethod.type.type === ShippingType.HOME_DELIVERY
+				? OrderStatus.PROCESSING_SHIPPING
+				: OrderStatus.PENDING;
 
 		// Crear la orden
 		const order = new Order({
 			user: userId,
-			items: processedItems,
-			shippingAddress,
-			paymentInfo: {
-				...paymentInfo,
-				amount: total
+			status,
+			items: paymentService.getOrderProcessedItems(),
+			shippingInfo: {
+				type: shippingMethod.type.type,
+				pickupPoint: shippingMethod.pickupPoint,
+				cost: shippingMethod.type.cost
 			},
-			subtotal,
-			tax,
-			shippingCost,
-			total,
-			notes
+			paymentInfo: {
+				method: paymentMethod.type,
+				amount: paymentService.getFinalCost()
+			},
+			total: paymentService.getFinalCost()
+			// notes
 		});
+
+		let extras;
+		if (paymentMethod.type === PaymentType.CARD) {
+			const { ualaOrder, error } = await paymentService.withUalaBiss(order.id);
+			order.paymentInfo.transactionId = ualaOrder?.uuid || '';
+			if (error) {
+				return res.status(500).json({ message: 'Error al procesar el pago' });
+			}
+			extras = ualaOrder;
+		}
 
 		await order.save();
 
 		// Reducir stock de productos
-		for (const item of processedItems) {
+		for (const item of paymentService.getOrderProcessedItems()) {
 			await Product.findByIdAndUpdate(
 				item.product,
 				{ $inc: { stock: -item.quantity } },
@@ -174,7 +206,8 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 
 		return res.status(201).json({
 			message: 'Orden creada exitosamente',
-			order: populatedOrder
+			order: populatedOrder,
+			extras
 		});
 	} catch (error) {
 		console.error('Error al crear orden:', error);
@@ -185,15 +218,14 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 // Obtener todas las órdenes del usuario autenticado
 export const getUserOrders = async (req: AuthRequest, res: Response) => {
 	try {
-		const userId = req.user?.id;
+		const user = req.user;
+		if (!user) return res.status(401).json({ message: 'Usuario no autenticado' });
 
-		if (!userId) return res.status(401).json({ message: 'Usuario no autenticado' });
-
-		const orders = await Order.findByUser(userId);
+		const orders = await Order.findByUser(user._id as ObjectId);
 
 		return res.json({
 			message: 'Órdenes obtenidas exitosamente',
-			orders
+			orders: orders
 		});
 	} catch (error) {
 		console.error('Error al obtener órdenes del usuario:', error);
@@ -211,9 +243,7 @@ export const getOrderById = async (req: AuthRequest, res: Response) => {
 			return res.status(401).json({ message: 'Usuario no autenticado' });
 		}
 
-		const order = await Order.findById(id)
-			.populate('user', 'name email')
-			.populate('items.product', 'name price images');
+		const order = await Order.findById(id);
 
 		if (!order) {
 			return res.status(404).json({ message: 'Orden no encontrada' });
@@ -268,6 +298,39 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
 		});
 	} catch (error) {
 		console.error('Error al actualizar estado de orden:', error);
+		return res.status(500).json({ message: 'Error interno del servidor' });
+	}
+};
+
+// Actualizar estado del pago de una order(client)
+export const updatePaymentStatus = async (req: AuthRequest, res: Response) => {
+	try {
+		const { orderID } = req.body;
+		if (!orderID) return res.status(500).json({ message: 'no orderID found' });
+
+		const ualaOrder = await PaymentService.getOrderStatus(orderID);
+		if (ualaOrder.error) {
+			return res.status(500).json({ message: 'Error al actualizar estado de pago' });
+		}
+		console.log('orden de uala', ualaOrder);
+
+		const order = await Order.findOne({
+			'paymentInfo.transactionId': orderID
+		});
+		if (!order) {
+			return res.status(404).json({ message: 'Orden no encontrada' });
+		}
+
+		order.paymentInfo.status =
+			ualaOrder.orderStatus?.status === UalaOrderStatus.Aprobado
+				? PaymentStatus.APPROVED
+				: PaymentStatus.REJECTED;
+
+		await order.save();
+
+		return res.status(200).json({ message: 'Estado de pago actualizado exitosamente' });
+	} catch (error) {
+		console.error('Error al actualizar estado de pago:', error);
 		return res.status(500).json({ message: 'Error interno del servidor' });
 	}
 };
@@ -392,7 +455,7 @@ export const getOrderStats = async (req: AuthRequest, res: Response) => {
 		] = await Promise.all([
 			Order.countDocuments(),
 			Order.countDocuments({ status: OrderStatus.PENDING }),
-			Order.countDocuments({ status: OrderStatus.PROCESSING }),
+			Order.countDocuments({ status: OrderStatus.PROCESSING_SHIPPING }),
 			Order.countDocuments({ status: OrderStatus.SHIPPED }),
 			Order.countDocuments({ status: OrderStatus.DELIVERED }),
 			Order.countDocuments({ status: OrderStatus.CANCELLED }),

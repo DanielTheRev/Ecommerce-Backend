@@ -1,17 +1,17 @@
-import express, { Router } from 'express';
+import { Router } from 'express';
 import {
-	createOrder,
-	getUserOrders,
-	getOrderById,
-	updateOrderStatus,
 	cancelOrder,
+	createOrder,
 	getAllOrders,
+	getNotificationsUala,
+	getOrderById,
 	getOrderStats,
-	testOrderAndUala,
+	getUserOrders,
 	ualaWebhook,
-	getNotificationsUala
+	updateOrderStatus,
+	updatePaymentStatus
 } from '../controllers/orderController';
-import { protect, adminOnly } from '../middleware/auth';
+import { adminOnly, protect } from '../middleware/auth';
 
 const router: Router = Router();
 // uala webhook
@@ -19,8 +19,8 @@ router.post('/ualabis-notification', ualaWebhook);
 router.get('/ualabis-failedNotifications', getNotificationsUala);
 
 // Rutas para usuarios autenticados
-router.post('/test', testOrderAndUala);
 router.post('/', protect, createOrder); // Crear nueva orden
+router.post('/updatePaymentStatus/:orderID', protect, updatePaymentStatus); // actualizar estado de una order desde el cliente
 router.get('/my-orders', protect, getUserOrders); // Obtener órdenes del usuario
 router.get('/:id', protect, getOrderById); // Obtener orden por ID
 router.put('/:id/cancel', protect, cancelOrder); // Cancelar orden

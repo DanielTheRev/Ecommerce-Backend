@@ -55,7 +55,6 @@ async function verify(token: string) {
 		audience: CLIENT_ID
 	});
 	const payload = ticket.getPayload();
-	console.log(payload);
 	return payload;
 }
 
