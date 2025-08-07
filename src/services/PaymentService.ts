@@ -53,7 +53,8 @@ export class PaymentService {
 			price: this.isPreferredPaymentType
 				? item.data.prices.efectivo_transferencia
 				: item.data.prices.tarjeta_credito_debito,
-			name: item.data.name,
+			name: item.data.brand + ' ' + item.data.model,
+
 			image: item.data.image.dark
 		}));
 	}

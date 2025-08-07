@@ -25,14 +25,13 @@ const PORT = process.env.PORT || 3000;
 // Middlewares de seguridad
 const allowedOrigins =
 	process.env.NODE_ENV === 'production'
-		? ['https://increasing-contacted-stereo-ou.trycloudflare.com']
+		? ['https://recognised-norwegian-quiz-lightbox.trycloudflare.com']
 		: [
 				'http://localhost:3000',
 				'http://localhost:3001',
 				'http://localhost:5173',
 				'http://localhost:4200',
-				'http://localhost:4000',
-				'https://increasing-contacted-stereo-ou.trycloudflare.com'
+				'http://localhost:4000'
 			];
 
 app.use(helmet());

@@ -1,6 +1,10 @@
 export interface IProduct {
 	id: number;
-	name: string;
+	slug: string;
+	shortDescription: string;
+	largeDescription: string;
+	brand: string;
+	model: string;
 	prices: {
 		efectivo_transferencia: number;
 		tarjeta_credito_debito: number;
@@ -24,7 +28,11 @@ export interface IProduct {
 
 export interface IProductCreate {
 	_id?: string;
-	name: string;
+	shortDescription: string;
+	largeDescription: string;
+	brand: string;
+	model: string;
+	slug?: string;
 	price: number;
 	discount: number;
 	rating: number;

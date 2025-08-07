@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import { getUserProfile, loginUserWithGoogle, logout } from '../controllers/authController';
-import { protect } from '../middleware/auth';
 
 const router: Router = Router();
 

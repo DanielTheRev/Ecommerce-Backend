@@ -1,18 +1,38 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import { IProduct } from '../types/product.types';
+import slugify from 'slugify';
 
-export interface IProductDocument extends Omit<IProduct, 'id'>, Document {
+export interface IProductDocument extends Document, Omit<IProduct, 'id' | 'model'> {
 	_id: mongoose.Types.ObjectId;
 }
 
-const ProductSchema: Schema = new Schema(
+const ProductSchema: Schema = new Schema<IProduct>(
 	{
-		name: {
+		brand: {
 			type: String,
 			required: true,
 			trim: true,
 			maxlength: 200
 		},
+		model: {
+			type: String,
+			required: true,
+			trim: true,
+			maxlength: 200
+		},
+		shortDescription: {
+			type: String,
+			required: true,
+			trim: true,
+			maxlength: 200
+		},
+		largeDescription: {
+			type: String,
+			required: true,
+			trim: true,
+			maxlength: 200
+		},
+		slug: { type: String, unique: true },
 		prices: {
 			efectivo_transferencia: {
 				type: Number,
@@ -95,6 +115,12 @@ const ProductSchema: Schema = new Schema(
 		versionKey: false
 	}
 );
+ProductSchema.pre('save', function (next) {
+	if (this.isModified('brand') || this.isModified('model') || this.slug === null || this.slug === undefined) {
+		this.slug = slugify(this.brand + ' ' + this.model as string, { lower: true, strict: true });
+	}
+	next();
+});
 
 // Índices para mejorar el rendimiento
 ProductSchema.index({ name: 1 });

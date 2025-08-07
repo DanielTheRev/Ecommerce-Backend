@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { User, IUser, Role } from '../models/User';
 import { OAuth2Client } from 'google-auth-library';
+import { AdminUsers, IAdminUser } from '../models/AdminUser';
 
 const CLIENT_ID = '454689294878-lkugek83r3g7ot0vurcpumoc1rr8fd66.apps.googleusercontent.com';
 const client = new OAuth2Client(CLIENT_ID);
@@ -9,6 +10,14 @@ const client = new OAuth2Client(CLIENT_ID);
 interface AuthRequest extends Request {
 	user?: IUser;
 }
+
+const cookieOptions = {
+	expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 días
+	httpOnly: true,
+	secure: true,
+	// sameSite: 'strict' as const
+	sameSite: 'none' as const
+};
 
 // Función para generar JWT
 const generateToken = (userID: string): string => {
@@ -18,33 +27,37 @@ const generateToken = (userID: string): string => {
 };
 
 // Función para enviar respuesta con token
-const sendTokenResponse = (user: IUser, statusCode: number, res: Response) => {
-	const token = generateToken(user._id as string);
-
-	// Opciones de cookie
-	const options = {
-		expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 días
-		httpOnly: true,
-		secure: process.env.NODE_ENV === 'production',
-		// sameSite: 'strict' as const
-		sameSite: "none" as const
+const sendTokenResponse = (
+	statusCode: number,
+	res: Response,
+	user?: IUser,
+	userAdmin?: IAdminUser
+) => {
+	const _user = {
+		id: user?._id,
+		name: user?.name,
+		email: user?.email,
+		role: user?.role,
+		isActive: user?.isActive,
+		createdAt: user?.createdAt,
+		updatedAt: user?.updatedAt
+	};
+	const _userAdmin = {
+		id: userAdmin?._id,
+		name: userAdmin?.name,
+		email: userAdmin?.email,
+		role: userAdmin?.role
 	};
 
+	const _userData = userAdmin ? _userAdmin : _user;
+	const token = generateToken(user!._id as string);
 	return res
 		.status(statusCode)
-		.cookie('token', token, options)
+		.cookie('token', token, cookieOptions)
 		.json({
 			success: true,
 			message: statusCode === 201 ? 'Usuario registrado exitosamente' : 'Login exitoso',
-			user: {
-				id: user._id,
-				name: user.name,
-				email: user.email,
-				role: user.role,
-				isActive: user.isActive,
-				createdAt: user.createdAt,
-				updatedAt: user.updatedAt
-			}
+			user: _userData
 		});
 };
 
@@ -76,12 +89,13 @@ export const loginUserWithGoogle = async (req: Request, res: Response) => {
 			message: 'Token inválido'
 		});
 
+	console.log(userData);
 	const { name, email, sub: googleID, picture } = userData;
 
 	// Verificar si el usuario ya existe
 	const existingUser = await User.findOne({ googleID, email });
 	if (existingUser) {
-		return sendTokenResponse(existingUser, 200, res);
+		return sendTokenResponse(200, res, existingUser);
 	}
 
 	// Crear usuario
@@ -95,7 +109,17 @@ export const loginUserWithGoogle = async (req: Request, res: Response) => {
 	});
 	await user.save();
 
-	return sendTokenResponse(user, 201, res);
+	return sendTokenResponse(201, res, user);
+};
+
+export const LoginAdmin = async (req: Request, res: Response) => {
+	const data = req.body as { email: string; password: string };
+	const { email, password } = data;
+	const admin = await AdminUsers.findOne({ email });
+	if (!admin) return res.status(401).json({ message: 'Invalid credentials' });
+	const isMatch = await admin.comparePassword(password);
+	if (!isMatch) return res.status(401).json({ message: 'Invalid credentials' });
+	return sendTokenResponse(200, res, undefined, admin);
 };
 
 // @desc    Obtener usuario actual
@@ -138,6 +162,9 @@ export const loginUserWithGoogle = async (req: Request, res: Response) => {
 export const getUserProfile = async (req: Request, res: Response) => {
 	const { token: token } = req.cookies as { token: string };
 
+	console.log('getUserProfile');
+	console.log(token);
+
 	if (!token) return res.status(401).json({ message: 'no token provided' });
 	try {
 		const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userID: string };
@@ -159,10 +186,7 @@ export const getUserProfile = async (req: Request, res: Response) => {
 // @access  Private
 export const logout = async (req: Request, res: Response) => {
 	try {
-		res.cookie('token', 'none', {
-			expires: new Date(Date.now() + 10 * 1000), // 10 segundos
-			httpOnly: true
-		});
+		res.cookie('token', 'none', cookieOptions);
 
 		return res.status(200).json({
 			success: true,

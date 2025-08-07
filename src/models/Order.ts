@@ -315,24 +315,28 @@ orderSchema.methods.updateStatus = function (newStatus: OrderStatus) {
 };
 
 // Método estático para buscar órdenes por usuario
-orderSchema.statics.findByUser = async function (userId: ObjectId, page: number = 1, limit: number = 20) {
+orderSchema.statics.findByUser = async function (
+	userId: ObjectId,
+	page: number = 1,
+	limit: number = 20
+) {
 	const skip = (page - 1) * limit;
-	const total = await this.countDocuments();
 	const orders = await this.find({ user: userId })
 		.skip(skip)
 		.limit(limit)
 		.populate('items.product', 'name price images')
 		.sort({ createdAt: -1 });
-		
-		return {
-				data: orders,
-				pagination: {
-					currentPage: page,
-					totalPages: Math.ceil(total / limit),
-					totalItems: total,
-					itemsPerPage: limit
-				}
-			}
+
+	const total = await orders.length;
+	return {
+		data: orders,
+		pagination: {
+			currentPage: page,
+			totalPages: Math.ceil(total / limit),
+			totalItems: total,
+			itemsPerPage: limit
+		}
+	};
 };
 
 export default mongoose.model<IOrder, IOrderModel>('Order', orderSchema) as IOrderModel;

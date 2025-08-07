@@ -13,7 +13,11 @@ interface JwtPayload {
 }
 
 // Middleware para proteger rutas
-export const protect = async (req: AuthRequest, res: Response, next: NextFunction): Promise<Response | void> => {
+export const protect = async (
+	req: AuthRequest,
+	res: Response,
+	next: NextFunction
+): Promise<Response | void> => {
 	try {
 		let token: string | undefined;
 
@@ -25,7 +29,6 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
 		else if (req.cookies.token) {
 			token = req.cookies.token;
 		}
-		console.log('El maldito token =>',token)
 
 		// Verificar que existe el token
 		if (!token) {
@@ -47,14 +50,6 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
 					message: 'Usuario no encontrado'
 				});
 			}
-
-			// Verificar que el usuario esté activo
-			// if (!user.isActive) {
-			// 	return res.status(401).json({
-			// 		success: false,
-			// 		message: 'Usuario inactivo'
-			// 	});
-			// }
 
 			// Agregar usuario a la request
 			req.user = user;

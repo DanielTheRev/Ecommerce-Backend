@@ -136,7 +136,8 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 			// Verificar stock disponible
 			if (product.stock < item.quantity) {
 				return res.status(400).json({
-					message: `Stock insuficiente para ${product.name}. Disponible: ${product.stock}, Solicitado: ${item.quantity}`
+					message: `Stock insuficiente para ${product.brand} ${product.model}. Disponible: ${product.stock}, Solicitado: ${item.quantity}`
+
 				});
 			}
 		}
@@ -409,7 +410,7 @@ export const getAllOrders = async (req: AuthRequest, res: Response) => {
 
 		// Obtener órdenes con paginación
 		const orders = await Order.find(filters)
-			.populate('user', 'name email')
+			.populate('user', 'name email profilePhoto')
 			.populate('items.product', 'name price images')
 			.sort({ createdAt: -1 })
 			.limit(limitNumber)

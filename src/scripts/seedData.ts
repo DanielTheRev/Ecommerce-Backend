@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import { Product } from '../models/Product';
 import { IProductCreate } from '../types/product.types';
+import slugify from 'slugify';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -29,8 +30,11 @@ const getDolarBlue = async () => {
 const productsLucho: IProductCreate[] = [
 	// SAMSUNG
 	{
-		name: 'Samsung A16 4/128',
-		price: 222999 / 1295,
+		price: 222999 / 1350,
+		model: 'A16',
+		brand: 'Samsung',
+		shortDescription: 'Samsung A16 4/128',
+		largeDescription: 'Samsung A16 4/128',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -42,8 +46,11 @@ const productsLucho: IProductCreate[] = [
 		features: ['4GB RAM', '128GB almacenamiento']
 	},
 	{
-		name: 'Samsung A16 6/128',
-		price: 255999 / 1295,
+		price: 255999 / 1350,
+		model: 'A16',
+		brand: 'Samsung',
+		shortDescription: 'Samsung A16 6/128',
+		largeDescription: 'Samsung A16 6/128',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -55,8 +62,11 @@ const productsLucho: IProductCreate[] = [
 		features: ['6GB RAM', '128GB almacenamiento']
 	},
 	{
-		name: 'Samsung A16 8/256',
-		price: 277000 / 1295,
+		price: 277000 / 1350,
+		model: 'A16',
+		brand: 'Samsung',
+		shortDescription: 'Samsung A16 8/256',
+		largeDescription: 'Samsung A16 8/256',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -68,8 +78,11 @@ const productsLucho: IProductCreate[] = [
 		features: ['8GB RAM', '256GB almacenamiento']
 	},
 	{
-		name: 'Samsung A26 8/256',
-		price: 380999 / 1295,
+		price: 380999 / 1350,
+		model: 'A26',
+		brand: 'Samsung',
+		shortDescription: 'Samsung A26 8/256',
+		largeDescription: 'Samsung A26 8/256',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -81,8 +94,11 @@ const productsLucho: IProductCreate[] = [
 		features: ['8GB RAM', '256GB almacenamiento']
 	},
 	{
-		name: 'Samsung A06 4/64',
-		price: 151500 / 1295,
+		price: 151500 / 1350,
+		model: 'A06',
+		brand: 'Samsung',
+		shortDescription: 'Samsung A06 4/64',
+		largeDescription: 'Samsung A06 4/64',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -94,8 +110,11 @@ const productsLucho: IProductCreate[] = [
 		features: ['4GB RAM', '64GB almacenamiento']
 	},
 	{
-		name: 'Samsung A06 4/128',
-		price: 174000 / 1295,
+		price: 174000 / 1350,
+		model: 'A06',
+		brand: 'Samsung',
+		shortDescription: 'Samsung A06 4/128',
+		largeDescription: 'Samsung A06 4/128',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -109,8 +128,11 @@ const productsLucho: IProductCreate[] = [
 
 	// MOTOROLA
 	{
-		name: 'Motorola E15 2/64',
-		price: 134999 / 1295,
+		price: 134999 / 1350,
+		model: 'E15',
+		brand: 'Motorola',
+		shortDescription: 'Motorola E15 2/64',
+		largeDescription: 'Motorola E15 2/64',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -122,8 +144,11 @@ const productsLucho: IProductCreate[] = [
 		features: ['2GB RAM', '64GB almacenamiento']
 	},
 	{
-		name: 'Motorola G05 4/128',
-		price: 167999 / 1295,
+		price: 167999 / 1350,
+		model: 'G05',
+		brand: 'Motorola',
+		shortDescription: 'Motorola G05 4/128',
+		largeDescription: 'Motorola G05 4/128',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -135,8 +160,11 @@ const productsLucho: IProductCreate[] = [
 		features: ['4GB RAM', '128GB almacenamiento']
 	},
 	{
-		name: 'Motorola G15 4/128',
-		price: 186499 / 1295,
+		price: 186499 / 1350,
+		model: 'G15',
+		brand: 'Motorola',
+		shortDescription: 'Motorola G15 4/128',
+		largeDescription: 'Motorola G15 4/128',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -148,8 +176,11 @@ const productsLucho: IProductCreate[] = [
 		features: ['4GB RAM', '128GB almacenamiento']
 	},
 	{
-		name: 'Motorola G15 4/256',
-		price: 205999 / 1295,
+		price: 205999 / 1350,
+		model: 'G15',
+		brand: 'Motorola',
+		shortDescription: 'Motorola G15 4/256',
+		largeDescription: 'Motorola G15 4/256',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -161,8 +192,11 @@ const productsLucho: IProductCreate[] = [
 		features: ['4GB RAM', '256GB almacenamiento']
 	},
 	{
-		name: 'Motorola G35 4/256',
-		price: 231999 / 1295,
+		price: 231999 / 1350,
+		model: 'G35',
+		brand: 'Motorola',
+		shortDescription: 'Motorola G35 4/256',
+		largeDescription: 'Motorola G35 4/256',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -174,8 +208,11 @@ const productsLucho: IProductCreate[] = [
 		features: ['4GB RAM', '256GB almacenamiento']
 	},
 	{
-		name: 'Motorola G55 5G 8/256',
-		price: 299499 / 1295,
+		price: 299499 / 1350,
+		model: 'G55',
+		brand: 'Motorola',
+		shortDescription: 'Motorola G55 5G 8/256',
+		largeDescription: 'Motorola G55 5G 8/256',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -187,8 +224,11 @@ const productsLucho: IProductCreate[] = [
 		features: ['8GB RAM', '256GB almacenamiento', '5G']
 	},
 	{
-		name: 'Motorola G84 5G 8/256',
-		price: 297999 / 1295,
+		price: 297999 / 1350,
+		model: 'G84',
+		brand: 'Motorola',
+		shortDescription: 'Motorola G84 5G 8/256',
+		largeDescription: 'Motorola G84 5G 8/256',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -202,8 +242,11 @@ const productsLucho: IProductCreate[] = [
 
 	// XIAOMI
 	{
-		name: 'Xiaomi A5 4/128',
-		price: 152500 / 1295,
+		price: 152500 / 1350,
+		model: 'A5',
+		brand: 'Xiaomi',
+		shortDescription: 'Xiaomi A5 4/128',
+		largeDescription: 'Xiaomi A5 4/128',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -215,8 +258,11 @@ const productsLucho: IProductCreate[] = [
 		features: ['4GB RAM', '128GB almacenamiento']
 	},
 	{
-		name: 'Xiaomi 14C 4/128',
-		price: 175000 / 1295,
+		price: 175000 / 1350,
+		model: '14C',
+		brand: 'Xiaomi',
+		shortDescription: 'Xiaomi 14C 4/128',
+		largeDescription: 'Xiaomi 14C 4/128',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -228,8 +274,11 @@ const productsLucho: IProductCreate[] = [
 		features: ['4GB RAM', '128GB almacenamiento']
 	},
 	{
-		name: 'Xiaomi 14C 4/256',
-		price: 188000 / 1295,
+		price: 188000 / 1350,
+		model: '14C',
+		brand: 'Xiaomi',
+		shortDescription: 'Xiaomi 14C 4/256',
+		largeDescription: 'Xiaomi 14C 4/256',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -241,8 +290,11 @@ const productsLucho: IProductCreate[] = [
 		features: ['4GB RAM', '256GB almacenamiento']
 	},
 	{
-		name: 'Xiaomi 14C 8/256',
-		price: 205000 / 1295,
+		price: 205000 / 1350,
+		model: '14C',
+		brand: 'Xiaomi',
+		shortDescription: 'Xiaomi 14C 8/256',
+		largeDescription: 'Xiaomi 14C 8/256',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -254,8 +306,11 @@ const productsLucho: IProductCreate[] = [
 		features: ['8GB RAM', '256GB almacenamiento']
 	},
 	{
-		name: 'Xiaomi Note 14 6/128',
-		price: 241499 / 1295,
+		price: 241499 / 1350,
+		model: 'Note 14',
+		brand: 'Xiaomi',
+		shortDescription: 'Xiaomi Note 14 6/128',
+		largeDescription: 'Xiaomi Note 14 6/128',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -267,8 +322,11 @@ const productsLucho: IProductCreate[] = [
 		features: ['6GB RAM', '128GB almacenamiento']
 	},
 	{
-		name: 'Xiaomi Note 14 Pro 8/256',
-		price: 372999 / 1295,
+		price: 372999 / 1350,
+		model: 'Note 14 Pro',
+		brand: 'Xiaomi',
+		shortDescription: 'Xiaomi Note 14 Pro 8/256',
+		largeDescription: 'Xiaomi Note 14 Pro 8/256',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -282,8 +340,11 @@ const productsLucho: IProductCreate[] = [
 
 	// POCO / REALME
 	{
-		name: 'POCO C71 4/128',
-		price: 149999 / 1295,
+		price: 149999 / 1350,
+		model: 'C71',
+		brand: 'POCO',
+		shortDescription: 'POCO C71 4/128',
+		largeDescription: 'POCO C71 4/128',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -295,8 +356,11 @@ const productsLucho: IProductCreate[] = [
 		features: ['4GB RAM', '128GB almacenamiento']
 	},
 	{
-		name: 'POCO C75 6/128',
-		price: 167499 / 1295,
+		price: 167499 / 1350,
+		model: 'C75',
+		brand: 'POCO',
+		shortDescription: 'POCO C75 6/128',
+		largeDescription: 'POCO C75 6/128',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -308,8 +372,11 @@ const productsLucho: IProductCreate[] = [
 		features: ['6GB RAM', '128GB almacenamiento']
 	},
 	{
-		name: 'POCO C75 8/256',
-		price: 198999 / 1295,
+		price: 198999 / 1350,
+		model: 'C75',
+		brand: 'POCO',
+		shortDescription: 'POCO C75 8/256',
+		largeDescription: 'POCO C75 8/256',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -324,8 +391,11 @@ const productsLucho: IProductCreate[] = [
 
 const productsLuchito: IProductCreate[] = [
 	{
-		name: 'iPhone 11 64gb',
 		price: 285,
+		model: 'iPhone 11',
+		brand: 'Apple',
+		shortDescription: 'iPhone 11 64gb',
+		largeDescription: 'iPhone 11 64gb',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -337,8 +407,11 @@ const productsLuchito: IProductCreate[] = [
 		features: ['4GB RAM', '128GB almacenamiento']
 	},
 	{
-		name: 'iPhone 11 128gb',
 		price: 315,
+		model: 'iPhone 11',
+		brand: 'Apple',
+		shortDescription: 'iPhone 11 128gb',
+		largeDescription: 'iPhone 11 128gb',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -350,8 +423,11 @@ const productsLuchito: IProductCreate[] = [
 		features: ['4GB RAM', '128GB almacenamiento']
 	},
 	{
-		name: 'iPhone 12 64gb (Grado AB)',
 		price: 285,
+		model: 'iPhone 12 (Grado AB)',
+		brand: 'Apple',
+		shortDescription: 'iPhone 12 64gb (Grado AB)',
+		largeDescription: 'iPhone 12 64gb (Grado AB)',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -363,8 +439,11 @@ const productsLuchito: IProductCreate[] = [
 		features: ['4GB RAM', '128GB almacenamiento']
 	},
 	{
-		name: 'iPhone 12 128gb (Grado AB)',
 		price: 320,
+		model: 'iPhone 12 128gb (Grado AB)',
+		brand: 'Apple',
+		shortDescription: 'iPhone 12 128gb (Grado AB)',
+		largeDescription: 'iPhone 12 128gb (Grado AB)',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -376,8 +455,11 @@ const productsLuchito: IProductCreate[] = [
 		features: ['4GB RAM', '128GB almacenamiento']
 	},
 	{
-		name: 'iPhone 12 128gb (Grado A+)',
 		price: 345,
+		model: 'iPhone 12 128gb (Grado A+)',
+		brand: 'Apple',
+		shortDescription: 'iPhone 12 128gb (Grado A+)',
+		largeDescription: 'iPhone 12 128gb (Grado A+)',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -389,8 +471,11 @@ const productsLuchito: IProductCreate[] = [
 		features: ['4GB RAM', '128GB almacenamiento']
 	},
 	{
-		name: 'iPhone 12 pro (caja) 128GB',
 		price: 410,
+		model: 'iPhone 12 pro (caja) 128GB',
+		brand: 'Apple',
+		shortDescription: 'iPhone 12 pro (caja) 128GB',
+		largeDescription: 'iPhone 12 pro (caja) 128GB',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -402,8 +487,11 @@ const productsLuchito: IProductCreate[] = [
 		features: ['4GB RAM', '128GB almacenamiento']
 	},
 	{
-		name: 'iPhone 12 pro (Caja) 256GB',
 		price: 430,
+		model: 'iPhone 12 pro (Caja) 256GB',
+		brand: 'Apple',
+		shortDescription: 'iPhone 12 pro (Caja) 256GB',
+		largeDescription: 'iPhone 12 pro (Caja) 256GB',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -415,8 +503,11 @@ const productsLuchito: IProductCreate[] = [
 		features: ['4GB RAM', '128GB almacenamiento']
 	},
 	{
-		name: 'iPhone 13 128GB (A+)',
 		price: 420,
+		model: 'iPhone 13 128GB (A+)',
+		brand: 'Apple',
+		shortDescription: 'iPhone 13 128GB (A+)',
+		largeDescription: 'iPhone 13 128GB (A+)',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -428,8 +519,11 @@ const productsLuchito: IProductCreate[] = [
 		features: ['4GB RAM', '128GB almacenamiento']
 	},
 	{
-		name: 'iPhone 13 256GB (A+ Caja)',
 		price: 470,
+		model: 'iPhone 13 256GB (A+ Caja)',
+		brand: 'Apple',
+		shortDescription: 'iPhone 13 256GB (A+ Caja)',
+		largeDescription: 'iPhone 13 256GB (A+ Caja)',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -441,8 +535,11 @@ const productsLuchito: IProductCreate[] = [
 		features: ['4GB RAM', '128GB almacenamiento']
 	},
 	{
-		name: 'iPhone 13 128GB SELLADO',
 		price: 590,
+		model: 'iPhone 13 128GB SELLADO',
+		brand: 'Apple',
+		shortDescription: 'iPhone 13 128GB SELLADO',
+		largeDescription: 'iPhone 13 128GB SELLADO',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -454,8 +551,11 @@ const productsLuchito: IProductCreate[] = [
 		features: ['4GB RAM', '128GB almacenamiento']
 	},
 	{
-		name: 'iPhone 14 128GB (Caja)',
 		price: 470,
+		model: 'iPhone 14 128GB (Caja)',
+		brand: 'Apple',
+		shortDescription: 'iPhone 14 128GB (Caja)',
+		largeDescription: 'iPhone 14 128GB (Caja)',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -467,8 +567,11 @@ const productsLuchito: IProductCreate[] = [
 		features: ['4GB RAM', '128GB almacenamiento']
 	},
 	{
-		name: 'iPhone 14 Pro 128GB',
 		price: 620,
+		model: 'iPhone 14 Pro 128GB',
+		brand: 'Apple',
+		shortDescription: 'iPhone 14 Pro 128GB',
+		largeDescription: 'iPhone 14 Pro 128GB',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -480,8 +583,11 @@ const productsLuchito: IProductCreate[] = [
 		features: ['4GB RAM', '128GB almacenamiento']
 	},
 	{
-		name: 'iPhone 14 Pro Max 128GB',
 		price: 720,
+		model: 'iPhone 14 Pro Max 128GB',
+		brand: 'Apple',
+		shortDescription: 'iPhone 14 Pro Max 128GB',
+		largeDescription: 'iPhone 14 Pro Max 128GB',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -493,8 +599,11 @@ const productsLuchito: IProductCreate[] = [
 		features: ['4GB RAM', '128GB almacenamiento']
 	},
 	{
-		name: 'iPhone 15 128GB SELLADO',
 		price: 780,
+		model: 'iPhone 15 128GB SELLADO',
+		brand: 'Apple',
+		shortDescription: 'iPhone 15 128GB SELLADO',
+		largeDescription: 'iPhone 15 128GB SELLADO',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -506,8 +615,11 @@ const productsLuchito: IProductCreate[] = [
 		features: ['4GB RAM', '128GB almacenamiento']
 	},
 	{
-		name: 'iPhone 16 128GB SELLADO',
 		price: 870,
+		model: 'iPhone 16 128GB SELLADO',
+		brand: 'Apple',
+		shortDescription: 'iPhone 16 128GB SELLADO',
+		largeDescription: 'iPhone 16 128GB SELLADO',
 		discount: 0,
 		rating: 0,
 		reviews: 0,
@@ -521,54 +633,52 @@ const productsLuchito: IProductCreate[] = [
 ];
 
 function createProductsWithPrices(products: IProductCreate[], dolarHoy: number) {
-	return products.map((product) => {
-		const myCommission = 50000;
+  return products.map((product) => {
+    product.slug = slugify(product.shortDescription, {
+      lower: true,
+      strict: true,
+    });
 
-		const ualaSalesCommission = 0.049;
-		const IVA = 1.21;
-		const ualaSalesCommissionWithIVA = ualaSalesCommission * IVA;
+		const MiGanancia = product.brand === 'Apple' ? 0.10 : 0.15;
 
-		const threeInstallmentsCFT = 0.0869 * IVA; // 3 cuotas sin interés 8.69% + IVA
-		const sixInstallmentsCFT = 0.1439 * IVA; // 6 cuotas sin interés 14,39% + IVA
-		// Precio del producto viene en dolares
-		const productBaseUSD = product.price;
 
-		// Precio en Pesos Argentinos con mi comisión
-		const basePriceARS = productBaseUSD * dolarHoy + myCommission;
+    // Tu ganancia objetivo en ARS
+    const gananciaObjetivo = product.price * dolarHoy * MiGanancia;
 
-		// Precio final absorbiendo comisión Uala
-		const priceWithUala = basePriceARS / (1 - ualaSalesCommissionWithIVA);
-		// Precio final sin intervención de Uala
-		const priceWithOutUala = basePriceARS;
+    // Precio que quieres recibir en mano (costo del producto en ARS + tu ganancia)
+    const precioBaseEnARS = product.price * dolarHoy;
+    const precioObjetivo = precioBaseEnARS + gananciaObjetivo;
 
-		/* 		// Precio con 3 cuotas sin interés absorbidas por mi
-		const price3Cuotas = priceWithUala * (1 + threeInstallmentsCFT);
-		const cuota3 = price3Cuotas / 3;
+    // Recargos de Ualá con IVA
+    const commissionUala = 0.049 * 1.21;
+    const CFT_6_cuotas = 0.1439 * 1.21;
 
-		// Precio con 6 cuotas sin interés absorbidas por mi
-		const price6Cuotas = priceWithUala * (1 + sixInstallmentsCFT);
-		const cuota6 = price6Cuotas / 6; */
-		const price6Cuotas = priceWithUala * (1 + sixInstallmentsCFT);
-		const cuota3 = price6Cuotas / 3;
-		const cuota6 = price6Cuotas / 6;
-		const discount = basePriceARS - price6Cuotas;
-		const percentage = Math.round((discount / basePriceARS) * 100 * -1);
+    // Para 1 pago (efectivo, transferencia o tarjeta de débito)
+    // El precio final que el cliente paga debe ser el precio objetivo, pero "inflado" para cubrir la comisión de Ualá.
+    // Fórmula: Precio del Cliente = Precio Objetivo / (1 - Tasa de Comisión de Ualá)
+    const precioEfectivoTransferencia = Math.round(precioObjetivo);
+    // Para 6 cuotas (tarjeta de crédito)
+    // El precio final debe ser el precio objetivo, "inflado" para cubrir tanto la comisión de Ualá como el CFT.
+    // Fórmula: Precio del Cliente = Precio Objetivo / (1 - Tasa de Comisión de Ualá - Tasa de CFT)
+    // Nota: El cálculo de Ualá es sobre el precio final.
+    const precio6Cuotas = Math.round(precioObjetivo / (1 - commissionUala - CFT_6_cuotas));
 
-		return {
-			...product,
-			discount: percentage,
-			prices: {
-				efectivo_transferencia: Math.round(priceWithOutUala),
-				tarjeta_credito_debito: Math.round(price6Cuotas),
-				tarjeta_credito_3_cuotas: Math.round(price6Cuotas),
-				tarjeta_credito_6_cuotas: Math.round(price6Cuotas),
-				cuotas: {
-					'3_cuotas_sin_interes': Math.round(cuota3),
-					'6_cuotas_sin_interes': Math.round(cuota6)
-				}
-			}
-		};
-	});
+    // Cálculo del % ahorro de pagar en efectivo vs 6 cuotas
+    const percentage = Math.round(((precio6Cuotas - precioEfectivoTransferencia) / precio6Cuotas) * 100);
+
+    return {
+      ...product,
+      discount: percentage,
+      prices: {
+        efectivo_transferencia: precioEfectivoTransferencia,
+        tarjeta_credito_debito: precio6Cuotas,
+        cuotas: {
+          '3_cuotas_sin_interes': Math.round(precio6Cuotas / 3),
+          '6_cuotas_sin_interes': Math.round(precio6Cuotas / 6),
+        },
+      },
+    };
+  });
 }
 
 const seedDatabase = async (): Promise<void> => {
@@ -593,7 +703,7 @@ const seedDatabase = async (): Promise<void> => {
 		console.log('\n📦 Productos creados:');
 		createdProducts.slice(0, 3).forEach((product, index) => {
 			console.log(
-				`${index + 1}. ${product.name} - $${product.prices.efectivo_transferencia} (${
+				`${index + 1}. ${product.brand + ' ' + product.model} - $${product.prices.efectivo_transferencia} (${
 					product.discount
 				}% descuento)`
 			);
