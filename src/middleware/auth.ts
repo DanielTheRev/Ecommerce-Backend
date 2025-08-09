@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { User, IUser } from '../models/User';
+import { AdminUsers } from '../models/AdminUser';
 
 export interface AuthRequest extends Request {
 	user?: IUser;
@@ -42,9 +43,9 @@ export const protect = async (
 			// Verificar token
 			const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
 			// Buscar usuario actual
-			const user = await User.findById(decoded.userID);
-
-			if (!user) {
+			const user = await User.findById(decoded.userID) as any;
+			const adminUser = await AdminUsers.findById(decoded.userID) as any;
+			if (!user && !adminUser) {
 				return res.status(401).json({
 					success: false,
 					message: 'Usuario no encontrado'
@@ -52,7 +53,8 @@ export const protect = async (
 			}
 
 			// Agregar usuario a la request
-			req.user = user;
+			req.user = user || adminUser;
+
 			next();
 		} catch (error) {
 			return res.status(401).json({

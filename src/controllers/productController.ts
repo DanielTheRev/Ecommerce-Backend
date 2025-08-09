@@ -85,7 +85,12 @@ export class ProductController {
 			const productData: IProductCreate = req.body;
 
 			// Validaciones básicas
-			if (!productData.brand || !productData.model || !productData.image?.light || !productData.image?.dark) {
+			if (
+				!productData.brand ||
+				!productData.model ||
+				!productData.image?.light ||
+				!productData.image?.dark
+			) {
 				res.status(400).json({
 					success: false,
 					message: 'Los campos brand, model, image.light e image.dark son requeridos'
@@ -217,8 +222,10 @@ export class ProductController {
 
 			// Búsqueda por texto
 			if (q) {
-				query.$or = [{ brand: { $regex: q, $options: 'i' } }, { model: { $regex: q, $options: 'i' } }];
-
+				query.$or = [
+					{ brand: { $regex: q, $options: 'i' } },
+					{ model: { $regex: q, $options: 'i' } }
+				];
 			}
 
 			// Filtros por precio

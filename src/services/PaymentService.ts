@@ -19,6 +19,15 @@ export class PaymentService {
 		this.isPreferredPaymentType = this.preferredPaymentTypes.includes(paymentType);
 	}
 
+	static theOrderIsPreferredPayment(orderType: PaymentType) {
+		const preferredPaymentTypes = [
+			PaymentType.CASH,
+			PaymentType.BANK_TRANSFER,
+			PaymentType.ALIAS_TRANSFER
+		];
+		return preferredPaymentTypes.includes(orderType);
+	}
+
 	async withUalaBiss(orderID: string) {
 		try {
 			const ualaOrder = await UalaApiCheckout.createOrder({

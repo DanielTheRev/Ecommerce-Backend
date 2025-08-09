@@ -1,4 +1,5 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
+import { socketManager } from '../sockets/socketManager';
 import { ObjectId } from 'mongoose';
 import UalaApiCheckout from 'ualabis-nodejs';
 import { CreateOrderDTO } from '../interfaces/order.interface';
@@ -137,7 +138,6 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 			if (product.stock < item.quantity) {
 				return res.status(400).json({
 					message: `Stock insuficiente para ${product.brand} ${product.model}. Disponible: ${product.stock}, Solicitado: ${item.quantity}`
-
 				});
 			}
 		}
@@ -204,6 +204,21 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 		const populatedOrder = await Order.findById(order._id)
 			.populate('user', 'name email')
 			.populate('items.product', 'name price images');
+
+		// Notificar nueva transacción a admins vía WebSocket
+		//todo implementación de notificaciones via socket
+		// socketManager.notifyTransaction({
+		// 	orderId: populatedOrder?._id,
+		// 	user: populatedOrder?.user,
+		// 	total: populatedOrder?.total,
+		// 	status: populatedOrder?.status,
+		// 	paymentMethod: populatedOrder?.paymentInfo?.method,
+		// 	items: populatedOrder?.items?.map((item) => ({
+		// 		product: item.product,
+		// 		quantity: item.quantity,
+		// 		price: item.price
+		// 	}))
+		// });
 
 		return res.status(201).json({
 			message: 'Orden creada exitosamente',
@@ -293,6 +308,20 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
 			.populate('user', 'name email')
 			.populate('items.product', 'name price images');
 
+		// Notificar actualización de orden a admins vía WebSocket
+		//todo implementación de notificaciones via socket
+		socketManager.notifyClient(order.user._id.toString(), 'paymentStatus', {
+			newState: status
+		});
+		// socketManager.notifyOrderUpdate({
+		// 	orderId: updatedOrder?._id,
+		// 	user: updatedOrder?.user,
+		// 	previousStatus: order.status,
+		// 	newStatus: status,
+		// 	total: updatedOrder?.total,
+		// 	updatedBy: req.user?.name || 'Admin'
+		// });
+
 		return res.json({
 			message: 'Estado de orden actualizado exitosamente',
 			order: updatedOrder
@@ -305,35 +334,78 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
 
 // Actualizar estado del pago de una order(client)
 export const updatePaymentStatus = async (req: AuthRequest, res: Response) => {
-	try {
-		const { orderID } = req.body;
-		if (!orderID) return res.status(500).json({ message: 'no orderID found' });
-
-		const ualaOrder = await PaymentService.getOrderStatus(orderID);
-		if (ualaOrder.error) {
-			return res.status(500).json({ message: 'Error al actualizar estado de pago' });
-		}
-		console.log('orden de uala', ualaOrder);
-
-		const order = await Order.findOne({
-			'paymentInfo.transactionId': orderID
+	const { orderID } = req.body as { orderID: string };
+	if (!orderID)
+		return res.status(404).json({
+			message: 'No se brindo id de la compra'
 		});
-		if (!order) {
-			return res.status(404).json({ message: 'Orden no encontrada' });
-		}
+	const order = await Order.findById(orderID);
+	if (!order) {
+		return res.status(404).json({ message: 'Orden no encontrada' });
+	}
 
-		order.paymentInfo.status =
+	let newStatus: string;
+
+	const isCard = PaymentService.theOrderIsPreferredPayment(order.paymentInfo.method);
+	if (isCard) {
+		if (!order.paymentInfo.transactionId)
+			return res.status(404).json({ message: 'No se encontró número de transacción' });
+
+		const ualaOrder = await PaymentService.getOrderStatus(order.paymentInfo.transactionId);
+
+		if (ualaOrder.error) {
+			return res
+				.status(500)
+				.json({ message: 'Error al actualizar estado de pago, no se encontró orden en uala' });
+		}
+		newStatus =
 			ualaOrder.orderStatus?.status === UalaOrderStatus.Aprobado
 				? PaymentStatus.APPROVED
 				: PaymentStatus.REJECTED;
-
-		await order.save();
-
-		return res.status(200).json({ message: 'Estado de pago actualizado exitosamente' });
-	} catch (error) {
-		console.error('Error al actualizar estado de pago:', error);
-		return res.status(500).json({ message: 'Error interno del servidor' });
 	}
+	newStatus = PaymentStatus.PAID;
+	order.paymentInfo.status = PaymentStatus.PAID;
+	//todo implementación de notificaciones via socket
+	socketManager.notifyClient(order.user._id.toString(), 'paymentStatus', {
+		newState: newStatus,
+		orderID: order._id
+	});
+	return res.status(200).json({ message: 'Pago actualizado con éxito', orderUpdated: order });
+	// try {
+	// 	const { orderID } = req.body;
+	// 	if (!orderID)
+	// 		return res.status(500).json({
+	// 			message: 'no orderID found'
+	// 		});
+
+	// 	const ualaOrder = await PaymentService.getOrderStatus(orderID);
+	// 	if (ualaOrder.error) {
+	// 		return res.status(500).json({ message: 'Error al actualizar estado de pago' });
+	// 	}
+	// 	console.log('orden de uala', ualaOrder);
+
+	// 	const order = await Order.findOne({
+	// 		'paymentInfo.transactionId': orderID
+	// 	});
+	// 	if (!order) {
+	// 		return res.status(404).json({ message: 'Orden no encontrada' });
+	// 	}
+
+	// 	order.paymentInfo.status =
+	// 		ualaOrder.orderStatus?.status === UalaOrderStatus.Aprobado
+	// 			? PaymentStatus.APPROVED
+	// 			: PaymentStatus.REJECTED;
+
+	// 	// await order.save();
+
+	// 	return res.status(200).json({
+	// 		message: 'Estado de pago actualizado exitosamente',
+	// 		order
+	// 	});
+	// } catch (error) {
+	// 	console.error('Error al actualizar estado de pago:', error);
+	// 	return res.status(500).json({ message: 'Error interno del servidor' });
+	// }
 };
 
 // Cancelar una orden (solo si está en estado pending)
@@ -399,36 +471,33 @@ export const getAllOrders = async (req: AuthRequest, res: Response) => {
 			return res.status(403).json({ message: 'No tienes permisos para ver todas las órdenes' });
 		}
 
-		const { page = 1, limit = 10, status, userId } = req.query;
-		const pageNumber = parseInt(page as string);
-		const limitNumber = parseInt(limit as string);
+		const { status, userId } = req.query;
+		const page = parseInt(req.query.page as string) || 1;
+		const limit = parseInt(req.query.limit as string) || 10;
+		const skip = (page - 1) * limit;
 
 		// Construir filtros
 		const filters: any = {};
 		if (status) filters.status = status;
 		if (userId) filters.user = userId;
 
-		// Obtener órdenes con paginación
-		const orders = await Order.find(filters)
+		// Obtener órdenes con Paginación
+		let orders = await Order.find(filters)
 			.populate('user', 'name email profilePhoto')
 			.populate('items.product', 'name price images')
-			.sort({ createdAt: -1 })
-			.limit(limitNumber)
-			.skip((pageNumber - 1) * limitNumber);
+			.skip(skip)
+			.limit(limit);
 
 		// Contar total de órdenes
-		const totalOrders = await Order.countDocuments(filters);
-		const totalPages = Math.ceil(totalOrders / limitNumber);
+		const total = await Order.countDocuments(filters);
 
 		return res.json({
-			message: 'Órdenes obtenidas exitosamente',
-			orders,
+			data: orders,
 			pagination: {
-				currentPage: pageNumber,
-				totalPages,
-				totalOrders,
-				hasNext: pageNumber < totalPages,
-				hasPrev: pageNumber > 1
+				currentPage: page,
+				totalPages: Math.ceil(total / limit),
+				totalItems: total,
+				itemsPerPage: limit
 			}
 		});
 	} catch (error) {

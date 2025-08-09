@@ -50,7 +50,8 @@ const sendTokenResponse = (
 	};
 
 	const _userData = userAdmin ? _userAdmin : _user;
-	const token = generateToken(user!._id as string);
+	const token = generateToken(_userData!.id as string);
+
 	return res
 		.status(statusCode)
 		.cookie('token', token, cookieOptions)
@@ -62,7 +63,7 @@ const sendTokenResponse = (
 };
 
 // Función para traer los datos según el token de google
-async function verify(token: string) {
+async function verifyGoogleToken(token: string) {
 	const ticket = await client.verifyIdToken({
 		idToken: token,
 		audience: CLIENT_ID
@@ -81,7 +82,7 @@ export const loginUserWithGoogle = async (req: Request, res: Response) => {
 			success: false,
 			message: 'Token no proporcionado'
 		});
-	const userData = await verify(token);
+	const userData = await verifyGoogleToken(token);
 
 	if (!userData)
 		return res.status(401).json({
@@ -89,7 +90,6 @@ export const loginUserWithGoogle = async (req: Request, res: Response) => {
 			message: 'Token inválido'
 		});
 
-	console.log(userData);
 	const { name, email, sub: googleID, picture } = userData;
 
 	// Verificar si el usuario ya existe
@@ -105,7 +105,8 @@ export const loginUserWithGoogle = async (req: Request, res: Response) => {
 		role: role || Role.user,
 		googleID,
 		profilePhoto: picture,
-		isActive: true
+		isActive: true,
+		token
 	});
 	await user.save();
 
@@ -116,10 +117,29 @@ export const LoginAdmin = async (req: Request, res: Response) => {
 	const data = req.body as { email: string; password: string };
 	const { email, password } = data;
 	const admin = await AdminUsers.findOne({ email });
-	if (!admin) return res.status(401).json({ message: 'Invalid credentials' });
+	if (!admin)
+		return res.status(401).json({
+			success: false,
+			message: 'Credenciales inválidas'
+		});
 	const isMatch = await admin.comparePassword(password);
-	if (!isMatch) return res.status(401).json({ message: 'Invalid credentials' });
-	return sendTokenResponse(200, res, undefined, admin);
+	if (!isMatch)
+		return res.status(401).json({
+			success: false,
+			message: 'Credenciales inválidas'
+		});
+
+	// Crear user temporal para sendTokenResponse
+	const tempUser = {
+		_id: admin._id,
+		name: admin.name,
+		email: admin.email,
+		role: admin.role
+	} as any;
+	admin.token = generateToken(admin._id as string);
+	await admin.save();
+
+	return sendTokenResponse(200, res, tempUser);
 };
 
 // @desc    Obtener usuario actual
@@ -162,18 +182,38 @@ export const LoginAdmin = async (req: Request, res: Response) => {
 export const getUserProfile = async (req: Request, res: Response) => {
 	const { token: token } = req.cookies as { token: string };
 
-	console.log('getUserProfile');
-	console.log(token);
-
 	if (!token) return res.status(401).json({ message: 'no token provided' });
 	try {
 		const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userID: string };
+		console.log('GET USER PROFILES');
+		console.log(decoded);
 		const user = await User.findById(decoded.userID).select([
 			'name',
 			'email',
 			'role',
 			'profilePhoto'
 		]);
+		console.log(user);
+		return res.json({ ...user?.toJSON(), token });
+	} catch (error) {
+		console.log(error);
+		return res.status(401).json({ valid: false });
+	}
+};
+export const getAdminUserProfile = async (req: Request, res: Response) => {
+	const { token: token } = req.cookies as { token: string };
+	
+	if (!token) return res.status(401).json({ message: 'no token provided' });
+	try {
+		const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userID: string };
+		const user = await AdminUsers.findById(decoded.userID).select([
+			'name',
+			'email',
+			'role',
+			'profilePhoto',
+			'token'
+		]);
+		console.log(user);
 		return res.json({ user });
 	} catch (error) {
 		console.log(error);

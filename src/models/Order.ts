@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document, ObjectId } from 'mongoose';
 import { PaymentType } from './PaymentMethod';
 import { ShippingType } from './ShippingOption';
+import { OrderData } from 'ualabis-nodejs/dist/types/order';
 
 // Enum para estados de orden
 export enum OrderStatus {
@@ -13,10 +14,11 @@ export enum OrderStatus {
 
 // Enum para estados de pago
 export enum PaymentStatus {
-	PENDING = 'Pendiente',
-	APPROVED = 'Aprobado',
-	REJECTED = 'Rechazado',
-	CANCELLED = 'Cancelado'
+  PENDING = 'Pendiente',
+  APPROVED = 'Aprobado',
+  PAID = 'Pagado',
+  REJECTED = 'Rechazado',
+  CANCELLED = 'Cancelado',
 }
 
 // Interface para items de la orden
@@ -29,14 +31,14 @@ export interface IOrderItem {
 }
 
 // Interface para dirección de envío
-export interface IShippingAddress {
-	street: string;
-	city: string;
-	state: string;
-	postalCode: string;
-	country: string;
-	phone?: string;
-}
+// export interface IShippingAddress {
+// 	street: string;
+// 	city: string;
+// 	state: string;
+// 	postalCode: string;
+// 	country: string;
+// 	phone?: string;
+// }
 
 // Interface para información de envío
 export interface IShippingInfo {
@@ -45,7 +47,7 @@ export interface IShippingInfo {
 		name: string;
 		address: string;
 	};
-	shippingAddress?: IShippingAddress;
+	// shippingAddress?: IShippingAddress;
 	cost: number;
 }
 
@@ -56,6 +58,7 @@ export interface IPaymentInfo {
 	transactionId?: string;
 	paymentDate?: Date;
 	amount: number;
+	ualaOrderStatus?: OrderData;
 }
 
 // Interface principal de la orden
@@ -109,38 +112,38 @@ const orderItemSchema = new Schema<IOrderItem>({
 });
 
 // Schema para dirección de envío
-const shippingAddressSchema = new Schema<IShippingAddress>({
-	street: {
-		type: String,
-		required: true,
-		trim: true
-	},
-	city: {
-		type: String,
-		required: true,
-		trim: true
-	},
-	state: {
-		type: String,
-		required: true,
-		trim: true
-	},
-	postalCode: {
-		type: String,
-		required: true,
-		trim: true
-	},
-	country: {
-		type: String,
-		required: true,
-		trim: true,
-		default: 'Argentina'
-	},
-	phone: {
-		type: String,
-		trim: true
-	}
-});
+// const shippingAddressSchema = new Schema<IShippingAddress>({
+// 	street: {
+// 		type: String,
+// 		required: true,
+// 		trim: true
+// 	},
+// 	city: {
+// 		type: String,
+// 		required: true,
+// 		trim: true
+// 	},
+// 	state: {
+// 		type: String,
+// 		required: true,
+// 		trim: true
+// 	},
+// 	postalCode: {
+// 		type: String,
+// 		required: true,
+// 		trim: true
+// 	},
+// 	country: {
+// 		type: String,
+// 		required: true,
+// 		trim: true,
+// 		default: 'Argentina'
+// 	},
+// 	phone: {
+// 		type: String,
+// 		trim: true
+// 	}
+// });
 
 // Schema para información de envío
 const shippingInfoSchema = new Schema<IShippingInfo>({
@@ -196,6 +199,10 @@ const paymentInfoSchema = new Schema<IPaymentInfo>({
 		type: Number,
 		required: true,
 		min: 0
+	},
+	ualaOrderStatus: {
+		type: Object,
+		default: undefined
 	}
 });
 paymentInfoSchema.pre('save', function (next) {

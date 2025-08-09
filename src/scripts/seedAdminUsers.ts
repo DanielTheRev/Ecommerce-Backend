@@ -3,11 +3,11 @@ import { IAdminUserCreate } from '../models/AdminUser';
 import { AdminUsers } from '../models/AdminUser';
 
 const adminUsers: IAdminUserCreate[] = [
-	// {
-	// 	name: 'Daniel Larrosa',
-	// 	email: 'larrosadaniel2894@gmail.com',
-	// 	password: '@Unarefacil1'
-	// }
+	{
+		name: 'Daniel Larrosa',
+		email: 'larrosadaniel2894@gmail.com',
+		password: '@Unarefacil1',
+	}
 ];
 
 const poblateAdminUsers = async () => {

@@ -14,7 +14,6 @@ export interface IPaymentMethod extends Document {
 	name: string;
 	description?: string;
 	isActive: boolean;
-	processingFee?: number; // Comisión en porcentaje (opcional)
 	createdAt: Date;
 	updatedAt: Date;
 }
@@ -40,12 +39,6 @@ const paymentMethodSchema = new Schema<IPaymentMethod>(
 			type: Boolean,
 			default: true
 		},
-		processingFee: {
-			type: Number,
-			default: 0,
-			min: 0,
-			max: 100 // Máximo 100% de comisión
-		}
 	},
 	{
 		timestamps: true

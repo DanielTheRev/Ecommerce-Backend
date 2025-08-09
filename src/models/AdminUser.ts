@@ -7,6 +7,7 @@ export interface IAdminUser extends Document {
 	email: string;
 	role: Role.admin;
 	password: string;
+	token: string;
 	comparePassword(candidatePassword: string): Promise<boolean>;
 	hasPassword(password: string): Promise<string>;
 }
@@ -15,6 +16,7 @@ export interface IAdminUserCreate {
 	name: string;
 	email: string;
 	password: string;
+	token?: string;
 }
 
 const userAdminSchema = new Schema<IAdminUser>(
@@ -40,6 +42,10 @@ const userAdminSchema = new Schema<IAdminUser>(
 			type: String,
 			enum: Role,
 			default: Role.admin
+		},
+		token: {
+			type: String,
+			required: false
 		}
 	},
 	{
@@ -60,8 +66,6 @@ userAdminSchema.pre('save', async function (next) {
 		next(error as Error);
 	}
 });
-
-
 
 // Método para comparar contraseñas
 userAdminSchema.methods.comparePassword = async function (

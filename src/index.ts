@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import { createServer } from 'http';
 import { connectDB } from './config/database';
 import productRoutes from './routes/productRoutes';
 import authRoutes from './routes/auth';
@@ -10,6 +11,7 @@ import orderRoutes from './routes/orderRoutes';
 import shippingRoutes from './routes/shippingRoutes';
 import paymentMethodRoutes from './routes/paymentMethodRoutes';
 import { initUalaCheckOut } from './config/ualabis';
+import { socketManager } from './sockets/socketManager';
 import cookie_parser from 'cookie-parser';
 
 // Cargar variables de entorno
@@ -31,6 +33,7 @@ const allowedOrigins =
 				'http://localhost:3001',
 				'http://localhost:5173',
 				'http://localhost:4200',
+				'http://localhost:4300',
 				'http://localhost:4000'
 			];
 
@@ -102,17 +105,24 @@ app.use((error: any, req: Request, res: Response, next: any) => {
 	});
 });
 
+// Crear servidor HTTP
+const httpServer = createServer(app);
+
 // Función para iniciar el servidor
 const startServer = async (): Promise<void> => {
 	try {
 		// Conectar a la base de datos
 		await connectDB();
 
+		// Inicializar WebSockets
+		socketManager.initialize(httpServer);
+
 		// Iniciar el servidor
-		app.listen(PORT, () => {
+		httpServer.listen(PORT, () => {
 			console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
 			console.log(`📊 Ambiente: ${process.env.NODE_ENV || 'development'}`);
 			console.log(`🔗 API Endpoints disponibles en http://localhost:${PORT}/api/products`);
+			console.log(`🔌 WebSocket Server disponible en ws://localhost:${PORT}`);
 		});
 	} catch (error) {
 		console.error('❌ Error al iniciar el servidor:', error);
