@@ -207,6 +207,7 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 
 		// Notificar nueva transacción a admins vía WebSocket
 		//todo implementación de notificaciones via socket
+		socketManager.notifyOrderStateToAdmin('order_new', populatedOrder, 'Nueva orden recibida');
 		// socketManager.notifyTransaction({
 		// 	orderId: populatedOrder?._id,
 		// 	user: populatedOrder?.user,
@@ -310,9 +311,14 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
 
 		// Notificar actualización de orden a admins vía WebSocket
 		//todo implementación de notificaciones via socket
-		socketManager.notifyClient(order.user._id.toString(), 'paymentStatus', {
-			newState: status
-		});
+		socketManager.notifyClient(
+			order.user._id.toString(),
+			'Pago recibido con éxito',
+			'paymentStatus',
+			{
+				newState: status
+			}
+		);
 		// socketManager.notifyOrderUpdate({
 		// 	orderId: updatedOrder?._id,
 		// 	user: updatedOrder?.user,
@@ -339,15 +345,16 @@ export const updatePaymentStatus = async (req: AuthRequest, res: Response) => {
 		return res.status(404).json({
 			message: 'No se brindo id de la compra'
 		});
-	const order = await Order.findById(orderID);
+	const order = await Order.findById(orderID)
+		.populate('user', 'name email')
+		.populate('items.product', 'name price images');
 	if (!order) {
 		return res.status(404).json({ message: 'Orden no encontrada' });
 	}
 
 	let newStatus: string;
-
 	const isCard = PaymentService.theOrderIsPreferredPayment(order.paymentInfo.method);
-	if (isCard) {
+	if (!isCard) {
 		if (!order.paymentInfo.transactionId)
 			return res.status(404).json({ message: 'No se encontró número de transacción' });
 
@@ -365,47 +372,16 @@ export const updatePaymentStatus = async (req: AuthRequest, res: Response) => {
 	}
 	newStatus = PaymentStatus.PAID;
 	order.paymentInfo.status = PaymentStatus.PAID;
+	await order.save();
+
 	//todo implementación de notificaciones via socket
-	socketManager.notifyClient(order.user._id.toString(), 'paymentStatus', {
-		newState: newStatus,
-		orderID: order._id
-	});
+	socketManager.notifyClient(
+		order.user._id.toString(),
+		'Pago recibido con éxito',
+		'paymentStatus',
+		order
+	);
 	return res.status(200).json({ message: 'Pago actualizado con éxito', orderUpdated: order });
-	// try {
-	// 	const { orderID } = req.body;
-	// 	if (!orderID)
-	// 		return res.status(500).json({
-	// 			message: 'no orderID found'
-	// 		});
-
-	// 	const ualaOrder = await PaymentService.getOrderStatus(orderID);
-	// 	if (ualaOrder.error) {
-	// 		return res.status(500).json({ message: 'Error al actualizar estado de pago' });
-	// 	}
-	// 	console.log('orden de uala', ualaOrder);
-
-	// 	const order = await Order.findOne({
-	// 		'paymentInfo.transactionId': orderID
-	// 	});
-	// 	if (!order) {
-	// 		return res.status(404).json({ message: 'Orden no encontrada' });
-	// 	}
-
-	// 	order.paymentInfo.status =
-	// 		ualaOrder.orderStatus?.status === UalaOrderStatus.Aprobado
-	// 			? PaymentStatus.APPROVED
-	// 			: PaymentStatus.REJECTED;
-
-	// 	// await order.save();
-
-	// 	return res.status(200).json({
-	// 		message: 'Estado de pago actualizado exitosamente',
-	// 		order
-	// 	});
-	// } catch (error) {
-	// 	console.error('Error al actualizar estado de pago:', error);
-	// 	return res.status(500).json({ message: 'Error interno del servidor' });
-	// }
 };
 
 // Cancelar una orden (solo si está en estado pending)
@@ -464,6 +440,7 @@ export const cancelOrder = async (req: AuthRequest, res: Response) => {
 };
 
 // Obtener todas las órdenes (solo admin)
+// Función mejorada para obtener todas las órdenes
 export const getAllOrders = async (req: AuthRequest, res: Response) => {
 	try {
 		// Verificar que el usuario es admin
@@ -471,38 +448,128 @@ export const getAllOrders = async (req: AuthRequest, res: Response) => {
 			return res.status(403).json({ message: 'No tienes permisos para ver todas las órdenes' });
 		}
 
-		const { status, userId } = req.query;
+		const { status, userId, dateRange } = req.query;
 		const page = parseInt(req.query.page as string) || 1;
 		const limit = parseInt(req.query.limit as string) || 10;
 		const skip = (page - 1) * limit;
 
 		// Construir filtros
 		const filters: any = {};
-		if (status) filters.status = status;
-		if (userId) filters.user = userId;
 
-		// Obtener órdenes con Paginación
-		let orders = await Order.find(filters)
-			.populate('user', 'name email profilePhoto')
-			.populate('items.product', 'name price images')
+		// Filtro por estado
+		if (status) {
+			filters.status = status;
+		}
+
+		// Filtro por usuario
+		if (userId) {
+			filters.user = userId;
+		}
+
+		// Filtro por rango de fechas
+		if (dateRange) {
+			const now = new Date();
+			let startDate: Date;
+
+			switch (dateRange) {
+				case 'today':
+					startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+					filters.createdAt = { $gte: startDate };
+					break;
+
+				case 'this_week':
+					const startOfWeek = new Date(now);
+					startOfWeek.setDate(now.getDate() - now.getDay()); // Domingo
+					startOfWeek.setHours(0, 0, 0, 0);
+					filters.createdAt = { $gte: startOfWeek };
+					break;
+
+				case 'this_month':
+					startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+					filters.createdAt = { $gte: startDate };
+					break;
+
+				case 'last_3_months':
+					startDate = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+					filters.createdAt = { $gte: startDate };
+					break;
+
+				case 'last_6_months':
+					startDate = new Date(now.getFullYear(), now.getMonth() - 6, 1);
+					filters.createdAt = { $gte: startDate };
+					break;
+
+				case 'this_year':
+					startDate = new Date(now.getFullYear(), 0, 1);
+					filters.createdAt = { $gte: startDate };
+					break;
+
+				default:
+					// 'all' o cualquier otro valor no aplica filtro de fecha
+					break;
+			}
+		}
+
+		console.log('🔍 Filtros aplicados:', filters);
+
+		// Obtener órdenes con paginación y populate mejorado
+		const orders = await Order.find(filters)
+			.populate('user', 'name email profilePhoto role')
+			.populate({
+				path: 'items.product',
+				select: 'name price images description category'
+			})
+			.sort({ createdAt: -1 }) // Ordenar por fecha de creación descendente
 			.skip(skip)
 			.limit(limit);
 
-		// Contar total de órdenes
+		// Contar total de órdenes con los mismos filtros
 		const total = await Order.countDocuments(filters);
 
-		return res.json({
+		// Estadísticas adicionales (opcional)
+		const stats = await Order.aggregate([
+			{ $match: filters },
+			{
+				$group: {
+					_id: '$status',
+					count: { $sum: 1 },
+					totalAmount: { $sum: '$total' }
+				}
+			}
+		]);
+
+		const response = {
 			data: orders,
 			pagination: {
 				currentPage: page,
 				totalPages: Math.ceil(total / limit),
 				totalItems: total,
 				itemsPerPage: limit
+			},
+			// Incluir estadísticas si se desea
+			stats: stats.reduce((acc, stat) => {
+				acc[stat._id] = {
+					count: stat.count,
+					totalAmount: stat.totalAmount
+				};
+				return acc;
+			}, {} as any),
+			filters: {
+				status: status || 'all',
+				userId: userId || null,
+				dateRange: dateRange || 'all'
 			}
-		});
+		};
+
+		console.log(`📊 Devolviendo ${orders.length} órdenes de ${total} totales`);
+
+		return res.json(response);
 	} catch (error) {
 		console.error('Error al obtener todas las órdenes:', error);
-		return res.status(500).json({ message: 'Error interno del servidor' });
+		return res.status(500).json({
+			message: 'Error interno del servidor',
+			error: process.env.NODE_ENV === 'development' ? error : undefined
+		});
 	}
 };
 

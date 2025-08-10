@@ -108,32 +108,39 @@ class SocketManager {
 	// === NOTIFICACIONES ===
 
 	// A todos los admins
-	notifyAdmins(type: string, data: any) {
+	notifyAdmins(type: 'new_order', message: string, data: any) {
 		if (!this.io) return;
-		this.io.to('admins').emit('admin-notification', this.buildNotification(type, data));
+		this.io.to('admins').emit('admin-notification', this.buildNotification(type, message, data));
+	}
+
+	notifyOrderStateToAdmin(type: string, Data: any, message: string) {
+		if (!this.io) return;
+		const notification = this.buildNotification(type, message, Data);
+		this.io.to('admins').emit('order-notification', notification);
 	}
 
 	// A un cliente específico
-	notifyClient(userId: string, type: string, data: any) {
+	notifyClient(userId: string, message: string, type: string, data: any) {
 		if (!this.io) return;
 		this.io
 			.to(`client_${userId}`)
-			.emit('client-notification', this.buildNotification(type, data));
+			.emit('client-notification', this.buildNotification(type, message, data));
 	}
 
 	// A todos los clientes
-	notifyAllClients(type: string, data: any) {
+	notifyAllClients(type: string, message: string, data: any) {
 		if (!this.io) return;
 		for (const socket of this.connectedClients.values()) {
-			socket.emit('client-notification', this.buildNotification(type, data));
+			socket.emit('client-notification', this.buildNotification(type, message, data));
 		}
 	}
 
 	// Helper para generar notificación
-	private buildNotification(type: string, data: any) {
+	private buildNotification(type: string, message: string, data: any) {
 		return {
 			type,
 			data,
+			message,
 			timestamp: new Date().toISOString(),
 			id: `${type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 		};
