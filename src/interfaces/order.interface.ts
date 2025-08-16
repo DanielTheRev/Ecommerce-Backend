@@ -1,18 +1,21 @@
-import { IPaymentMethod } from '@/models/PaymentMethod';
-import { IShippingOption, IPickupPoint } from '@/models/ShippingOption';
+import { PaymentType } from '@/models/PaymentMethod';
+import { IPickupPoint, ShippingType } from '@/models/ShippingOption';
+import { ICartItemDTO } from './cart-item';
 
 export interface CreateOrderDTO {
-	items: {
-		productId: string;
-		name: string;
-		price: number;
-		quantity: number;
-		image: string;
-	}[];
+	items: ICartItemDTO[];
+	subtotal: number;
 	total: number;
+	desc: string | number;
+	shippingCost: string | number;
 	shippingMethod: {
-		type: IShippingOption;
+		_id: string;
+		type: ShippingType;
 		pickupPoint: IPickupPoint;
+		cost: number;
 	};
-	paymentMethod: IPaymentMethod;
+	paymentMethod: {
+		_id: string;
+		type: PaymentType;
+	};
 }

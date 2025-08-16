@@ -153,11 +153,11 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 		const paymentService = new PaymentService(
 			itemsFormat,
 			paymentMethod.type,
-			shippingMethod.type.cost
+			shippingMethod.cost
 		);
 
 		const status =
-			shippingMethod.type.type === ShippingType.HOME_DELIVERY
+			shippingMethod.type === ShippingType.HOME_DELIVERY
 				? OrderStatus.PROCESSING_SHIPPING
 				: OrderStatus.PENDING;
 
@@ -167,9 +167,9 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 			status,
 			items: paymentService.getOrderProcessedItems(),
 			shippingInfo: {
-				type: shippingMethod.type.type,
+				type: shippingMethod.type,
 				pickupPoint: shippingMethod.pickupPoint,
-				cost: shippingMethod.type.cost
+				cost: shippingMethod.cost
 			},
 			paymentInfo: {
 				method: paymentMethod.type,
@@ -271,10 +271,7 @@ export const getOrderById = async (req: AuthRequest, res: Response) => {
 			return res.status(403).json({ message: 'No tienes permiso para ver esta orden' });
 		}
 
-		return res.json({
-			message: 'Orden obtenida exitosamente',
-			order
-		});
+		return res.json(order);
 	} catch (error) {
 		console.error('Error al obtener orden por ID:', error);
 		return res.status(500).json({ message: 'Error interno del servidor' });

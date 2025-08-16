@@ -35,7 +35,7 @@ export class PaymentService {
 				// amount: this.getFinalCost(),
 				callbackSuccess: process.env.callbackSuccess + `?id=${orderID}` || '',
 				callbackFail: process.env.callbackFail + `?id=${orderID}` || '',
-				notificationUrl: `https://leading-feels-nokia-introduced.trycloudflare.com/api/orders/ualabis-notification?id=${orderID}`,
+				notificationUrl: `${process.env.notificationUrl}?id=${orderID}`,
 				description: this.getDescriptionQuantity()
 			});
 			return { ualaOrder, error: null };

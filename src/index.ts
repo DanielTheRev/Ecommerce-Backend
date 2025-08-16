@@ -27,7 +27,7 @@ const PORT = process.env.PORT || 3000;
 // Middlewares de seguridad
 const allowedOrigins =
 	process.env.NODE_ENV === 'production'
-		? ['https://recognised-norwegian-quiz-lightbox.trycloudflare.com']
+		? ['https://www.electromix.com.ar', 'https://electromix.com.ar']
 		: [
 				'http://localhost:3000',
 				'http://localhost:3001',

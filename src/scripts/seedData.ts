@@ -633,52 +633,53 @@ const productsLuchito: IProductCreate[] = [
 ];
 
 function createProductsWithPrices(products: IProductCreate[], dolarHoy: number) {
-  return products.map((product) => {
-    product.slug = slugify(product.shortDescription, {
-      lower: true,
-      strict: true,
-    });
+	return products.map((product) => {
+		product.slug = slugify(product.shortDescription, {
+			lower: true,
+			strict: true
+		});
 
-		const MiGanancia = product.brand === 'Apple' ? 0.10 : 0.15;
+		const MiGanancia = product.brand === 'Apple' ? 0.1 : 0.30;
 
+		// Tu ganancia objetivo en ARS
+		const gananciaObjetivo = product.price * dolarHoy * MiGanancia;
 
-    // Tu ganancia objetivo en ARS
-    const gananciaObjetivo = product.price * dolarHoy * MiGanancia;
+		// Precio que quieres recibir en mano (costo del producto en ARS + tu ganancia)
+		const precioBaseEnARS = product.price * dolarHoy;
+		const precioObjetivo = precioBaseEnARS + gananciaObjetivo;
 
-    // Precio que quieres recibir en mano (costo del producto en ARS + tu ganancia)
-    const precioBaseEnARS = product.price * dolarHoy;
-    const precioObjetivo = precioBaseEnARS + gananciaObjetivo;
+		// Recargos de Ualá con IVA
+		const commissionUala = 0.049 * 1.21;
+		const CFT_6_cuotas = 0.1439 * 1.21;
 
-    // Recargos de Ualá con IVA
-    const commissionUala = 0.049 * 1.21;
-    const CFT_6_cuotas = 0.1439 * 1.21;
+		// Para 1 pago (efectivo, transferencia o tarjeta de débito)
+		// El precio final que el cliente paga debe ser el precio objetivo, pero "inflado" para cubrir la comisión de Ualá.
+		// Fórmula: Precio del Cliente = Precio Objetivo / (1 - Tasa de Comisión de Ualá)
+		const precioEfectivoTransferencia = Math.round(precioObjetivo);
+		// Para 6 cuotas (tarjeta de crédito)
+		// El precio final debe ser el precio objetivo, "inflado" para cubrir tanto la comisión de Ualá como el CFT.
+		// Fórmula: Precio del Cliente = Precio Objetivo / (1 - Tasa de Comisión de Ualá - Tasa de CFT)
+		// Nota: El cálculo de Ualá es sobre el precio final.
+		const precio6Cuotas = Math.round(precioObjetivo / (1 - commissionUala - CFT_6_cuotas));
 
-    // Para 1 pago (efectivo, transferencia o tarjeta de débito)
-    // El precio final que el cliente paga debe ser el precio objetivo, pero "inflado" para cubrir la comisión de Ualá.
-    // Fórmula: Precio del Cliente = Precio Objetivo / (1 - Tasa de Comisión de Ualá)
-    const precioEfectivoTransferencia = Math.round(precioObjetivo);
-    // Para 6 cuotas (tarjeta de crédito)
-    // El precio final debe ser el precio objetivo, "inflado" para cubrir tanto la comisión de Ualá como el CFT.
-    // Fórmula: Precio del Cliente = Precio Objetivo / (1 - Tasa de Comisión de Ualá - Tasa de CFT)
-    // Nota: El cálculo de Ualá es sobre el precio final.
-    const precio6Cuotas = Math.round(precioObjetivo / (1 - commissionUala - CFT_6_cuotas));
+		// Cálculo del % ahorro de pagar en efectivo vs 6 cuotas
+		const percentage = Math.round(
+			((precio6Cuotas - precioEfectivoTransferencia) / precio6Cuotas) * 100
+		);
 
-    // Cálculo del % ahorro de pagar en efectivo vs 6 cuotas
-    const percentage = Math.round(((precio6Cuotas - precioEfectivoTransferencia) / precio6Cuotas) * 100);
-
-    return {
-      ...product,
-      discount: percentage,
-      prices: {
-        efectivo_transferencia: precioEfectivoTransferencia,
-        tarjeta_credito_debito: precio6Cuotas,
-        cuotas: {
-          '3_cuotas_sin_interes': Math.round(precio6Cuotas / 3),
-          '6_cuotas_sin_interes': Math.round(precio6Cuotas / 6),
-        },
-      },
-    };
-  });
+		return {
+			...product,
+			discount: percentage,
+			prices: {
+				efectivo_transferencia: precioEfectivoTransferencia,
+				tarjeta_credito_debito: precio6Cuotas,
+				cuotas: {
+					'3_cuotas_sin_interes': Math.round(precio6Cuotas / 3),
+					'6_cuotas_sin_interes': Math.round(precio6Cuotas / 6)
+				}
+			}
+		};
+	});
 }
 
 const seedDatabase = async (): Promise<void> => {

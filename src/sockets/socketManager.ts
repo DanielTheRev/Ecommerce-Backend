@@ -18,7 +18,7 @@ class SocketManager {
 			cors: {
 				origin:
 					process.env.NODE_ENV === 'production'
-						? ['https://recognised-norwegian-quiz-lightbox.trycloudflare.com']
+						? ['https://www.electromix.com.ar']
 						: [
 								'http://localhost:3000',
 								'http://localhost:3001',
@@ -29,6 +29,7 @@ class SocketManager {
 							],
 				credentials: true
 			},
+			path: '/api/socket.io',
 			transports: ['websocket', 'polling']
 		});
 
@@ -42,6 +43,7 @@ class SocketManager {
 		if (!this.io) return;
 
 		this.io.use(async (socket: AuthSocket, next) => {
+			console.log('alguien se quiere conectar...');
 			try {
 				const token = socket.handshake.auth.token;
 				if (!token) return next(new Error('No token provided'));
