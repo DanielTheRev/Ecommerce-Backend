@@ -1,5 +1,7 @@
+import { Document, ObjectId } from 'mongoose';
+
 export interface IProduct {
-	id: number;
+	_id: string;
 	slug: string;
 	shortDescription: string;
 	largeDescription: string;
@@ -23,7 +25,9 @@ export interface IProduct {
 		light: string;
 		dark: string;
 	};
-	features: string[];
+	features: {
+		principalFeatures: string[];
+	};
 }
 
 export interface IProductCreate {
@@ -42,7 +46,12 @@ export interface IProductCreate {
 		light: string;
 		dark: string;
 	};
-	features: string[];
+	features: {
+		principalFeatures: string[];
+	};
+}
+export interface IProductDocument extends Document, Omit<IProduct, 'model' | '_id'> {
+	_id: ObjectId;
 }
 
 export interface IProductUpdate extends Partial<IProductCreate> {}

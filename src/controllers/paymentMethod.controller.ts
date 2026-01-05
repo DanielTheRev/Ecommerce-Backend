@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { PaymentMethod } from '../models/PaymentMethod';
+import { PaymentMethod } from '@/models/PaymentMethod.model';
 
 export class PaymentMethodController {
 	// Obtener todos los métodos de pago

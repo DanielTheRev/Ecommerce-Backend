@@ -1,6 +1,6 @@
+import { PaymentType } from '@/interfaces/paymentMethod.interface';
+import { IProduct } from '@/interfaces/product.interface';
 import UalaApiCheckout from 'ualabis-nodejs';
-import { PaymentType } from '../models/PaymentMethod';
-import { IProductDocument } from '../models/Product';
 
 export class PaymentService {
 	private preferredPaymentTypes = [
@@ -8,7 +8,7 @@ export class PaymentService {
 		PaymentType.BANK_TRANSFER,
 		PaymentType.ALIAS_TRANSFER
 	];
-	private itemsFromCart: { data: IProductDocument; quantity: number }[] = [];
+	private itemsFromCart: { data: IProduct; quantity: number }[] = [];
 
 	private shippingCost: number = 0;
 	private isPreferredPaymentType: boolean = true;
@@ -31,8 +31,8 @@ export class PaymentService {
 	async withUalaBiss(orderID: string) {
 		try {
 			const ualaOrder = await UalaApiCheckout.createOrder({
-				amount: 10,
-				// amount: this.getFinalCost(),
+				// amount: 10,
+				amount: this.getFinalCost(),
 				callbackSuccess: process.env.callbackSuccess + `?id=${orderID}` || '',
 				callbackFail: process.env.callbackFail + `?id=${orderID}` || '',
 				notificationUrl: `${process.env.notificationUrl}?id=${orderID}`,

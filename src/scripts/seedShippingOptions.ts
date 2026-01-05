@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import { ShippingOption, ShippingType } from '../models/ShippingOption';
+import { ShippingOption, ShippingType } from '../models/ShippingOption.model';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -22,15 +22,27 @@ const shippingOptions = [
 			}
 		]
 	},
+	// {
+	// 	type: ShippingType.HOME_DELIVERY,
+	// 	name: 'Envío a Domicilio por Correo',
+	// 	cost: 5000, // $5000 pesos
+	// 	isDefaultForCash: false,
+	// 	pickupPoints: [
+	// 		{ name: 'Correo Argentino', address: '' },
+	// 		{ name: 'Andreani', address: '' },
+	// 		{ name: 'Envío en el día vía moto', address: '' }
+	// 	]
+	// }
 	{
 		type: ShippingType.HOME_DELIVERY,
 		name: 'Envío a Domicilio por Correo',
-		cost: 5000, // $5000 pesos
+		cost: 0, // $5000 pesos
 		isDefaultForCash: false,
 		pickupPoints: [
-			{ name: 'Correo Argentino', address: '' },
-			{ name: 'Andreani', address: '' },
-			{ name: 'Envío en el día vía moto', address: '' }
+			{ name: 'Coordinar correo / Envío en el dia por moto', address: '' }
+
+			// { name: 'Andreani', address: '' },
+			// { name: 'Envío en el día vía moto', address: '' }
 		]
 	}
 ];

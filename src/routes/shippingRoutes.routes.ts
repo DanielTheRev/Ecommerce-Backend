@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { ShippingController } from '../controllers/shippingController';
+import { ShippingController } from '../controllers/shipping.controller';
 import { protect, adminOnly } from '../middleware/auth';
 
 const router: Router = Router();

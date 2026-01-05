@@ -1,87 +1,16 @@
-import mongoose, { Schema, Document, ObjectId } from 'mongoose';
-import { PaymentType } from './PaymentMethod';
-import { ShippingType } from './ShippingOption';
-import { OrderData } from 'ualabis-nodejs/dist/types/order';
+import mongoose, { ObjectId, Schema } from 'mongoose';
 
-// Enum para estados de orden
-export enum OrderStatus {
-	PENDING = 'Pendiente de encuentro',
-	PROCESSING_SHIPPING = 'En proceso de envío',
-	SHIPPED = 'Enviado',
-	DELIVERED = 'Entregado',
-	CANCELLED = 'Cancelado'
-}
-
-// Enum para estados de pago
-export enum PaymentStatus {
-  PENDING = 'Pendiente',
-  APPROVED = 'Aprobado',
-  PAID = 'Pagado',
-  REJECTED = 'Rechazado',
-  CANCELLED = 'Cancelado',
-}
-
-// Interface para items de la orden
-export interface IOrderItem {
-	product: mongoose.Types.ObjectId;
-	quantity: number;
-	price: number; // Precio al momento de la compra
-	name: string; // Nombre del producto al momento de la compra
-	image?: string; // Imagen del producto
-}
-
-// Interface para dirección de envío
-// export interface IShippingAddress {
-// 	street: string;
-// 	city: string;
-// 	state: string;
-// 	postalCode: string;
-// 	country: string;
-// 	phone?: string;
-// }
-
-// Interface para información de envío
-export interface IShippingInfo {
-	type: ShippingType;
-	pickupPoint?: {
-		name: string;
-		address: string;
-	};
-	// shippingAddress?: IShippingAddress;
-	cost: number;
-}
-
-// Interface para información de pago
-export interface IPaymentInfo {
-	method: PaymentType;
-	status: PaymentStatus;
-	transactionId?: string;
-	paymentDate?: Date;
-	amount: number;
-	ualaOrderStatus?: OrderData;
-}
-
-// Interface principal de la orden
-export interface IOrder extends Document {
-	user: mongoose.Types.ObjectId;
-	items: IOrderItem[];
-	shippingInfo: IShippingInfo;
-	paymentInfo: IPaymentInfo;
-	status: OrderStatus;
-	shippingCost: number;
-	total: number;
-	orderNumber: string;
-	notes?: string;
-	createdAt: Date;
-	updatedAt: Date;
-	calculateTotals: () => number;
-	updateStatus: (newStatus: OrderStatus) => Promise<IOrder>;
-}
-
-// Interface para el modelo con métodos estáticos
-export interface IOrderModel extends mongoose.Model<IOrder> {
-	findByUser(userId: ObjectId): Promise<IOrder[]>;
-}
+import {
+	IOrderItem,
+	IShippingInfo,
+	IPaymentInfo,
+	PaymentStatus,
+	IOrder,
+	IOrderModel,
+	OrderStatus
+} from '@/interfaces/order.interface';
+import { PaymentType } from '@/interfaces/paymentMethod.interface';
+import { ShippingType } from '@/interfaces/shippingMethods.interface';
 
 // Schema para items de la orden
 const orderItemSchema = new Schema<IOrderItem>({
@@ -279,7 +208,8 @@ const orderSchema = new Schema<IOrder, IOrderModel>(
 
 // Índices para optimizar consultas
 orderSchema.index({ user: 1, createdAt: -1 });
-orderSchema.index({ orderNumber: 1 });
+// `orderNumber` tiene `unique: true` en su definición de campo, por lo que
+// Mongoose/Natively Mongo crea el índice. Evitamos declaración duplicada.
 orderSchema.index({ status: 1 });
 orderSchema.index({ 'paymentInfo.status': 1 });
 

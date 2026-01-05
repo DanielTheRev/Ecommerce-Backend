@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import { Product } from '../models/Product';
-import { IProductCreate, IProductUpdate } from '../types/product.types';
+import { Product } from '@/models/Product.model';
+import { IProductCreate, IProductUpdate } from '@/interfaces/product.interface';
 
 export class ProductController {
 	// GET /api/products/all - Obtener todos los productos sin Paginación
@@ -213,13 +213,26 @@ export class ProductController {
 	// GET /api/products/search - Buscar productos
 	static async searchProducts(req: Request, res: Response): Promise<void> {
 		try {
-			const { q, minPrice, maxPrice, minRating } = req.query;
+			const { q, minPrice, maxPrice, minRating, suggestions } = req.query;
 			const page = parseInt(req.query.page as string) || 1;
 			const limit = parseInt(req.query.limit as string) || 10;
 			const skip = (page - 1) * limit;
 
 			let query: any = {};
+			// if suggestions is true, return only brand and model matches without pagination
+			if (suggestions) {
+				query.$or = [
+					{ brand: { $regex: q, $options: 'i' } },
+					{ model: { $regex: q, $options: 'i' } }
+				];
 
+				const products = await Product.find(query)
+					.sort({ 'prices.efectivo_transferencia': -1 })
+					.limit(limit);
+
+				res.status(200).json(products);
+				return;
+			}
 			// Búsqueda por texto
 			if (q) {
 				query.$or = [

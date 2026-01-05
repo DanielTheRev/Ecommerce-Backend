@@ -1,8 +1,8 @@
 import { Server as HTTPServer } from 'http';
 import jwt from 'jsonwebtoken';
 import { Socket, Server as SocketIOServer } from 'socket.io';
-import { AdminUsers } from '../models/AdminUser';
-import { User } from '../models/User';
+import { AdminUsers } from '../models/AdminUser.model';
+import { User } from '../models/User.model';
 
 interface AuthSocket extends Socket {
 	user?: any;
@@ -43,9 +43,10 @@ class SocketManager {
 		if (!this.io) return;
 
 		this.io.use(async (socket: AuthSocket, next) => {
-			console.log('alguien se quiere conectar...');
+			// console.log('alguien se quiere conectar...');
 			try {
 				const token = socket.handshake.auth.token;
+				// console.log('websockets token => ', token);
 				if (!token) return next(new Error('No token provided'));
 
 				const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {

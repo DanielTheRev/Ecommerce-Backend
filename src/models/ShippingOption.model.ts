@@ -1,27 +1,9 @@
-import mongoose, { Schema, Document } from 'mongoose';
-
-// Enum para tipos de envío
-export enum ShippingType {
-	PICKUP = 'Punto de encuentro', // Punto de encuentro
-	HOME_DELIVERY = 'Envío a domicilio' // Envío a domicilio
-}
-
-// Interface para punto de venta
-export interface IPickupPoint {
-	name: string;
-	address: string;
-}
-
-// Interface principal del documento
-export interface IShippingOption extends Document {
-	type: ShippingType;
-	name: string;
-	cost: number;
-	pickupPoints?: IPickupPoint[];
-	isDefaultForCash: boolean;
-	createdAt: Date;
-	updatedAt: Date;
-}
+import {
+	IPickupPoint,
+	IShippingOption,
+	ShippingType
+} from '@/interfaces/shippingMethods.interface';
+import mongoose, { Schema } from 'mongoose';
 
 const pickupPointSchema = new Schema<IPickupPoint>({
 	name: { type: String, required: true },

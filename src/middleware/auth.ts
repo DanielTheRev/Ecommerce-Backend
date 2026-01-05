@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { User, IUser } from '../models/User';
-import { AdminUsers } from '../models/AdminUser';
+import { User } from '../models/User.model';
+import { AdminUsers } from '../models/AdminUser.model';
+import { IUser } from '@/interfaces/user.interface';
 
 export interface AuthRequest extends Request {
 	user?: IUser;
@@ -26,13 +27,18 @@ export const protect = async (
 		if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
 			token = req.headers.authorization.split(' ')[1];
 		}
-		// Verificar token en cookies
-		else if (req.cookies.token) {
-			token = req.cookies.token;
+		// Verificar token en cookies de clientes
+		if (req.cookies.token_c) {
+			token = req.cookies.token_c;
+		}
+		// Verificar token en cookies de clientes
+		if (req.cookies.token_a) {
+			token = req.cookies.token_a;
 		}
 
 		// Verificar que existe el token
 		if (!token) {
+			console.log('NO HAY TOKEN, USUARIO NO TIENE AUTORIZACIÓN');
 			return res.status(401).json({
 				success: false,
 				message: 'Acceso no autorizado, token requerido'
@@ -40,29 +46,36 @@ export const protect = async (
 		}
 
 		try {
+			console.log('VERIFICANDO TOKEN DEL USUARIO');
+			console.log(token);
 			// Verificar token
 			const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
 			// Buscar usuario actual
-			const user = await User.findById(decoded.userID) as any;
-			const adminUser = await AdminUsers.findById(decoded.userID) as any;
+			const user = (await User.findById(decoded.userID)) as any;
+			const adminUser = (await AdminUsers.findById(decoded.userID)) as any;
+
 			if (!user && !adminUser) {
 				return res.status(401).json({
 					success: false,
 					message: 'Usuario no encontrado'
 				});
 			}
-
+			const finalUser = user || adminUser;
+			console.log('USUARIO FINAL');
+			console.log(finalUser);
 			// Agregar usuario a la request
-			req.user = user || adminUser;
+			req.user = finalUser;
 
 			next();
 		} catch (error) {
+			console.log(error);
 			return res.status(401).json({
 				success: false,
 				message: 'Token inválido'
 			});
 		}
 	} catch (error) {
+		console.log('ACA ESTA EL ERROR');
 		console.error('Error en middleware de autenticación:', error);
 		return res.status(500).json({
 			success: false,

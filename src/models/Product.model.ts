@@ -1,10 +1,6 @@
-import mongoose, { Schema, Document } from 'mongoose';
-import { IProduct } from '../types/product.types';
+import mongoose, { Schema, Document, ObjectId } from 'mongoose';
+import { IProduct, IProductDocument } from '../interfaces/product.interface';
 import slugify from 'slugify';
-
-export interface IProductDocument extends Document, Omit<IProduct, 'id' | 'model'> {
-	_id: mongoose.Types.ObjectId;
-}
 
 const ProductSchema: Schema = new Schema<IProduct>(
 	{
@@ -97,12 +93,14 @@ const ProductSchema: Schema = new Schema<IProduct>(
 				trim: true
 			}
 		},
-		features: [
-			{
-				type: String,
-				trim: true
-			}
-		],
+		features: {
+			principalFeatures: [
+				{
+					type: String,
+					trim: true
+				}
+			]
+		},
 		stock: {
 			type: Number,
 			required: true,
@@ -116,15 +114,20 @@ const ProductSchema: Schema = new Schema<IProduct>(
 	}
 );
 ProductSchema.pre('save', function (next) {
-	if (this.isModified('brand') || this.isModified('model') || this.slug === null || this.slug === undefined) {
-		this.slug = slugify(this.brand + ' ' + this.model as string, { lower: true, strict: true });
+	if (
+		this.isModified('brand') ||
+		this.isModified('model') ||
+		this.slug === null ||
+		this.slug === undefined
+	) {
+		this.slug = slugify((this.brand + ' ' + this.model) as string, { lower: true, strict: true });
 	}
 	next();
 });
 
 // Índices para mejorar el rendimiento
-ProductSchema.index({ name: 1 });
-ProductSchema.index({ price: 1 });
+// `name` y `price` no existen explícitamente en este esquema (se usan `brand`, `model`, `prices`).
+// Eliminamos índices inválidos para evitar errores/advertencias.
 ProductSchema.index({ rating: -1 });
 
 export const Product = mongoose.model<IProductDocument>('Product', ProductSchema);

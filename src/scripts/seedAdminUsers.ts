@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
-import { IAdminUserCreate } from '../models/AdminUser';
-import { AdminUsers } from '../models/AdminUser';
+import { IAdminUserCreate } from '../models/AdminUser.model';
+import { AdminUsers } from '../models/AdminUser.model';
 
 const adminUsers: IAdminUserCreate[] = [
 	{

@@ -5,14 +5,16 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { connectDB } from './config/database';
-import productRoutes from './routes/productRoutes';
-import authRoutes from './routes/auth';
-import orderRoutes from './routes/orderRoutes';
-import shippingRoutes from './routes/shippingRoutes';
-import paymentMethodRoutes from './routes/paymentMethodRoutes';
+import productRoutes from './routes/productRoutes.routes';
+import authRoutes from './routes/auth.routes';
+import orderRoutes from './routes/orderRoutes.routes';
+import shippingRoutes from './routes/shippingRoutes.routes';
+import paymentMethodRoutes from './routes/paymentMethodRoutes.routes';
+import homeRoutes from './routes/home.routes';
 import { initUalaCheckOut } from './config/ualabis';
 import { socketManager } from './sockets/socketManager';
 import cookie_parser from 'cookie-parser';
+import { errorMiddleware } from './middleware/error.middleware';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -34,13 +36,21 @@ const allowedOrigins =
 				'http://localhost:5173',
 				'http://localhost:4200',
 				'http://localhost:4300',
-				'http://localhost:4000'
+				'http://localhost:4000',
+				'https://www.electromix.com.ar',
+				'https://electromix.com.ar',
+				'https://0rxf1t1jlv0j4ylas2rhatrnc8efqzeufyfvw0lggpthyb0r2m-h839267052.scf.usercontent.goog'
 			];
 
 app.use(helmet());
 app.use(
 	cors({
 		origin: (origin, callback) => {
+			if (process.env.NODE_ENV !== 'production') {
+				// En desarrollo, permitir cualquier origen
+				return callback(null, true);
+			}
+
 			if (!origin || allowedOrigins.includes(origin)) {
 				callback(null, true);
 			} else {
@@ -74,8 +84,12 @@ app.use('/api/auth', authRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/shipping', shippingRoutes);
 app.use('/api/payment-methods', paymentMethodRoutes);
+app.use('/api/home', homeRoutes);
 
-// Ruta raíz
+// Error handler middleware
+app.use(errorMiddleware);
+
+// Root route
 app.get('/', (req: Request, res: Response) => {
 	res.status(200).json({
 		success: true,
@@ -86,7 +100,7 @@ app.get('/', (req: Request, res: Response) => {
 });
 
 // Middleware para rutas no encontradas
-app.use('*', (req: Request, res: Response) => {
+app.use((req: Request, res: Response) => {
 	res.status(404).json({
 		success: false,
 		message: 'Ruta no encontrada',
@@ -95,15 +109,15 @@ app.use('*', (req: Request, res: Response) => {
 });
 
 // Middleware global de manejo de errores
-app.use((error: any, req: Request, res: Response, next: any) => {
-	console.error('❌ Error no capturado:', error);
+// app.use((error: any, req: Request, res: Response, next: any) => {
+// 	console.error('❌ Error no capturado:', error);
 
-	res.status(error.status || 500).json({
-		success: false,
-		message: error.message || 'Error interno del servidor',
-		...(process.env.NODE_ENV === 'development' && { stack: error.stack })
-	});
-});
+// 	res.status(error.status || 500).json({
+// 		success: false,
+// 		message: error.message || 'Error interno del servidor',
+// 		...(process.env.NODE_ENV === 'development' && { stack: error.stack })
+// 	});
+// });
 
 // Crear servidor HTTP
 const httpServer = createServer(app);

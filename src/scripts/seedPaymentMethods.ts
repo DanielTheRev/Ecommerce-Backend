@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { PaymentMethod, PaymentType } from '../models/PaymentMethod';
+import { PaymentMethod, PaymentType } from '../models/PaymentMethod.model';
 import { connectDB } from '../config/database';
 
 const initPaymentMethods = async () => {

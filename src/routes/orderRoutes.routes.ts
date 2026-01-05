@@ -8,9 +8,9 @@ import {
 	getOrderStats,
 	getUserOrders,
 	ualaWebhook,
-	updateOrderStatus,
-	updatePaymentStatus
-} from '../controllers/orderController';
+	updatePaymentStatus,
+	updateShippingStatus
+} from '../controllers/order.controller';
 import { adminOnly, protect } from '../middleware/auth';
 
 const router: Router = Router();
@@ -27,7 +27,8 @@ router.put('/:id/cancel', protect, cancelOrder); // Cancelar orden
 // Rutas para administradores
 router.get('/', protect, adminOnly, getAllOrders); // Obtener todas las órdenes (admin)
 router.post('/updatePaymentStatus', protect, adminOnly, updatePaymentStatus); // actualizar estado de una order desde el cliente
-router.put('/:id/status', protect, adminOnly, updateOrderStatus); // Actualizar estado de orden (admin)
+router.post('/updateShippingStatus', protect, adminOnly, updateShippingStatus); // actualizar estado de una order desde el cliente
+// router.put('/:id/status', protect, adminOnly, updateOrderStatus); Actualizar estado de orden (admin)
 router.get('/admin/stats', protect, adminOnly, getOrderStats); // Obtener estadísticas (admin)
 
 export default router;

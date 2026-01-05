@@ -1,5 +1,6 @@
+import { ShippingType } from '@/interfaces/shippingMethods.interface';
+import { ShippingOption } from '@/models/ShippingOption.model';
 import { Request, Response } from 'express';
-import { ShippingOption, ShippingType } from '../models/ShippingOption';
 
 export class ShippingController {
 	// Obtener todas las opciones de envío

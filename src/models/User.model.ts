@@ -1,20 +1,5 @@
-import { Schema, model, Document } from 'mongoose';
-
-export enum Role {
-	user = 'user',
-	admin = 'admin'
-}
-
-export interface IUser extends Document {
-	name: string;
-	email: string;
-	role: Role;
-	googleID: string;
-	profilePhoto: string;
-	isActive: boolean;
-	createdAt: Date;
-	updatedAt: Date;
-}
+import { IUser, Role } from '@/interfaces/user.interface';
+import { Schema, model } from 'mongoose';
 
 const userSchema = new Schema<IUser>(
 	{
@@ -55,7 +40,7 @@ const userSchema = new Schema<IUser>(
 	}
 );
 
-// Middleware para hashear password antes de guardar
+// Middleware to hash password before save
 // userSchema.pre('save', async function(next) {
 //   if (!this.isModified('password')) return next();
 
@@ -74,7 +59,8 @@ const userSchema = new Schema<IUser>(
 // };
 
 // Índices
-userSchema.index({ email: 1 });
+// `email` ya define `unique: true` en la propiedad, eso crea el índice automáticamente.
+// Evitamos declarar el mismo índice explícitamente para prevenir warnings de duplicado.
 userSchema.index({ isActive: 1 });
 
 export const User = model<IUser>('User', userSchema);

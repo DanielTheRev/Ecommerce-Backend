@@ -1,23 +1,6 @@
-import { Schema, model, Document } from 'mongoose';
-import { Role } from './User';
+import { Schema, model } from 'mongoose';
+import { IAdminUser, Role } from '@/interfaces/user.interface';
 import bcrypt from 'bcryptjs';
-
-export interface IAdminUser extends Document {
-	name: string;
-	email: string;
-	role: Role.admin;
-	password: string;
-	token: string;
-	comparePassword(candidatePassword: string): Promise<boolean>;
-	hasPassword(password: string): Promise<string>;
-}
-
-export interface IAdminUserCreate {
-	name: string;
-	email: string;
-	password: string;
-	token?: string;
-}
 
 const userAdminSchema = new Schema<IAdminUser>(
 	{
