@@ -1,12 +1,13 @@
+import { Role } from '@/interfaces/user.interface';
+import { User } from '@/models/User.model';
+import { UserService } from '@/services/user.service';
 import mongoose from 'mongoose';
-import { IAdminUserCreate } from '../models/AdminUser.model';
-import { AdminUsers } from '../models/AdminUser.model';
 
-const adminUsers: IAdminUserCreate[] = [
+const adminUsers = [
 	{
 		name: 'Daniel Larrosa',
-		email: 'larrosadaniel2894@gmail.com',
-		password: '@Unarefacil1',
+		email: 'fernando.larrosa94@gmail.com',
+		password: '@Unarefacil1'
 	}
 ];
 
@@ -18,18 +19,25 @@ const poblateAdminUsers = async () => {
 		console.log('✅ Conectado a MongoDB');
 
 		// Limpiar la colección existente
-		await AdminUsers.deleteMany({});
-		console.log('🗑️ Productos existentes eliminados');
+		// await User.deleteMany({ role: 'admin' });
+		// console.log('🗑️ Productos existentes eliminados');
 
 		// Insertar productos de prueba
 		for (const AdminUser of adminUsers) {
-			const newUser = new AdminUsers(AdminUser);
+			const user = await User.findOne({ email: AdminUser.email }).select('+password');
+			if (user) {
+				user.password = AdminUser.password;
+				user.role = Role.admin;
+				await user.save();
+				continue;
+			}
+			const newUser = new User(AdminUser);
 			await newUser.save();
 		}
 
 		// Mostrar algunos usuarios creados
 		console.log('\n📦 Usuarios creados:');
-		const createdAdminUsers = await AdminUsers.find();
+		const createdAdminUsers = await User.find({ role: Role.admin });
 		createdAdminUsers.forEach((user, index) => {
 			console.log(`${index + 1}. ${user.name}; ${user.email}; ${user.role}`);
 		});

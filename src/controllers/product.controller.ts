@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Product } from '@/models/Product.model';
-import { IProductCreate, IProductUpdate } from '@/interfaces/product.interface';
+import { IProductCreateDTO, IProductUpdateDTO } from '@/interfaces/product.interface';
+import { ProductService } from '@/services/product.service';
 
 export class ProductController {
 	// GET /api/products/all - Obtener todos los productos sin Paginación
@@ -79,47 +80,20 @@ export class ProductController {
 		}
 	}
 
-	// POST /api/products - Crear un nuevo producto
+	// POST /api/products - Create new product
 	static async createProduct(req: Request, res: Response): Promise<void> {
-		try {
-			const productData: IProductCreate = req.body;
-
-			// Validaciones básicas
-			if (
-				!productData.brand ||
-				!productData.model ||
-				!productData.image?.light ||
-				!productData.image?.dark
-			) {
-				res.status(400).json({
-					success: false,
-					message: 'Los campos brand, model, image.light e image.dark son requeridos'
-				});
-				return;
-			}
-
-			const product = new Product(productData);
-			const savedProduct = await product.save();
-
-			res.status(201).json({
-				success: true,
-				message: 'Producto creado exitosamente',
-				data: savedProduct
-			});
-		} catch (error) {
-			res.status(400).json({
-				success: false,
-				message: 'Error al crear el producto',
-				error: error instanceof Error ? error.message : 'Error desconocido'
-			});
-		}
+		let data = req.body as IProductCreateDTO;
+		const files = req.files;
+		console.log(data, files);
+		// data.images = files as { file: Express.Multer.File }[];
+		// const newProduct = await ProductService.createProduct()
 	}
 
 	// PUT /api/products/:id - Actualizar un producto completo
 	static async updateProduct(req: Request, res: Response): Promise<void> {
 		try {
 			const { id } = req.params;
-			const updateData: IProductUpdate = req.body;
+			const updateData: IProductUpdateDTO = req.body;
 
 			const product = await Product.findByIdAndUpdate(id, updateData, {
 				new: true,
@@ -152,7 +126,7 @@ export class ProductController {
 	static async patchProduct(req: Request, res: Response): Promise<void> {
 		try {
 			const { id } = req.params;
-			const updateData: Partial<IProductUpdate> = req.body;
+			const updateData: Partial<IProductUpdateDTO> = req.body;
 
 			const product = await Product.findByIdAndUpdate(
 				id,

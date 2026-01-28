@@ -3,14 +3,14 @@ import {
 	CreateOrderDTO,
 	OrderStatus,
 	PaymentStatus,
-	updatePaymentStatusDTO
+	updatePaymentStatusDTO,
+	updateShippingStatusDTO
 } from '@/interfaces/order.interface';
 import OrderModel from '@/models/Order.model';
 import { PaymentService } from './Payment.service';
 import { PaymentMethodService } from './paymentMethod.service';
 import { ProductService } from './product.service';
 import { ShippingMethodService } from './shippingMethod.service';
-
 
 import { PaymentType } from '@/interfaces/paymentMethod.interface';
 import { ShippingType } from '@/interfaces/shippingMethods.interface';
@@ -19,14 +19,18 @@ import { Role } from '@/interfaces/user.interface';
 
 export class OrderService {
 	static async getOrderById(id: string) {
-		if (!id) throw new AppError('Order ID is required', 400);
+		if (!id) throw new AppError('Order ID is required', 'El ID de la orden es requerido', 400);
 		try {
 			const order = await OrderModel.findById(id);
-			if (!order) throw new AppError('Order not found', 404);
+			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
 			return order;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
-			throw new AppError('Failed to retrieve order', 500);
+			throw new AppError(
+				'Failed to retrieve order',
+				'Error al intentar recuperar la orden',
+				500
+			);
 		}
 	}
 
@@ -35,29 +39,47 @@ export class OrderService {
 			const order = await OrderModel.findById(id)
 				.populate('user', 'name email')
 				.populate('items.product', 'name price images');
-			if (!order) throw new AppError('Order not found', 404);
+			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
 			return order;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
-			throw new AppError('Failed to retrieve order', 500);
+			throw new AppError(
+				'Failed to retrieve order',
+				'Error al intentar recuperar la orden',
+				500
+			);
 		}
 	}
 
 	static async updateOrderStatus(id: string, orderStatus: PaymentStatus) {
 		try {
 			const order = await OrderModel.findByIdAndUpdate(id, { orderStatus }, { new: true });
-			if (!order) throw new AppError('Order not found', 404);
+			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
 			return order;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
-			throw new AppError('Failed to update order status', 500);
+			throw new AppError(
+				'Failed to update order status',
+				'Error al intentar actualizar el estado de la orden',
+				500
+			);
 		}
 	}
 
 	static async createOrder(data: CreateOrderDTO, userId: string) {
 		/* Validate user and order data */
-		if (!userId) throw new AppError('User ID is required to create an order', 400);
-		if (!data || data.items.length === 0) throw new AppError('Order items are required', 400);
+		if (!userId)
+			throw new AppError(
+				'User ID is required to create an order',
+				'El ID del usuario es requerido para crear una orden',
+				400
+			);
+		if (!data || data.items.length === 0)
+			throw new AppError(
+				'Order items are required',
+				'Los items de la orden son requeridos',
+				400
+			);
 		const orderIDS = data.items.map((item) => item.productId);
 		try {
 			/* fetching products in the cart from DB */
@@ -118,7 +140,11 @@ export class OrderService {
 				const { ualaOrder, error } = await paymentService.withUalaBiss(order.id);
 				order.paymentInfo.transactionId = ualaOrder?.uuid || '';
 				if (error) {
-					throw new AppError('Failed to create order', 500);
+					throw new AppError(
+						'Failed to create order',
+						'Error al intentar crear la orden',
+						500
+					);
 				}
 				extras = ualaOrder;
 			}
@@ -135,65 +161,106 @@ export class OrderService {
 			return { order: populatedOrder, extras };
 		} catch (error) {
 			if (error instanceof AppError) throw error;
-			throw new AppError('Failed to create order', 500);
+			throw new AppError('Failed to create order', 'Error al intentar crear la orden', 500);
 		}
 	}
 
 	static async getOrdersByUserId(userId: string) {
-		if (!userId) throw new AppError('User ID is required to fetch orders', 400);
+		if (!userId)
+			throw new AppError(
+				'User ID is required to fetch orders',
+				'El ID del usuario es requerido para obtener las órdenes',
+				400
+			);
 		try {
 			const userOrders = await OrderModel.findByUser(userId);
 			return userOrders;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
-			throw new AppError('Failed to retrieve user orders', 500);
+			throw new AppError(
+				'Failed to retrieve user orders',
+				'Error al intentar recuperar las órdenes del usuario',
+				500
+			);
 		}
 	}
 
 	static async updatePaymentStatus(data: updatePaymentStatusDTO) {
-		if (!data.orderID) throw new AppError('Order ID is required to update payment status', 400);
+		if (!data.orderID)
+			throw new AppError(
+				'Order ID is required to update payment status',
+				'El ID de la orden es requerido para actualizar el estado del pago',
+				400
+			);
 		try {
 			let order = await this.getOrderByIdPopulated(data.orderID);
-			if (!order) throw new AppError('Order not found', 404);
+			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
 			let newStatus: string;
 			const isCard = PaymentService.theOrderIsPreferredPayment(order.paymentInfo.method);
-			if (!isCard) {
+			if (isCard) {
 				if (!order.paymentInfo.transactionId)
-					throw new AppError('No transaction ID found for this order', 400);
+					throw new AppError(
+						'No transaction ID found for this order',
+						'No se encontró ID de transacción para esta orden',
+						400
+					);
 
 				const ualaOrder = await PaymentService.getOrderStatus(order.paymentInfo.transactionId);
 
-				if (ualaOrder.error) {
-					throw new AppError('Failed to retrieve payment status from Uala', 500);
-				}
+				if (!ualaOrder.orderStatus || ualaOrder.error)
+					throw new AppError(
+						'Order not found',
+						'transaccion no encontrada',
+						404
+					);
+
 				newStatus =
 					ualaOrder.orderStatus?.status === UalaOrderStatus.Aprobado
 						? PaymentStatus.APPROVED
 						: PaymentStatus.REJECTED;
 			}
-			newStatus = PaymentStatus.PAID;
-			order.paymentInfo.status = PaymentStatus.PAID;
+			order.paymentInfo.status = data.status;
+			// order.status = OrderStatus.DELIVERED;
 			const orderUpdated = await order.save();
 			return orderUpdated;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
-			throw new AppError('Failed to update payment status', 500);
+			throw new AppError(
+				'Failed to update payment status',
+				'Error al intentar actualizar el estado del pago',
+				500
+			);
 		}
 	}
 
-	static async updateOrderShippingStatus(id: string, newStatus: OrderStatus) {
-		if (!id) throw new AppError('Order ID is required to update shipping status', 400);
+	static async updateOrderShippingStatus(data: updateShippingStatusDTO) {
+		if (!data.orderID)
+			throw new AppError(
+				'Order ID is required to update shipping status',
+				'El ID de la orden es requerido para actualizar el estado del envío',
+				400
+			);
 		try {
-			const order = await OrderModel.findById(id);
+			const order = await OrderModel.findById(data.orderID)
+				.populate('user', 'name email profilePhoto role')
+				.populate({
+					path: 'items.product',
+					select: 'name price images description category'
+				});
+
 			if (!order) {
-				throw new AppError('Order not found', 404);
+				throw new AppError('Order not found', 'Orden no encontrada', 404);
 			}
-			order.status = OrderStatus.SHIPPED;
+			order.status = data.status;
 			const orderUpdated = await order.save();
 			return orderUpdated;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
-			throw new AppError('Failed to update shipping status', 500);
+			throw new AppError(
+				'Failed to update shipping status',
+				'Error al intentar actualizar el estado del envío',
+				500
+			);
 		}
 	}
 	/* only admin */
@@ -207,10 +274,11 @@ export class OrderService {
 			limit: string | number;
 		}
 	) {
-		if (query.userId === 'undefined') throw new AppError('Invalid userId filter', 400);
+		if (query.userId === 'undefined')
+			throw new AppError('Invalid userId filter', 'El filtro de userId no es válido', 400);
 
 		if (role !== 'admin') {
-			throw new AppError('Unauthorized access', 403);
+			throw new AppError('Unauthorized access', 'Acceso no autorizado', 403);
 		}
 		const page = parseInt(query.page as string) || 1;
 		const limit = parseInt(query.limit as string) || 10;
@@ -272,7 +340,7 @@ export class OrderService {
 					break;
 			}
 		}
-
+		console.log(query);
 		try {
 			// Obtener órdenes con Paginación y populate mejorado
 			const orders = await OrderModel.find(filters)
@@ -325,25 +393,48 @@ export class OrderService {
 			return response;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
-			throw new AppError('Failed to retrieve orders', 500);
+			throw new AppError(
+				'Failed to retrieve orders',
+				'Error al intentar recuperar las órdenes',
+				500
+			);
 		}
 	}
 
 	static async cancelOrder(id: string, userID: string, role: Role) {
-		if (!id) throw new AppError('Order ID is required to cancel an order', 400);
-		if (!userID) throw new AppError('User ID is required to cancel an order', 400);
-		if (role !== Role.admin) throw new AppError('Unauthorized access', 403);
+		if (!id)
+			throw new AppError(
+				'Order ID is required to cancel an order',
+				'El ID de la orden es requerido para cancelarla',
+				400
+			);
+		if (!userID)
+			throw new AppError(
+				'User ID is required to cancel an order',
+				'El ID del usuario es requerido para cancelar la orden',
+				400
+			);
+		if (role !== Role.admin)
+			throw new AppError('Unauthorized access', 'Acceso no autorizado', 403);
 		try {
 			const order = await this.getOrderById(id);
-			if (!order) throw new AppError('Order not found', 404);
+			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
 			// verify if the user is the owner of the order or an admin if is admin can cancel the order
 			if (order.user.toString() !== userID && role !== 'admin') {
-				throw new AppError('You can only cancel your own orders', 403);
+				throw new AppError(
+					'You can only cancel your own orders',
+					'Solo puedes cancelar tus propias órdenes',
+					403
+				);
 			}
 
 			// only pending orders can be cancelled
 			if (order.status !== OrderStatus.PENDING) {
-				throw new AppError('Only pending orders can be cancelled', 400);
+				throw new AppError(
+					'Only pending orders can be cancelled',
+					'Solo se pueden cancelar órdenes pendientes',
+					400
+				);
 			}
 
 			// Actualizar estado a cancelado
@@ -357,13 +448,14 @@ export class OrderService {
 			return updatedOrder;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
-			throw new AppError('failed to cancel order', 500);
+			throw new AppError('failed to cancel order', 'Error al intentar cancelar la orden', 500);
 		}
 	}
 
 	static async getOrderStats(role: Role) {
 		/* Verify role exist and its Admin */
-		if (!role || role !== Role.admin) throw new AppError('Unauthorized access', 403);
+		if (!role || role !== Role.admin)
+			throw new AppError('Unauthorized access', 'Acceso no autorizado', 403);
 		try {
 			const [
 				totalOrders,
@@ -396,7 +488,7 @@ export class OrderService {
 			};
 		} catch (error) {
 			if (error instanceof AppError) throw error;
-			throw new AppError('Error fetching order', 500);
+			throw new AppError('Error fetching order', 'Error al intentar recuperar las órdenes', 500);
 		}
 	}
 }

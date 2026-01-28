@@ -1,56 +1,39 @@
 import { AuthService } from '@/services/auth.service';
 import { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
-import { IUser, IAdminUser, Role } from '@/interfaces/user.interface';
+import { ISecureUser, IUser } from '@/interfaces/user.interface';
 import { UserService } from '@/services/user.service';
-import { AuthProvider } from '@/interfaces/auth.interface';
+import { AuthProvider, ILoginUserWithGoogle } from '@/interfaces/auth.interface';
+import { AppError } from '@/errors/app.error';
 
 /* Function to send response with token */
-const sendTokenResponse = (
-	statusCode: number,
-	res: Response,
-	user?: IUser,
-	userAdmin?: IAdminUser
-) => {
-	const _user = {
-		id: user?._id,
-		name: user?.name,
-		email: user?.email,
-		role: user?.role,
-		isActive: user?.isActive,
-		createdAt: user?.createdAt,
-		updatedAt: user?.updatedAt
-	};
-	const _userAdmin = {
-		id: userAdmin?._id,
-		name: userAdmin?.name,
-		email: userAdmin?.email,
-		role: userAdmin?.role
-	};
+const sendTokenResponse = (statusCode: number, res: Response, user?: ISecureUser) => {
+	if (!user) throw new AppError('SendTokenResponseError: Not found user', 'User not found', 401);
 
-	const _userData = userAdmin ? _userAdmin : _user;
-	const token = AuthService.generateToken(_userData!.id as string);
-	const cookiePath = userAdmin ? 'token_a' : 'token_c';
-	console.log(cookiePath);
+	const token = AuthService.generateToken(user.id);
+	const cookiePath = 'token_b';
 	return res
 		.status(statusCode)
 		.cookie(cookiePath, token, AuthService.cookieOptions)
 		.json({
 			success: true,
 			message: statusCode === 201 ? 'Usuario registrado exitosamente' : 'Login exitoso',
-			user: _userData
+			user: user
 		});
 };
 
 // @desc    Iniciar sesión con google
 // @route   POST /api/auth/login/google
 // @access  Public
-export const loginUserWithGoogle = async (req: Request, res: Response, next: NextFunction) => {
-	const { token, role } = req.body as { token: string; role: Role };
+export const loginUser = async (req: Request, res: Response, next: NextFunction) => {
+	const { provider, token: googleToken, email, password } = req.body as ILoginUserWithGoogle;
 
 	try {
-		const user = await AuthService.loginUserWith(AuthProvider.GOOGLE, token, role);
-		return sendTokenResponse(201, res, user as unknown as IUser);
+		const user = await AuthService.loginUserWith(provider, googleToken, {
+			email,
+			password
+		});
+		return sendTokenResponse(201, res, user as unknown as ISecureUser);
 	} catch (error) {
 		return next(error);
 	}
@@ -59,13 +42,13 @@ export const loginUserWithGoogle = async (req: Request, res: Response, next: Nex
 export const LoginAdmin = async (req: Request, res: Response, next: NextFunction) => {
 	const data = req.body as { email: string; password: string };
 	const { email, password } = data;
+
 	try {
-		const user = await AuthService.loginUserWith(AuthProvider.Email, undefined, Role.admin, {
+		const user = await AuthService.loginUserWith(AuthProvider.Email, '', {
 			email,
 			password
 		});
-		const tempUser = user as unknown as IAdminUser;
-		return sendTokenResponse(200, res, undefined, tempUser);
+		return sendTokenResponse(200, res, user as ISecureUser);
 	} catch (error) {
 		return next(error);
 	}
@@ -73,42 +56,14 @@ export const LoginAdmin = async (req: Request, res: Response, next: NextFunction
 // @desc get user profile
 // @route GET /api/auth/getUser
 export const getUserProfile = async (req: Request, res: Response) => {
-	const { token_c: token } = req.cookies as { token_c: string };
+	const { token_b: token } = req.cookies as { token_b: string };
 
 	if (!token) return res.status(401).json({ message: 'no token provided' });
 	try {
 		const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userID: string };
-		const user = await UserService.getUserByID(decoded.userID, [
-			'name',
-			'email',
-			'role',
-			'profilePhoto'
-		]);
+		const user = await UserService.getUserByID(decoded.userID);
 		if (!user) return res.status(404).json({ message: 'User not found' });
-		return res.json({ ...user?.toJSON(), token });
-	} catch (error) {
-		console.log(error);
-		return res.status(401).json({ valid: false });
-	}
-};
-
-// @desc get admin user profile
-// @route GET /api/auth/getAdminUser
-export const getAdminUserProfile = async (req: Request, res: Response) => {
-	const { token_a: token } = req.cookies as { token_a: string };
-	console.log(req.cookies);
-
-	if (!token) return res.status(401).json({ message: 'no token provided' });
-	try {
-		const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userID: string };
-		const user = await UserService.getAdminUserByID(decoded.userID, [
-			'name',
-			'email',
-			'role',
-			'profilePhoto',
-			'token'
-		]);
-		return res.json({ user });
+		return res.json(user);
 	} catch (error) {
 		console.log(error);
 		return res.status(401).json({ valid: false });
@@ -120,7 +75,7 @@ export const getAdminUserProfile = async (req: Request, res: Response) => {
 // @access  Private
 export const logout = async (req: Request, res: Response) => {
 	try {
-		res.cookie('token_c', 'none', AuthService.cookieOptions);
+		res.cookie('token_b', 'none', AuthService.cookieOptions);
 
 		return res.status(200).json({
 			success: true,

@@ -15,12 +15,10 @@ import { initUalaCheckOut } from './config/ualabis';
 import { socketManager } from './sockets/socketManager';
 import cookie_parser from 'cookie-parser';
 import { errorMiddleware } from './middleware/error.middleware';
+import { EcommerceService } from './services/ecommerce.service';
 
 // Cargar variables de entorno
 dotenv.config();
-
-// Inicializar Uala Checkout
-initUalaCheckOut();
 
 // Crear aplicación Express
 const app: Application = express();
@@ -108,17 +106,6 @@ app.use((req: Request, res: Response) => {
 	});
 });
 
-// Middleware global de manejo de errores
-// app.use((error: any, req: Request, res: Response, next: any) => {
-// 	console.error('❌ Error no capturado:', error);
-
-// 	res.status(error.status || 500).json({
-// 		success: false,
-// 		message: error.message || 'Error interno del servidor',
-// 		...(process.env.NODE_ENV === 'development' && { stack: error.stack })
-// 	});
-// });
-
 // Crear servidor HTTP
 const httpServer = createServer(app);
 
@@ -127,7 +114,10 @@ const startServer = async (): Promise<void> => {
 	try {
 		// Conectar a la base de datos
 		await connectDB();
-
+		// Inicializar configuración de comercio
+		// await EcommerceService.seedDefaultConfig();
+		// Inicializar Uala Checkout
+		await initUalaCheckOut();
 		// Inicializar WebSockets
 		socketManager.initialize(httpServer);
 
@@ -145,6 +135,7 @@ const startServer = async (): Promise<void> => {
 };
 
 // Iniciar el servidor
+
 startServer();
 
 export default app;

@@ -1,11 +1,11 @@
+import { AppError } from '@/errors/app.error';
 import { AuthError } from '@/errors/auth.error';
 import { AuthProvider } from '@/interfaces/auth.interface';
+import { ISecureUser, Role } from '@/interfaces/user.interface';
+import dotenv from 'dotenv';
 import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
 import { UserService } from './user.service';
-import { Role } from '@/interfaces/user.interface';
-import { AppError } from '@/errors/app.error';
-import dotenv from 'dotenv';
 
 dotenv.config();
 
@@ -28,16 +28,21 @@ export class AuthService {
 
 	// get payload from Google token
 	private static async getDataFromGoogleToken(token: string) {
-		const client = this.getGoogleClient();
-		const ticket = await client.verifyIdToken({
-			idToken: token,
-			audience: this.CLIENT_ID
-		});
-		const payload = ticket.getPayload();
-		if (!payload) {
-			throw new Error('Invalid Google token payload');
+		try {
+			const client = this.getGoogleClient();
+			const ticket = await client.verifyIdToken({
+				idToken: token,
+				audience: this.CLIENT_ID
+			});
+			const payload = ticket.getPayload();
+			if (!payload) {
+				throw new Error('Invalid Google token payload');
+			}
+			return payload;
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError('google token or implementation error', 'Usuario no encontrado', 500);
 		}
-		return payload;
 	}
 
 	static generateToken(userID: string): string {
@@ -49,76 +54,84 @@ export class AuthService {
 	static async loginUserWith(
 		provider: AuthProvider,
 		token?: string,
-		role?: Role,
 		loginData?: { email: string; password: string }
 	) {
+		/* If is an user, role will be defined */
+		const role = Role.user;
 		// Implement login logic based on provider
-		if (provider === AuthProvider.GOOGLE) return this.loginWithGoogle(token!, role!);
+		if (provider === AuthProvider.GOOGLE) return this.loginWithGoogle(role, token!);
 		if (provider === AuthProvider.Email) return this.loginWithEmail(loginData!, role!);
-		throw new AppError('Unsupported authentication provider', 400);
+		throw new AppError(
+			'Unsupported authentication provider',
+			'Proveedor de autenticación no soportado',
+			400
+		);
 	}
 
-	private static async loginWithGoogle(token: string, role: Role) {
-		// Validate token
-		if (!token) throw new AuthError('No token provided', 401);
+	private static async loginWithGoogle(role: Role, googleToken: string) {
+		if (!googleToken) throw new AppError('no token provided', 'No se proporcionó token', 500);
 		// try to get user data from google token
 		try {
-			const userData = await AuthService.getDataFromGoogleToken(token);
+			const userData = await AuthService.getDataFromGoogleToken(googleToken);
 			if (!userData) {
-				throw new AuthError('Invalid Google token or no user valid', 401);
+				throw new AuthError(
+					'Invalid Google token or no user valid',
+					'Token de google invalido o usuario no valido',
+					401
+				);
 			}
-			const { name = '', email = '', sub: googleID, picture = '' } = userData;
+			const { name, email, sub: googleID, picture } = userData;
 
-			const existingUser = await UserService.getUserByGoogleID(googleID);
-			if (existingUser) return existingUser;
+			const user = await UserService.getUserByGoogleID(googleID);
+			/* user already registered with google */
+			if (user) return user;
 
 			const newUserData = {
 				name,
 				email,
-				role: role || Role.user,
+				role,
 				googleID,
 				profilePhoto: picture,
-				isActive: true,
-				token
+				isActive: true
 			};
-			const newUser = await UserService.createUser(newUserData, token);
+			const newUser = await UserService.createUser(newUserData);
 			return newUser;
 		} catch (error) {
 			console.log(error);
 			if (error instanceof AppError) throw error;
-			throw new AppError('Authentication failed', 500);
+			throw new AppError('Authentication failed', 'Error al intentar iniciar sesión', 500);
 		}
 	}
 
 	private static async loginWithEmail(loginData: { email: string; password: string }, role: Role) {
 		if (!loginData.email || !loginData.password) {
-			throw new AuthError('Missing email or password', 400);
+			throw new AuthError('Missing email or password', 'Faltan email o contraseña', 400);
 		}
-		// for now, only admin can login with Email
-		if (role === Role.admin) {
-			try {
-				const admin = await UserService.getAdminUserByEmail(loginData.email);
-				if (!admin) {
-					throw new AuthError('Invalid credentials', 401);
-				}
-				const isMatch = await admin.comparePassword(loginData.password);
-				if (!isMatch) {
-					throw new AuthError('Invalid credentials', 401);
-				}
-				const tempUser = {
-					_id: admin._id,
-					name: admin.name,
-					email: admin.email,
-					role: admin.role
-				} as any;
-				admin.token = AuthService.generateToken(admin._id as string);
-				await admin.save();
-				return tempUser;
-			} catch (error) {
-				if (error instanceof AppError) throw error;
-				throw new AppError('Authentication failed', 500);
+		try {
+			const user = await UserService.getUserByEmail(loginData.email);
+			if (!user) {
+				throw new AuthError('Invalid credentials', 'Credenciales invalidas', 401);
 			}
+			const isMatch = await user.comparePassword(loginData.password);
+			if (!isMatch) {
+				throw new AuthError('Invalid credentials', 'Credenciales inválidas', 401);
+			}
+			const userFlat: ISecureUser = {
+				id: user.id,
+				name: user.name,
+				email: user.email,
+				role: user.role,
+				googleID: user.googleID,
+				profilePhoto: user.profilePhoto,
+				isActive: user.isActive,
+				createdAt: user.createdAt,
+				updatedAt: user.updatedAt
+			};
+			return userFlat;
+		} catch (error) {
+			console.log(error);
+			if (error instanceof AppError) throw error;
+			throw new AppError('Authentication failed', 'Error al intentar iniciar sesión', 500);
 		}
-		throw new AppError('login error', 401);
 	}
 }

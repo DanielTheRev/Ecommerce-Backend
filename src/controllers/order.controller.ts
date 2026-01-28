@@ -41,7 +41,6 @@ export const ualaWebhook = async (req: AuthRequest, res: Response) => {
 export const createOrder = async (req: AuthRequest, res: Response, next: NextFunction) => {
 	try {
 		const userId = req.user?.id;
-		console.log('new order request by user:', userId);
 		const { order, extras } = await OrderService.createOrder(req.body as CreateOrderDTO, userId!);
 
 		return res.status(201).json({
@@ -58,8 +57,7 @@ export const createOrder = async (req: AuthRequest, res: Response, next: NextFun
 export const getUserOrders = async (req: AuthRequest, res: Response, next: NextFunction) => {
 	try {
 		const user = req.user;
-
-		const userOrders = await OrderService.getOrdersByUserId(user!.id);
+		const userOrders = await OrderService.getOrdersByUserId(user!._id as string);
 		return res.json({
 			message: 'Órdenes obtenidas exitosamente',
 			orders: userOrders
@@ -94,9 +92,9 @@ export const getOrderById = async (req: AuthRequest, res: Response, next: NextFu
 
 // update order status (only admin)
 export const updatePaymentStatus = async (req: AuthRequest, res: Response, next: NextFunction) => {
-	const { orderID } = req.body as updatePaymentStatusDTO;
+	const { orderID, status } = req.body as updatePaymentStatusDTO;
 	try {
-		const order = await OrderService.updatePaymentStatus({ orderID });
+		const order = await OrderService.updatePaymentStatus({ orderID, status });
 		//todo implementación de notificaciones via socket
 		socketManager.notifyClient(
 			order.user._id.toString(),
@@ -111,9 +109,9 @@ export const updatePaymentStatus = async (req: AuthRequest, res: Response, next:
 };
 
 export const updateShippingStatus = async (req: AuthRequest, res: Response, next: NextFunction) => {
-	const { orderID } = req.body as updateShippingStatusDTO;
+	const { orderID, status } = req.body as updateShippingStatusDTO;
 	try {
-		const order = await OrderService.updateOrderShippingStatus(orderID, OrderStatus.SHIPPED);
+		const order = await OrderService.updateOrderShippingStatus({ orderID, status });
 		socketManager.notifyClient(
 			order.user._id.toString(),
 			'Compra enviada con éxito',
@@ -155,9 +153,9 @@ export const getAllOrders = async (req: AuthRequest, res: Response, next: NextFu
 		const page = parseInt(req.query.page as string) || 1;
 		const limit = parseInt(req.query.limit as string) || 10;
 		const query = {
-			status: (status as string) || 'all',
+			status: (status as string) || '',
 			userId: (userId as string) || '',
-			dateRange: (dateRange as string) || 'all',
+			dateRange: (dateRange as string) || '',
 			page,
 			limit
 		};

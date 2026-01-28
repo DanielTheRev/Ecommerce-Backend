@@ -6,22 +6,16 @@ export enum Role {
 	admin = 'admin'
 }
 
-/* admin interfaces */
-export interface IAdminUser extends Document {
+export interface ISecureUser {
+	id: string;
 	name: string;
 	email: string;
-	role: Role.admin;
-	password: string;
-	token: string;
-	comparePassword(candidatePassword: string): Promise<boolean>;
-	hasPassword(password: string): Promise<string>;
-}
-
-export interface IAdminUserCreate {
-	name: string;
-	email: string;
-	password: string;
-	token?: string;
+	role: Role;
+	googleID: string;
+	profilePhoto: string;
+	isActive: boolean;
+	createdAt: Date;
+	updatedAt: Date;
 }
 
 /* user interfaces */
@@ -31,7 +25,10 @@ export interface IUser extends Document {
 	role: Role;
 	googleID: string;
 	profilePhoto: string;
+	password: string;
 	isActive: boolean;
 	createdAt: Date;
 	updatedAt: Date;
+	comparePassword(candidatePassword: string): Promise<boolean>;
+	hasPassword(password: string): Promise<string>;
 }

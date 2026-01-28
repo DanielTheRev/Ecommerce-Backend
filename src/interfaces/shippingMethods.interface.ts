@@ -2,8 +2,8 @@ import { Document } from 'mongoose';
 
 // Shipping types Enum
 export enum ShippingType {
-	PICKUP = 'Punto de encuentro', // Punto de encuentro
-	HOME_DELIVERY = 'Envío a domicilio' // Envío a domicilio
+	PICKUP = 'Punto de encuentro',
+	HOME_DELIVERY = 'Envío a domicilio'
 }
 
 // IPickupPoint Interface

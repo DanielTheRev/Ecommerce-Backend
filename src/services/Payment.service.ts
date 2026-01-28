@@ -1,6 +1,12 @@
+import {
+	EcommercePaymentProviders,
+	IEcommercePaymentGateway
+} from '@/interfaces/ecommerce.interface';
 import { PaymentType } from '@/interfaces/paymentMethod.interface';
-import { IProduct } from '@/interfaces/product.interface';
+import { IProduct, IProductPrices } from '@/interfaces/product.interface';
 import UalaApiCheckout from 'ualabis-nodejs';
+import { EcommerceService } from './ecommerce.service';
+import { AppError } from '@/errors/app.error';
 
 export class PaymentService {
 	private preferredPaymentTypes = [
@@ -55,6 +61,78 @@ export class PaymentService {
 		}
 	}
 
+	static async CalculatePrices(
+		paymentProvider: EcommercePaymentProviders,
+		cost_price: number,
+		dolar: number
+	) {
+		try {
+			//TODO: implementar mas tarde esto↓
+			// const paymentGateways = {
+			// 	[EcommercePaymentProviders.UALA]: this.calculatePricesWithUala,
+			// 	[EcommercePaymentProviders.MERCADOPAGO]: this.calculatePricesWithMercadoPago
+			// };
+			// const prices = await paymentGateways[paymentGateway](cost_price, dolar);
+			const prices = await this.calculatePricesWithUala(cost_price, dolar);
+			return prices;
+		} catch (error) {
+			throw new AppError(
+				'Failed to calculate prices on PaymentService.CalculatePrices',
+				'Error al calcular los precios',
+				500
+			);
+		}
+	}
+
+	private static async calculatePricesWithUala(
+		cost_price: number,
+		dolar: number
+	): Promise<IProductPrices> {
+		try {
+			const config = await EcommerceService.getConfig();
+			const ualaConfig = config.paymentGateways.uala;
+
+			// 1. Obtenemos los valores y los normalizamos inmediatamente
+			const rawProfit = config.profit; // Puede ser 10 o 0.1
+			const rawBaseComm = ualaConfig.baseCommission; // Puede ser 4.9 o 0.049
+			const rawCFT6 = ualaConfig.cft6Cuotas; // Puede ser 18.9 o 0.189
+
+			const profitFactor = this.normalizePercentage(rawProfit);
+			const baseCommFactor = this.normalizePercentage(rawBaseComm);
+			const cft6Factor = this.normalizePercentage(rawCFT6);
+			const ivaFactor = 1 + config.taxes.iva / 100; // El IVA siempre suele ser 21, así que 1.21
+
+			// 2. Costo base
+			const basePriceInArs = cost_price * dolar;
+
+			// Si profitFactor es 0.10, la ganancia es base * 0.10
+			const targetPrice = basePriceInArs * (1 + profitFactor);
+
+			// 4. Cálculo de la Tasa Total de Ualá con IVA
+			// (Comisión Base + CFT) * 1.21
+			const totalTasa6Cuotas = (baseCommFactor + cft6Factor) * ivaFactor;
+
+			const price6Installments = Math.round(targetPrice / (1 - totalTasa6Cuotas));
+
+			return {
+				efectivo_transferencia: Math.round(targetPrice),
+				tarjeta_credito_debito: price6Installments,
+				cuotas: {
+					'3_cuotas_sin_interes': Math.round(price6Installments / 3),
+					'6_cuotas_sin_interes': Math.round(price6Installments / 6)
+				}
+			};
+		} catch (error) {
+			throw new AppError(
+				'Failed to calculate prices with Uala on PaymentService.calculatePricesWithUala',
+				'Error al calcular precios con Uala',
+				500
+			);
+		}
+	}
+	// TODO: Implementar cálculo de precios con MercadoPago
+	private static calculatePricesWithMercadoPago(cost_price: number) {}
+
 	getOrderProcessedItems() {
 		return this.itemsFromCart.map((item) => ({
 			product: item.data._id,
@@ -64,7 +142,7 @@ export class PaymentService {
 				: item.data.prices.tarjeta_credito_debito,
 			name: item.data.brand + ' ' + item.data.model,
 
-			image: item.data.image.dark
+			image: item.data.images[0].url
 		}));
 	}
 
@@ -91,5 +169,11 @@ export class PaymentService {
 
 	getDescriptionQuantity() {
 		return `${this.itemsFromCart.length} ${this.itemsFromCart.length > 1 ? 'productos' : 'producto'}`;
+	}
+	private static normalizePercentage(value: number): number {
+		if (!value) return 0;
+		// Si alguien pone 18 o 10, lo llevamos a 0.18 o 0.10
+		// Si alguien ya puso 0.049, lo dejamos como está
+		return value >= 1 ? value / 100 : value;
 	}
 }

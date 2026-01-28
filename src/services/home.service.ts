@@ -135,7 +135,11 @@ export class HomeService {
 			});
 			return brandGroups;
 		} catch (error) {
-			throw new AppError('Error grouping products by brand', 500);
+			throw new AppError(
+				'Error grouping products by brand',
+				'Error al agrupar productos por marca',
+				500
+			);
 		}
 	}
 

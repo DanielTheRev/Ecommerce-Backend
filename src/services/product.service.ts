@@ -1,27 +1,69 @@
 import { AppError } from '@/errors/app.error';
 import { IOrderItem } from '@/interfaces/order.interface';
-import { IProduct } from '@/interfaces/product.interface';
+import { IProduct, IProductCreateDTO } from '@/interfaces/product.interface';
 import { Product } from '@/models/Product.model';
+import slugify from 'slugify';
+import { getDolar } from './dolar.service';
+import { PaymentService } from './Payment.service';
+import { EcommercePaymentProviders } from '@/interfaces/ecommerce.interface';
+import { ImageService } from './images.service';
 
 export class ProductService {
+	private constructor() {}
+	static async createProduct(data: IProductCreateDTO): Promise<IProduct> {
+		try {
+			this.checkFields(data);
+			const slug = this.generateSlug(data.shortDescription, data.features);
+			const { venta } = await getDolar();
+			
+			const prices = await PaymentService.CalculatePrices(
+				EcommercePaymentProviders.UALA,
+				data.price,
+				venta
+			);
+			const rawImages = data.images.map((image) => ({
+				id: slug,
+				source: image.file
+			}));
+			// TODO mejorar la ruta de las images en cloudinary
+			const images = await ImageService.UploadImages(rawImages, 'electromix/product-images');
+			const newProduct = await Product.create({
+				slug,
+				brand: data.brand,
+				shortDescription: data.shortDescription,
+				largeDescription: data.largeDescription,
+				model: data.model,
+				category: data.category,
+				features: data.features,
+				stock: 10,
+				prices,
+				images
+			});
+			return newProduct.toObject() as unknown as IProduct;
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError('Failed to create product', 'Error al crear el producto', 500);
+		}
+	}
+
 	static async getAllProducts(): Promise<IProduct[]> {
 		try {
 			const products = (await Product.find().lean()) as unknown as IProduct[];
 			return products;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
-			throw new AppError('Failed to fetch products', 500);
+			throw new AppError('Failed to fetch products', 'Error al obtener los productos', 500);
 		}
 	}
 
 	static async getProductById(id: string): Promise<IProduct> {
 		try {
 			const product = (await Product.findById(id).lean()) as unknown as IProduct;
-			if (!product) throw new AppError('Product not found', 404);
+			if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
 			return product;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
-			throw new AppError('Failed to fetch product', 500);
+			throw new AppError('Failed to fetch product', 'Error al obtener el producto', 500);
 		}
 	}
 
@@ -30,13 +72,22 @@ export class ProductService {
 			const products = (await Product.find({
 				_id: { $in: ids }
 			}).lean()) as unknown as IProduct[];
-			if (products.length === 0) throw new AppError('No products found for the given IDs', 404);
+			if (products.length === 0)
+				throw new AppError(
+					'No products found for the given IDs',
+					'No se encontraron productos para los IDs dados',
+					404
+				);
 			if (products.length !== ids.length)
-				throw new AppError('Some products not found for the given IDs', 404);
+				throw new AppError(
+					'Some products not found for the given IDs',
+					'Algunos productos no se encontraron para los IDs dados',
+					404
+				);
 			return products;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
-			throw new AppError('Failed to fetch products', 500);
+			throw new AppError('Failed to fetch products', 'Error al obtener los productos', 500);
 		}
 	}
 
@@ -46,14 +97,27 @@ export class ProductService {
 		try {
 			for (const item of products) {
 				const prod = await Product.findById(item._id).lean();
-				if (!prod) throw new AppError(`Product with ID ${item._id} not found`, 404);
+				if (!prod)
+					throw new AppError(
+						`Product with ID ${item._id} not found`,
+						`Producto ${item._id} no encontrado`,
+						404
+					);
 				if (prod.stock < item.quantity)
-					throw new AppError(`Insufficient stock for product ID ${item._id}`, 400);
+					throw new AppError(
+						`Insufficient stock for product ID ${item._id}`,
+						`Stock insuficiente para el producto ${item._id}`,
+						400
+					);
 			}
 			return true;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
-			throw new AppError('Failed to verify product stock', 500);
+			throw new AppError(
+				'Failed to verify product stock',
+				'Error al verificar el stock del producto',
+				500
+			);
 		}
 	}
 
@@ -63,13 +127,22 @@ export class ProductService {
 		try {
 			for (const item of products) {
 				const prod = await Product.findById(item._id);
-				if (!prod) throw new AppError(`Product with ID ${item._id} not found`, 404);
+				if (!prod)
+					throw new AppError(
+						`Product with ID ${item._id} not found`,
+						`Producto ${item._id} no encontrado`,
+						404
+					);
 				await Product.findByIdAndUpdate(item._id, { $inc: { stock: -item.quantity } });
 			}
 			return true;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
-			throw new AppError('Failed to reduce product stock', 500);
+			throw new AppError(
+				'Failed to reduce product stock',
+				'Error al reducir el stock del producto',
+				500
+			);
 		}
 	}
 
@@ -83,8 +156,56 @@ export class ProductService {
 				);
 			} catch (error) {
 				if (error instanceof AppError) throw error;
-				throw new AppError('Failed to restore product stock', 500);
+				throw new AppError(
+					'Failed to restore product stock',
+					'Error al restaurar el stock del producto',
+					500
+				);
 			}
+		}
+	}
+
+	private static checkFields(data: IProductCreateDTO) {
+		try {
+			const { brand, shortDescription, largeDescription, model, price, images, features } = data;
+			if (
+				!brand ||
+				!model ||
+				!shortDescription ||
+				!largeDescription ||
+				!price ||
+				images.length === 0 ||
+				features.length === 0
+			) {
+				throw new AppError(
+					'ProductService.createProduct: Missing fields when user creates a product',
+					'Todos los campos son requeridos',
+					400
+				);
+			}
+			return true;
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError(
+				'ProductService.createProduct: Error checking fields',
+				'Error al verificar los campos',
+				500
+			);
+		}
+	}
+	private static generateSlug(shortDescription: string, features: string[]): string {
+		try {
+			const slug = slugify(`${shortDescription}-${features.toString()}`, {
+				lower: true,
+				strict: true
+			});
+			return slug;
+		} catch (error) {
+			throw new AppError(
+				'ProductService.generateSlug: Error generating slug',
+				'Error al generar el slug',
+				500
+			);
 		}
 	}
 }

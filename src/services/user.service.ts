@@ -1,63 +1,54 @@
 import { AppError } from '@/errors/app.error';
-import { DatabaseError } from '@/errors/database.error';
 import { IUser, Role } from '@/interfaces/user.interface';
-import { AdminUsers } from '@/models/AdminUser.model';
+
 import { User } from '@/models/User.model';
 
 export class UserService {
 	static async getUserByGoogleID(id: string) {
 		try {
-			const user = await User.findOne({ googleID: id });
-			if (!user) {
-				throw new AppError('User not found ', 404);
-			}
+			const user = (await User.findOne({ googleID: id }).lean()) as IUser;
 			return user;
-		} catch (error) {
-			if (error instanceof AppError) throw error;
-			throw new AppError('Error retrieving user by Google ID', 500);
-		}
-	}
-
-	static async getUserByID(id: string, selectedFields?: string[]) {
-		try {
-			const user = await User.findById(id).select(selectedFields || []);
-			return user;
-		} catch (error) {
-			if (error instanceof AppError) throw error;
-			throw new AppError('Error trying to find user', 500);
-		}
-	}
-
-	static async getAdminUserByEmail(email: string) {
-		try {
-			const admin = AdminUsers.findOne({ email });
-			if (!admin) {
-				throw new AppError('Admin user not found with the provided email', 404);
-			}
-			return admin;
-		} catch (error) {
-			if (error instanceof AppError) throw error;
-			throw new AppError('Error in UserService.getAdminUserByEmail trying to find admin', 500);
-		}
-	}
-
-	static async getAdminUserByID(id: string, selectedFields?: string[]) {
-		try {
-			const admin = await AdminUsers.findById(id).select(selectedFields || []);
-			if (!admin) {
-				throw new AppError('Admin user not found with the provided ID', 404);
-			}
-			return admin;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
 			throw new AppError(
-				'Error in UserService.getAdminUserByID trying to find admin by ID',
+				'Error retrieving user by Google ID',
+				'Error al intentar recuperar el usuario por Google ID',
 				500
 			);
 		}
 	}
 
-	static async createUser(userData: Partial<IUser>, token: string) {
+	static async getUserByID(id: string) {
+		try {
+			const user = (await User.findById(id).lean()) as IUser;
+			if (!user) throw new AppError('User not found', 'Usuario no encontrado', 404);
+			return user;
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError(
+				'Error trying to find user',
+				'Error al intentar encontrar el usuario',
+				500
+			);
+		}
+	}
+
+	static async getUserByEmail(email: string) {
+		try {
+			const user = await User.findOne({ email }).select('+password').exec();
+			if (!user) throw new AppError('User not found', 'Usuario no encontrado', 404);
+			return user;
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError(
+				'Error found trying get user',
+				'Error al intentar recuperar el usuario',
+				500
+			);
+		}
+	}
+
+	static async createUser(userData: Partial<IUser>) {
 		try {
 			const user = await User.create({
 				name: userData.name,
@@ -65,13 +56,17 @@ export class UserService {
 				role: userData.role || Role.user,
 				googleID: userData.googleID,
 				profilePhoto: userData.profilePhoto,
-				isActive: true,
-				token
+				isActive: true
 			});
 			return user;
 		} catch (error) {
+			console.log(error);
 			if (error instanceof AppError) throw error;
-			throw new AppError('Error creating new user', 500);
+			throw new AppError(
+				'Error creating new user',
+				'Error al intentar crear un nuevo usuario',
+				500
+			);
 		}
 	}
 }

@@ -1,11 +1,12 @@
+import { IUser, Role } from '@/interfaces/user.interface';
+import { UserService } from '@/services/user.service';
 import { Server as HTTPServer } from 'http';
 import jwt from 'jsonwebtoken';
 import { Socket, Server as SocketIOServer } from 'socket.io';
-import { AdminUsers } from '../models/AdminUser.model';
-import { User } from '../models/User.model';
+import { parse } from 'cookie';
 
 interface AuthSocket extends Socket {
-	user?: any;
+	user?: IUser;
 }
 
 class SocketManager {
@@ -45,22 +46,18 @@ class SocketManager {
 		this.io.use(async (socket: AuthSocket, next) => {
 			// console.log('alguien se quiere conectar...');
 			try {
-				const token = socket.handshake.auth.token;
-				// console.log('websockets token => ', token);
+				const cookies = socket.handshake.headers.cookie;
+
+				if (!cookies) return next(new Error('No cookies'));
+				const parsed = parse(cookies);
+				const token = parsed['token_b'];
 				if (!token) return next(new Error('No token provided'));
 
 				const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {
 					userID: string;
-					role: string;
 				};
 
-				let user: any;
-				const AdminUser = await AdminUsers.findById(decoded.userID).select('name email role');
-				const ClientUser = await User.findById(decoded.userID).select('name email role');
-
-				user = AdminUser ? AdminUser : ClientUser;
-
-				if (!user) return next(new Error('User not found'));
+				const user = await UserService.getUserByID(decoded.userID);
 				socket.user = user;
 
 				next();
@@ -77,24 +74,24 @@ class SocketManager {
 		this.io.on('connection', (socket: AuthSocket) => {
 			const { role, _id, name } = socket.user || {};
 
-			if (role === 'admin') {
+			if (role === Role.admin) {
 				this.connectedAdmins.set(socket.id, socket);
 				socket.join('admins');
 				console.log(`🟢 Admin connected: ${name} (${socket.id})`);
 			}
 
-			if (role === 'user') {
+			if (role === Role.user) {
 				this.connectedClients.set(socket.id, socket);
 				socket.join(`client_${_id}`);
 				console.log(`🟢 Client connected: ${name} (${socket.id}) role: (${role})`);
 			}
 
 			socket.on('disconnect', () => {
-				if (role === 'admin') {
+				if (role === Role.admin) {
 					this.connectedAdmins.delete(socket.id);
 					console.log(`🔴 Admin disconnected: ${name} (${socket.id})`);
 				}
-				if (role === 'client') {
+				if (role === Role.user) {
 					this.connectedClients.delete(socket.id);
 					console.log(`🔴 Client disconnected: ${name} (${socket.id})`);
 				}

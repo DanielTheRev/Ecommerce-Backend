@@ -1,14 +1,15 @@
 import { Router } from 'express';
-import { getUserProfile, loginUserWithGoogle, logout, LoginAdmin, getAdminUserProfile } from '../controllers/auth.controller';
+import { getUserProfile, LoginAdmin, loginUser, logout } from '../controllers/auth.controller';
+import { protect } from '@/middleware/auth';
 
 const router: Router = Router();
 
-// Rutas públicas
-router.post('/login/google', loginUserWithGoogle);
-router.post('/login/admin', LoginAdmin);
+// Public routes
+router.post('/login', loginUser);
+router.post('/admin/login', LoginAdmin);
 router.post('/logout', logout);
-router.get('/getUser', getUserProfile);
-router.get('/getAdminUser', getAdminUserProfile);
+router.get('/getUser', protect, getUserProfile);
+// router.get('/getAdminUser', getAdminUserProfile);
 
 // Rutas protegidas
 // router.get('/me', protect, getCurrentUser);

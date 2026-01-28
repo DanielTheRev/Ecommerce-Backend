@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User.model';
-import { AdminUsers } from '../models/AdminUser.model';
 import { IUser } from '@/interfaces/user.interface';
+import { AppError } from '@/errors/app.error';
+import { UserService } from '@/services/user.service';
 
 export interface AuthRequest extends Request {
 	user?: IUser;
@@ -21,66 +22,35 @@ export const protect = async (
 	next: NextFunction
 ): Promise<Response | void> => {
 	try {
-		let token: string | undefined;
+		let token;
 
-		// Verificar token en headers
+		// verify token in headers
 		if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
 			token = req.headers.authorization.split(' ')[1];
 		}
-		// Verificar token en cookies de clientes
-		if (req.cookies.token_c) {
-			token = req.cookies.token_c;
-		}
-		// Verificar token en cookies de clientes
-		if (req.cookies.token_a) {
-			token = req.cookies.token_a;
+		/* verify token in cookies */
+		if (req.cookies.token_b) {
+			token = req.cookies.token_b;
 		}
 
 		// Verificar que existe el token
-		if (!token) {
-			console.log('NO HAY TOKEN, USUARIO NO TIENE AUTORIZACIÓN');
-			return res.status(401).json({
-				success: false,
-				message: 'Acceso no autorizado, token requerido'
-			});
-		}
+		if (!token) throw new AppError('Token not found', 'No se proporciono token', 401);
+		console.log('VERIFICANDO TOKEN DEL USUARIO');
+		console.log(token);
+		// Verificar token
+		const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
+		// Buscar usuario actual
+		const user = await UserService.getUserByID(decoded.userID);
+		if (!user) throw new AppError('User not found', 'Usuario no encontrado', 401);
 
-		try {
-			console.log('VERIFICANDO TOKEN DEL USUARIO');
-			console.log(token);
-			// Verificar token
-			const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
-			// Buscar usuario actual
-			const user = (await User.findById(decoded.userID)) as any;
-			const adminUser = (await AdminUsers.findById(decoded.userID)) as any;
+		// add user to every request
+		req.user = user;
 
-			if (!user && !adminUser) {
-				return res.status(401).json({
-					success: false,
-					message: 'Usuario no encontrado'
-				});
-			}
-			const finalUser = user || adminUser;
-			console.log('USUARIO FINAL');
-			console.log(finalUser);
-			// Agregar usuario a la request
-			req.user = finalUser;
-
-			next();
-		} catch (error) {
-			console.log(error);
-			return res.status(401).json({
-				success: false,
-				message: 'Token inválido'
-			});
-		}
+		next();
 	} catch (error) {
-		console.log('ACA ESTA EL ERROR');
 		console.error('Error en middleware de autenticación:', error);
-		return res.status(500).json({
-			success: false,
-			message: 'Error interno del servidor'
-		});
+		if (error instanceof AppError) throw error;
+		throw new AppError('Failed to login user', 'Error al intentar iniciar sesión', 500);
 	}
 };
 

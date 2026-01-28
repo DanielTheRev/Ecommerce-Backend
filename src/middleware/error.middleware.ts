@@ -6,11 +6,11 @@ export function errorMiddleware(err: Error, req: Request, res: Response, next: N
 		console.log(err.message);
 		return res.status(err.statusCode).json({
 			success: false,
-			message: err.message
+			message: err.messageToSendClient
 		});
 	}
 	// Errors not handled specifically are treated as generic server errors
-	console.error(err);
+	console.log(err);
 
 	return res.status(500).json({
 		success: false,

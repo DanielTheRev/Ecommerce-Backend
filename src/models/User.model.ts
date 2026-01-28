@@ -1,4 +1,5 @@
 import { IUser, Role } from '@/interfaces/user.interface';
+import bcrypt from 'bcryptjs';
 import { Schema, model } from 'mongoose';
 
 const userSchema = new Schema<IUser>(
@@ -11,7 +12,8 @@ const userSchema = new Schema<IUser>(
 		googleID: {
 			type: String,
 			unique: true,
-			trim: true
+			trim: true,
+			sparse: true
 		},
 		email: {
 			type: String,
@@ -29,6 +31,12 @@ const userSchema = new Schema<IUser>(
 			enum: Role,
 			default: Role.user
 		},
+		password: {
+			type: String,
+			minlength: [6, 'La contraseña debe tener al menos 6 caracteres'],
+			select: false,
+			default: null
+		},
 		isActive: {
 			type: Boolean,
 			default: true
@@ -41,26 +49,23 @@ const userSchema = new Schema<IUser>(
 );
 
 // Middleware to hash password before save
-// userSchema.pre('save', async function(next) {
-//   if (!this.isModified('password')) return next();
+userSchema.pre('save', async function (next) {
+	if (!this.isModified('password')) return next();
 
-//   try {
-//     const salt = await bcrypt.genSalt(12);
-//     this.password = await bcrypt.hash(this.password, salt);
-//     next();
-//   } catch (error) {
-//     next(error as Error);
-//   }
-// });
+	try {
+		const salt = await bcrypt.genSalt(12);
+		this.password = await bcrypt.hash(this.password, salt);
+		next();
+	} catch (error) {
+		next(error as Error);
+	}
+});
 
 // Método para comparar contraseñas
-// userSchema.methods.comparePassword = async function(candidatePassword: string): Promise<boolean> {
-//   return bcrypt.compare(candidatePassword, this.password);
-// };
+userSchema.methods.comparePassword = async function (candidatePassword: string): Promise<boolean> {
+	return bcrypt.compare(candidatePassword, this.password);
+};
 
-// Índices
-// `email` ya define `unique: true` en la propiedad, eso crea el índice automáticamente.
-// Evitamos declarar el mismo índice explícitamente para prevenir warnings de duplicado.
 userSchema.index({ isActive: 1 });
 
 export const User = model<IUser>('User', userSchema);

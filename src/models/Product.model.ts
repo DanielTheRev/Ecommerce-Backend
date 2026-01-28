@@ -1,8 +1,7 @@
-import mongoose, { Schema, Document, ObjectId } from 'mongoose';
-import { IProduct, IProductDocument } from '../interfaces/product.interface';
-import slugify from 'slugify';
+import mongoose, { Schema } from 'mongoose';
+import { IProduct, IProductDocument, IProductCategories } from '../interfaces/product.interface';
 
-const ProductSchema: Schema = new Schema<IProduct>(
+const ProductSchema = new Schema(
 	{
 		brand: {
 			type: String,
@@ -15,6 +14,14 @@ const ProductSchema: Schema = new Schema<IProduct>(
 			required: true,
 			trim: true,
 			maxlength: 200
+		},
+		category: {
+			type: String,
+			required: [true, 'La categoría es obligatoria'],
+			enum: {
+				values: Object.values(IProductCategories),
+				message: '{VALUE} no es una categoría válida' // Mensaje de error personalizado
+			}
 		},
 		shortDescription: {
 			type: String,
@@ -36,16 +43,6 @@ const ProductSchema: Schema = new Schema<IProduct>(
 				default: 0
 			},
 			tarjeta_credito_debito: {
-				type: Number,
-				required: true,
-				default: 0
-			},
-			tarjeta_credito_3_cuotas: {
-				type: Number,
-				required: true,
-				default: 0
-			},
-			tarjeta_credito_6_cuotas: {
 				type: Number,
 				required: true,
 				default: 0
@@ -72,35 +69,22 @@ const ProductSchema: Schema = new Schema<IProduct>(
 		},
 		rating: {
 			type: Number,
-			default: null,
+			default: 0,
 			min: 0,
 			max: 5
 		},
 		reviews: {
 			type: Number,
-			default: null,
+			default: 0,
 			min: 0
 		},
-		image: {
-			light: {
-				type: String,
-				required: true,
-				trim: true
-			},
-			dark: {
-				type: String,
-				required: true,
-				trim: true
+		images: [
+			{
+				url: { type: String, required: true },
+				public_id: { type: String, required: true }
 			}
-		},
-		features: {
-			principalFeatures: [
-				{
-					type: String,
-					trim: true
-				}
-			]
-		},
+		],
+		features: [{ type: String }],
 		stock: {
 			type: Number,
 			required: true,
@@ -113,21 +97,8 @@ const ProductSchema: Schema = new Schema<IProduct>(
 		versionKey: false
 	}
 );
-ProductSchema.pre('save', function (next) {
-	if (
-		this.isModified('brand') ||
-		this.isModified('model') ||
-		this.slug === null ||
-		this.slug === undefined
-	) {
-		this.slug = slugify((this.brand + ' ' + this.model) as string, { lower: true, strict: true });
-	}
-	next();
-});
 
-// Índices para mejorar el rendimiento
-// `name` y `price` no existen explícitamente en este esquema (se usan `brand`, `model`, `prices`).
-// Eliminamos índices inválidos para evitar errores/advertencias.
-ProductSchema.index({ rating: -1 });
+ProductSchema.index({ slug: -1 });
+ProductSchema.index({ brand: 1, model: 1 });
 
 export const Product = mongoose.model<IProductDocument>('Product', ProductSchema);

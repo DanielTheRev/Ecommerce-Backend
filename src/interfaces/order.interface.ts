@@ -24,10 +24,12 @@ export interface CreateOrderDTO {
 
 export interface updatePaymentStatusDTO {
 	orderID: string;
+	status: PaymentStatus
 }
 
 export interface updateShippingStatusDTO {
 	orderID: string;
+	status: OrderStatus
 }
 
 // Enum for order status
