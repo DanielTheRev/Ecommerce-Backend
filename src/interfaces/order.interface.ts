@@ -1,8 +1,8 @@
-import { ICartItemDTO } from './cart-item.interface';
-import mongoose, { Document, ObjectId } from 'mongoose';
+import mongoose, { Document } from 'mongoose';
 import { OrderData } from 'ualabis-nodejs/dist/types/order';
+import { ICartItemDTO } from './cart-item.interface';
 import { PaymentType } from './paymentMethod.interface';
-import { ShippingType, IPickupPoint } from './shippingMethods.interface';
+import { IPickupPoint, ShippingType } from './shippingMethods.interface';
 
 export interface CreateOrderDTO {
 	items: ICartItemDTO[];
@@ -20,6 +20,12 @@ export interface CreateOrderDTO {
 		_id: string;
 		type: PaymentType;
 	};
+}
+
+export interface StatusEntry {
+	status: OrderStatus;
+	timestamp: Date;
+	note?: string;
 }
 
 export interface updatePaymentStatusDTO {
@@ -45,7 +51,6 @@ export enum OrderStatus {
 export enum PaymentStatus {
 	PENDING = 'Pendiente',
 	APPROVED = 'Aprobado',
-	PAID = 'Pagado',
 	REJECTED = 'Rechazado',
 	CANCELLED = 'Cancelado'
 }
@@ -54,9 +59,9 @@ export enum PaymentStatus {
 export interface IOrderItem {
 	product: mongoose.Types.ObjectId;
 	quantity: number;
-	price: number; // Precio al momento de la compra
-	name: string; // Nombre del producto al momento de la compra
-	image?: string; // Imagen del producto
+	price: number;
+	name: string;
+	image?: string;
 }
 
 // Interface for shipping address
@@ -69,6 +74,8 @@ export interface IOrderItem {
 // 	phone?: string;
 // }
 
+
+
 // Interface for shipping information
 export interface IShippingInfo {
 	type: ShippingType;
@@ -78,6 +85,8 @@ export interface IShippingInfo {
 	};
 	// shippingAddress?: IShippingAddress;
 	cost: number;
+	shippedAt: Date;
+	deliveredAt: Date;
 }
 
 // Interface para información de pago
@@ -94,6 +103,7 @@ export interface IPaymentInfo {
 export interface IOrder extends Document {
 	user: mongoose.Types.ObjectId;
 	items: IOrderItem[];
+	history: StatusEntry[];
 	shippingInfo: IShippingInfo;
 	paymentInfo: IPaymentInfo;
 	status: OrderStatus;
@@ -103,8 +113,6 @@ export interface IOrder extends Document {
 	notes?: string;
 	createdAt: Date;
 	updatedAt: Date;
-	calculateTotals: () => number;
-	updateStatus: (newStatus: OrderStatus) => Promise<IOrder>;
 }
 
 // Interface para el modelo con métodos estáticos

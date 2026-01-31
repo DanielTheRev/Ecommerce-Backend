@@ -46,6 +46,8 @@ export class AuthService {
 	}
 
 	static generateToken(userID: string): string {
+		console.log('GENERANDO TOKEN');
+		console.log(userID);
 		return jwt.sign({ userID }, process.env.JWT_SECRET!, {
 			expiresIn: '7d'
 		});
@@ -117,7 +119,7 @@ export class AuthService {
 				throw new AuthError('Invalid credentials', 'Credenciales inválidas', 401);
 			}
 			const userFlat: ISecureUser = {
-				id: user.id,
+				_id: user._id as string,
 				name: user.name,
 				email: user.email,
 				role: user.role,

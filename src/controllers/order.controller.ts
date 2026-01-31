@@ -5,6 +5,7 @@ import {
 	updatePaymentStatusDTO,
 	updateShippingStatusDTO
 } from '@/interfaces/order.interface';
+import { NotificationSeverity, NotificationType } from '@/interfaces/notification.interface';
 import { UalaOrderStatus, UalaWebhook } from '@/interfaces/ualaWebhook.interface';
 import { AuthRequest } from '@/middleware/auth';
 import { OrderService } from '@/services/order.service';
@@ -39,9 +40,13 @@ export const ualaWebhook = async (req: AuthRequest, res: Response) => {
 
 // Crear nueva orden
 export const createOrder = async (req: AuthRequest, res: Response, next: NextFunction) => {
+	if (!req.user) {
+		return res.status(401).json({ message: 'Usuario no autenticado' });
+	}
 	try {
-		const userId = req.user?.id;
-		const { order, extras } = await OrderService.createOrder(req.body as CreateOrderDTO, userId!);
+		const userId = req.user._id;
+		const { order, extras } = await OrderService.createOrder(req.body as CreateOrderDTO, userId);
+		socketManager.notifyNewOrderToAdmins(order);
 
 		return res.status(201).json({
 			message: 'Orden creada exitosamente',
@@ -57,11 +62,18 @@ export const createOrder = async (req: AuthRequest, res: Response, next: NextFun
 export const getUserOrders = async (req: AuthRequest, res: Response, next: NextFunction) => {
 	try {
 		const user = req.user;
-		const userOrders = await OrderService.getOrdersByUserId(user!._id as string);
-		return res.json({
-			message: 'Órdenes obtenidas exitosamente',
-			orders: userOrders
-		});
+		const page = parseInt(req.query.page as string) || 1;
+		const limit = parseInt(req.query.limit as string) || 10;
+		const status = req.query.status as string;
+		const dateRange = req.query.dateRange as string;
+		const query = {
+			status: (status as string) || '',
+			dateRange: (dateRange as string) || '',
+			page,
+			limit
+		};
+		const userOrders = await OrderService.getOrdersByUserId(user!._id as string, query);
+		return res.json(userOrders);
 	} catch (error) {
 		return next(error);
 	}
@@ -71,7 +83,8 @@ export const getUserOrders = async (req: AuthRequest, res: Response, next: NextF
 export const getOrderById = async (req: AuthRequest, res: Response, next: NextFunction) => {
 	try {
 		const { id } = req.params;
-		const userId = req.user?.id;
+		const userId = req.user?._id;
+		console.log({ productID: id, userID: userId });
 
 		if (!userId) {
 			return res.status(401).json({ message: 'Usuario no autenticado' });
@@ -80,7 +93,7 @@ export const getOrderById = async (req: AuthRequest, res: Response, next: NextFu
 		const order = await OrderService.getOrderById(id);
 
 		// verify order ownership
-		if (order.user._id.toString() !== userId && req.user?.role !== 'admin') {
+		if (order.user._id.toString() !== userId.toString()) {
 			return res.status(403).json({ message: 'No tienes permiso para ver esta orden' });
 		}
 
@@ -95,13 +108,16 @@ export const updatePaymentStatus = async (req: AuthRequest, res: Response, next:
 	const { orderID, status } = req.body as updatePaymentStatusDTO;
 	try {
 		const order = await OrderService.updatePaymentStatus({ orderID, status });
-		//todo implementación de notificaciones via socket
-		socketManager.notifyClient(
-			order.user._id.toString(),
-			'Pago recibido con éxito',
-			'paymentStatus',
-			order
-		);
+
+		// Notificar al cliente
+		socketManager.notifyClient(order.user._id.toString(), {
+			type: NotificationType.PAYMENT_SUCCESS,
+			title: 'Pago Aprobado',
+			message: `Tu pago de $${order.total} fue procesado correctamente.`,
+			severity: NotificationSeverity.SUCCESS,
+			link: `/orders/${order._id}`,
+			data: order
+		});
 		return res.status(200).json({ message: 'Pago actualizado con éxito', orderUpdated: order });
 	} catch (error) {
 		return next(error);
@@ -112,12 +128,14 @@ export const updateShippingStatus = async (req: AuthRequest, res: Response, next
 	const { orderID, status } = req.body as updateShippingStatusDTO;
 	try {
 		const order = await OrderService.updateOrderShippingStatus({ orderID, status });
-		socketManager.notifyClient(
-			order.user._id.toString(),
-			'Compra enviada con éxito',
-			'shippingStatus',
-			order
-		);
+		socketManager.notifyClient(order.user._id.toString(), {
+			type: NotificationType.ORDER_STATUS_CHANGED,
+			title: 'Estado de Envío Actualizado',
+			message: `Tu pedido ahora está: ${status}`,
+			severity: NotificationSeverity.INFO,
+			link: `/orders/${order._id}`,
+			data: order
+		});
 		return res.json({
 			message: 'Envío actualizado con éxito',
 			orderUpdated: order
@@ -145,8 +163,7 @@ export const cancelOrder = async (req: AuthRequest, res: Response, next: NextFun
 	}
 };
 
-// Obtener todas las órdenes (solo admin)
-// Función mejorada para obtener todas las órdenes
+// Obtener todas las órdenes (only admin)
 export const getAllOrders = async (req: AuthRequest, res: Response, next: NextFunction) => {
 	try {
 		const { status, userId, dateRange } = req.query;

@@ -22,23 +22,18 @@ export const protect = async (
 	next: NextFunction
 ): Promise<Response | void> => {
 	try {
-		let token;
-
-		// verify token in headers
-		if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-			token = req.headers.authorization.split(' ')[1];
-		}
-		/* verify token in cookies */
-		if (req.cookies.token_b) {
-			token = req.cookies.token_b;
-		}
+		let token: string | undefined = req.cookies.token_b;
+		console.log('VERIFICANDO COOKIES');
+		console.log(req.cookies);
+		console.log('VERIFICANDO HEADERS');
+		console.log(req.headers.authorization);
 
 		// Verificar que existe el token
 		if (!token) throw new AppError('Token not found', 'No se proporciono token', 401);
-		console.log('VERIFICANDO TOKEN DEL USUARIO');
-		console.log(token);
 		// Verificar token
 		const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
+		console.log('VERIFICANDO DATOS DEL TOKEN');
+		console.log(decoded);
 		// Buscar usuario actual
 		const user = await UserService.getUserByID(decoded.userID);
 		if (!user) throw new AppError('User not found', 'Usuario no encontrado', 401);

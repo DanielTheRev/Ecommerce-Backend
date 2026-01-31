@@ -1,6 +1,6 @@
-import { Request, Response } from 'express';
+import { NextFunction, Request, Response } from 'express';
 import { Product } from '@/models/Product.model';
-import { IProductCreateDTO, IProductUpdateDTO } from '@/interfaces/product.interface';
+import { IProductCreateDTO, IProductSpec, IProductUpdateDTO } from '@/interfaces/product.interface';
 import { ProductService } from '@/services/product.service';
 
 export class ProductController {
@@ -81,12 +81,23 @@ export class ProductController {
 	}
 
 	// POST /api/products - Create new product
-	static async createProduct(req: Request, res: Response): Promise<void> {
+	static async createProduct(req: Request, res: Response, next: NextFunction): Promise<void> {
 		let data = req.body as IProductCreateDTO;
-		const files = req.files;
-		console.log(data, files);
-		// data.images = files as { file: Express.Multer.File }[];
-		// const newProduct = await ProductService.createProduct()
+		const files = req.files as Express.Multer.File[];
+		try {
+			data.specifications = JSON.parse(data.specifications as string) as IProductSpec[];
+			data.colors = JSON.parse(data.colors as string) as string[];
+			data.storage = JSON.parse(data.storage as string) as string[];
+			data.features = JSON.parse(data.features as string) as string[];
+			const newProduct = await ProductService.createProduct(data, files);
+			res.status(201).json({
+				success: true,
+				message: 'Producto creado exitosamente',
+				data: newProduct
+			});
+		} catch (error) {
+			next(error);
+		}
 	}
 
 	// PUT /api/products/:id - Actualizar un producto completo

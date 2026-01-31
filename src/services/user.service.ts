@@ -19,6 +19,8 @@ export class UserService {
 	}
 
 	static async getUserByID(id: string) {
+		console.log('BUSCANDO USUARIO POR ID');
+		console.log(id);
 		try {
 			const user = (await User.findById(id).lean()) as IUser;
 			if (!user) throw new AppError('User not found', 'Usuario no encontrado', 404);

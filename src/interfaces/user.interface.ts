@@ -7,7 +7,7 @@ export enum Role {
 }
 
 export interface ISecureUser {
-	id: string;
+	_id: string;
 	name: string;
 	email: string;
 	role: Role;
@@ -20,6 +20,7 @@ export interface ISecureUser {
 
 /* user interfaces */
 export interface IUser extends Document {
+	_id: string;
 	name: string;
 	email: string;
 	role: Role;

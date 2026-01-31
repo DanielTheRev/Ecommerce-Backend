@@ -9,21 +9,24 @@ import { EcommercePaymentProviders } from '@/interfaces/ecommerce.interface';
 import { ImageService } from './images.service';
 
 export class ProductService {
-	private constructor() {}
-	static async createProduct(data: IProductCreateDTO): Promise<IProduct> {
+	private constructor() { }
+
+	static async createProduct(data: IProductCreateDTO, imagesDTO: Express.Multer.File[]): Promise<IProduct> {
 		try {
 			this.checkFields(data);
-			const slug = this.generateSlug(data.shortDescription, data.features);
+			const slug = this.generateSlug(data.brand, data.model);
 			const { venta } = await getDolar();
-			
+
 			const prices = await PaymentService.CalculatePrices(
 				EcommercePaymentProviders.UALA,
 				data.price,
 				venta
 			);
-			const rawImages = data.images.map((image) => ({
-				id: slug,
-				source: image.file
+
+			if (imagesDTO.length === 0) throw new AppError('No images provided', 'No se proporcionaron imágenes', 400);
+			const rawImages = imagesDTO.map((image, index) => ({
+				id: `${data.brand}-${data.model}-${index}`,
+				source: image
 			}));
 			// TODO mejorar la ruta de las images en cloudinary
 			const images = await ImageService.UploadImages(rawImages, 'electromix/product-images');
@@ -37,10 +40,14 @@ export class ProductService {
 				features: data.features,
 				stock: 10,
 				prices,
-				images
+				images,
+				colors: data.colors,
+				storage: data.storage,
+				specifications: data.specifications
 			});
 			return newProduct.toObject() as unknown as IProduct;
 		} catch (error) {
+			console.log(error);
 			if (error instanceof AppError) throw error;
 			throw new AppError('Failed to create product', 'Error al crear el producto', 500);
 		}
@@ -167,14 +174,13 @@ export class ProductService {
 
 	private static checkFields(data: IProductCreateDTO) {
 		try {
-			const { brand, shortDescription, largeDescription, model, price, images, features } = data;
+			const { brand, shortDescription, largeDescription, model, price, features } = data;
 			if (
 				!brand ||
 				!model ||
 				!shortDescription ||
 				!largeDescription ||
 				!price ||
-				images.length === 0 ||
 				features.length === 0
 			) {
 				throw new AppError(
@@ -193,9 +199,9 @@ export class ProductService {
 			);
 		}
 	}
-	private static generateSlug(shortDescription: string, features: string[]): string {
+	private static generateSlug(brand: string, model: string): string {
 		try {
-			const slug = slugify(`${shortDescription}-${features.toString()}`, {
+			const slug = slugify(`${brand}-${model}`, {
 				lower: true,
 				strict: true
 			});

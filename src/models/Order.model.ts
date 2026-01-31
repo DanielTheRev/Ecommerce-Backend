@@ -13,6 +13,7 @@ import { ShippingType } from '@/interfaces/shippingMethods.interface';
 import { orderItemSchema } from './schemas/orderItem.schema';
 import { paymentInfoSchema } from './schemas/paymentInfo.schema';
 import { shippingInfoSchema } from './schemas/shippingInfo.schema';
+import { statusEntrySchema } from './schemas/statusEntry.schema';
 
 
 // Schema principal de la orden
@@ -41,6 +42,7 @@ const orderSchema = new Schema<IOrder, IOrderModel>(
 			type: paymentInfoSchema,
 			required: true
 		},
+		history: [statusEntrySchema],
 		status: {
 			type: String,
 			enum: Object.values(OrderStatus),
@@ -83,9 +85,8 @@ orderSchema.index({ 'paymentInfo.status': 1 });
 // Middleware para generar número de orden antes de guardar
 orderSchema.pre('save', async function (next) {
 	if (!this.orderNumber) {
-		const timestamp = Date.now().toString();
-		const random = Math.random().toString(36).substring(2, 8).toUpperCase();
-		this.orderNumber = `EH-${timestamp}-${random}`;
+		const shortId = Math.random().toString(36).substring(2, 10).toUpperCase();
+		this.orderNumber = `REV-${shortId}`;
 	}
 
 	// Validar que el pago en efectivo solo sea permitido con pickup
@@ -98,18 +99,34 @@ orderSchema.pre('save', async function (next) {
 		);
 	}
 
+	if (this.isModified('status')) {
+		this.history.push({
+			status: this.status,
+			timestamp: new Date(),
+		});
+
+		// 2. Lógica para fechas específicas
+		if (this.status === OrderStatus.SHIPPED) {
+			this.shippingInfo.shippedAt = new Date();
+		}
+
+		if (this.status === OrderStatus.DELIVERED) {
+			this.shippingInfo.deliveredAt = new Date();
+			// Si se entrega en mano (Efectivo), el pago también se aprueba en ese instante
+			if (this.paymentInfo.method === PaymentType.CASH) {
+				this.paymentInfo.status = PaymentStatus.APPROVED;
+				this.paymentInfo.paymentDate = new Date();
+			}
+			if (this.paymentInfo.method !== PaymentType.CASH && this.paymentInfo.status === PaymentStatus.PENDING) {
+				throw new Error("No podés entregar un pedido que no tiene el pago aprobado (Transferencia/Tarjeta)");
+			}
+		}
+
+
+	}
+
 	next();
 });
-
-// Método para actualizar estado de la orden
-orderSchema.methods.updateStatus = function (newStatus: OrderStatus) {
-	this.status = newStatus;
-	if (newStatus === OrderStatus.DELIVERED) {
-		this.paymentInfo.status = PaymentStatus.APPROVED;
-		this.paymentInfo.paymentDate = new Date();
-	}
-	return this.save();
-};
 
 
 

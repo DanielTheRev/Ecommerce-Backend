@@ -165,7 +165,12 @@ export class OrderService {
 		}
 	}
 
-	static async getOrdersByUserId(userId: string) {
+	static async getOrdersByUserId(userId: string, query: {
+		status: string;
+		dateRange: string;
+		page: number;
+		limit: number;
+	}) {
 		if (!userId)
 			throw new AppError(
 				'User ID is required to fetch orders',
@@ -173,8 +178,82 @@ export class OrderService {
 				400
 			);
 		try {
-			const userOrders = await OrderModel.findByUser(userId);
-			return userOrders;
+			const skip = (query.page - 1) * query.limit;
+			const { status, dateRange, limit, page } = query
+			// Construir filtros
+			const filters: any = {
+				user: userId
+			};
+
+			// Filtro por estado
+			if (status) {
+				filters.status = status;
+			}
+
+			// Filtro por rango de fechas
+			if (dateRange) {
+				const now = new Date();
+				let startDate: Date;
+
+				switch (dateRange) {
+					case 'today':
+						startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+						filters.createdAt = { $gte: startDate };
+						break;
+
+					case 'this_week':
+						const startOfWeek = new Date(now);
+						startOfWeek.setDate(now.getDate() - now.getDay()); // Domingo
+						startOfWeek.setHours(0, 0, 0, 0);
+						filters.createdAt = { $gte: startOfWeek };
+						break;
+
+					case 'this_month':
+						startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+						filters.createdAt = { $gte: startDate };
+						break;
+
+					case 'last_3_months':
+						startDate = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+						filters.createdAt = { $gte: startDate };
+						break;
+
+					case 'last_6_months':
+						startDate = new Date(now.getFullYear(), now.getMonth() - 6, 1);
+						filters.createdAt = { $gte: startDate };
+						break;
+
+					case 'this_year':
+						startDate = new Date(now.getFullYear(), 0, 1);
+						filters.createdAt = { $gte: startDate };
+						break;
+
+					default:
+						// 'all' o cualquier otro valor no aplica filtro de fecha
+						break;
+				}
+			}
+
+
+			const userOrders = await OrderModel.find(filters)
+				.populate({
+					path: 'items.product',
+					select: 'name price images description category'
+				})
+				.sort({ createdAt: -1 }) // Ordenar por fecha de creación descendente
+				.skip(skip)
+				.limit(query.limit);
+			const total = await OrderModel.countDocuments(filters);
+
+			return {
+				data: userOrders,
+				pagination: {
+					currentPage: page,
+					totalPages: Math.ceil(total / limit),
+					totalItems: total,
+					itemsPerPage: limit
+				},
+			};
 		} catch (error) {
 			if (error instanceof AppError) throw error;
 			throw new AppError(
@@ -196,7 +275,7 @@ export class OrderService {
 			let order = await this.getOrderByIdPopulated(data.orderID);
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
 			let newStatus: string;
-			const isCard = PaymentService.theOrderIsPreferredPayment(order.paymentInfo.method);
+			const isCard = order.paymentInfo.method === PaymentType.CARD;
 			if (isCard) {
 				if (!order.paymentInfo.transactionId)
 					throw new AppError(
@@ -220,7 +299,6 @@ export class OrderService {
 						: PaymentStatus.REJECTED;
 			}
 			order.paymentInfo.status = data.status;
-			// order.status = OrderStatus.DELIVERED;
 			const orderUpdated = await order.save();
 			return orderUpdated;
 		} catch (error) {
@@ -340,7 +418,6 @@ export class OrderService {
 					break;
 			}
 		}
-		console.log(query);
 		try {
 			// Obtener órdenes con Paginación y populate mejorado
 			const orders = await OrderModel.find(filters)

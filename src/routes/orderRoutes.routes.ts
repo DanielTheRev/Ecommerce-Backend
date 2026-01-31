@@ -28,7 +28,6 @@ router.put('/:id/cancel', protect, cancelOrder); // Cancelar orden
 router.get('/', protect, adminOnly, getAllOrders); // Obtener todas las órdenes (admin)
 router.post('/updatePaymentStatus', protect, adminOnly, updatePaymentStatus); // actualizar estado de una order desde el cliente
 router.post('/updateShippingStatus', protect, adminOnly, updateShippingStatus); // actualizar estado de una order desde el cliente
-// router.put('/:id/status', protect, adminOnly, updateOrderStatus); Actualizar estado de orden (admin)
 router.get('/admin/stats', protect, adminOnly, getOrderStats); // Obtener estadísticas (admin)
 
 export default router;

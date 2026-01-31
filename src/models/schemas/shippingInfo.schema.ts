@@ -24,6 +24,8 @@ export const shippingInfoSchema = new Schema<IShippingInfo>({
   // 		return this.type === ShippingType.HOME_DELIVERY;
   // 	}
   // },
+  shippedAt: { type: Date },
+  deliveredAt: { type: Date },
   cost: {
     type: Number,
     required: true,

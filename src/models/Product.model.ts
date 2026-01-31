@@ -27,13 +27,13 @@ const ProductSchema = new Schema(
 			type: String,
 			required: true,
 			trim: true,
-			maxlength: 200
+			// maxlength: 200
 		},
 		largeDescription: {
 			type: String,
 			required: true,
 			trim: true,
-			maxlength: 200
+			// maxlength: 200
 		},
 		slug: { type: String, unique: true },
 		prices: {
@@ -85,6 +85,14 @@ const ProductSchema = new Schema(
 			}
 		],
 		features: [{ type: String }],
+		colors: [{ type: String }],
+		storage: [{ type: String }],
+		specifications: [
+			{
+				key: { type: String, required: true },
+				value: { type: String, required: true }
+			}
+		],
 		stock: {
 			type: Number,
 			required: true,

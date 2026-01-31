@@ -7,10 +7,10 @@ import { AuthProvider, ILoginUserWithGoogle } from '@/interfaces/auth.interface'
 import { AppError } from '@/errors/app.error';
 
 /* Function to send response with token */
-const sendTokenResponse = (statusCode: number, res: Response, user?: ISecureUser) => {
+const sendTokenResponse = (statusCode: number, res: Response, user: ISecureUser) => {
 	if (!user) throw new AppError('SendTokenResponseError: Not found user', 'User not found', 401);
 
-	const token = AuthService.generateToken(user.id);
+	const token = AuthService.generateToken(user._id);
 	const cookiePath = 'token_b';
 	return res
 		.status(statusCode)
@@ -33,6 +33,8 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
 			email,
 			password
 		});
+		console.log('USUARIO ENVIADO');
+		console.log(user);
 		return sendTokenResponse(201, res, user as unknown as ISecureUser);
 	} catch (error) {
 		return next(error);
@@ -61,6 +63,7 @@ export const getUserProfile = async (req: Request, res: Response) => {
 	if (!token) return res.status(401).json({ message: 'no token provided' });
 	try {
 		const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userID: string };
+		console.log(decoded);
 		const user = await UserService.getUserByID(decoded.userID);
 		if (!user) return res.status(404).json({ message: 'User not found' });
 		return res.json(user);

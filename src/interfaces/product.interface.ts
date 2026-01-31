@@ -15,6 +15,9 @@ export interface IProduct {
 	stock: number;
 	images: IProductImage[];
 	features: string[];
+	colors: string[];
+	storage: string[];
+	specifications: IProductSpec[];
 }
 
 export interface IProductImage {
@@ -48,8 +51,15 @@ export interface IProductCreateDTO {
 	model: string;
 	price: number;
 	category: IProductCategories;
-	images: { file: Express.Multer.File | string }[];
-	features: string[];
+	colors: string | string[];
+	storage: string | string[];
+	features: string | string[];
+	specifications: string | IProductSpec[];
+}
+
+export interface IProductSpec {
+	key: string;
+	value: string;
 }
 
 export interface IProductUpdateDTO extends Partial<IProductCreateDTO> {

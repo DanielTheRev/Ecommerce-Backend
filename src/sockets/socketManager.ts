@@ -1,9 +1,17 @@
+import {
+	CreateAdminNotificationDto,
+	CreateClientNotificationDto,
+	INotification,
+	NotificationAudience,
+	NotificationSeverity,
+	NotificationType
+} from '@/interfaces/notification.interface';
 import { IUser, Role } from '@/interfaces/user.interface';
 import { UserService } from '@/services/user.service';
+import { parse } from 'cookie';
 import { Server as HTTPServer } from 'http';
 import jwt from 'jsonwebtoken';
 import { Socket, Server as SocketIOServer } from 'socket.io';
-import { parse } from 'cookie';
 
 interface AuthSocket extends Socket {
 	user?: IUser;
@@ -107,43 +115,87 @@ class SocketManager {
 
 	// === NOTIFICACIONES ===
 
-	// A todos los admins
-	notifyAdmins(type: 'new_order', message: string, data: any) {
+	/**
+	 * Notifica una nueva orden a los administradores
+	 */
+	notifyNewOrderToAdmins(order: any) {
 		if (!this.io) return;
-		this.io.to('admins').emit('admin-notification', this.buildNotification(type, message, data));
+		
+		const notification: CreateAdminNotificationDto = {
+			type: NotificationType.NEW_ORDER,
+			title: 'Nueva Orden Recibida',
+			message: `Orden #${order._id} creada por valor de $${order.total}`,
+			severity: NotificationSeverity.INFO,
+			data: order,
+			actionUrl: `/home/client-orders`
+		};
+
+		this.io.to('admins').emit('admin-notification', this.buildNotification(notification, NotificationAudience.ADMIN));
 	}
 
-	notifyOrderStateToAdmin(type: string, Data: any, message: string) {
+	/**
+	 * Notifica cualquier alerta de sistema a los administradores
+	 */
+	notifyAdminAlert(title: string, message: string, severity: NotificationSeverity = NotificationSeverity.INFO) {
 		if (!this.io) return;
-		const notification = this.buildNotification(type, message, Data);
-		this.io.to('admins').emit('order-notification', notification);
+
+		const notification: CreateAdminNotificationDto = {
+			type: NotificationType.SYSTEM_ALERT,
+			title,
+			message,
+			severity
+		};
+
+		this.io.to('admins').emit('admin-notification', this.buildNotification(notification, NotificationAudience.ADMIN));
 	}
 
-	// A un cliente específico
-	notifyClient(userId: string, message: string, type: string, data: any) {
+	/**
+	 * Notifica a un cliente específico (Versión Sanitizada)
+	 */
+	notifyClient(userId: string, notificationPayload: CreateClientNotificationDto) {
 		if (!this.io) return;
+
+		// Ensure we are not leaking unintended data, though TS types help, runtime check is good practice
+		// Here we trust the DTO passed by the controller/service layer
+		
+		const finalNotification = this.buildNotification(notificationPayload, NotificationAudience.USER);
+
 		this.io
 			.to(`client_${userId}`)
-			.emit('client-notification', this.buildNotification(type, message, data));
+			.emit('client-notification', finalNotification);
 	}
 
-	// A todos los clientes
-	notifyAllClients(type: string, message: string, data: any) {
+	/**
+	 * Notifica a todos los clientes (Ej: Anuncios generales)
+	 */
+	notifyAllClients(notificationPayload: CreateClientNotificationDto) {
 		if (!this.io) return;
+		
+		const finalNotification = this.buildNotification(notificationPayload, NotificationAudience.USER);
+
+		// Emit to all connected clients room or iterate
+		// Since we don't have a 'clients' global room, we broadcast or iterate. 
+		// Broadcasting to everyone except admins is tricky without a specific room. 
+		// Assuming we want to emit to all sockets that are NOT in 'admins'?
+		// For simplicity, let's iterate connected clients map which we maintain.
+		
 		for (const socket of this.connectedClients.values()) {
-			socket.emit('client-notification', this.buildNotification(type, message, data));
+			socket.emit('client-notification', finalNotification);
 		}
 	}
 
-	// Helper para generar notificación
-	private buildNotification(type: string, message: string, data: any) {
+	// Helper unificado
+	private buildNotification(
+		dto: CreateAdminNotificationDto | CreateClientNotificationDto, 
+		audience: NotificationAudience
+	): INotification {
 		return {
-			type,
-			data,
-			message,
-			timestamp: new Date().toISOString(),
-			id: `${type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-		};
+			id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+			timestamp: new Date(),
+			read: false,
+			audience,
+			...dto
+		} as INotification;
 	}
 
 	// Stats
