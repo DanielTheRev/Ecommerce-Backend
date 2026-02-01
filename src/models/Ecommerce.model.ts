@@ -28,8 +28,8 @@ const EcommerceSchema = new Schema(
 			},
 			mercadopago: {
 				active: { type: Boolean, default: false },
-				accessToken: { type: String , default: 'no asignado'},
-				publicKey: { type: String ,default: 'no asignado'},
+				accessToken: { type: String, default: 'no asignado' },
+				publicKey: { type: String, default: 'no asignado' },
 				baseCommission: { type: Number, default: 0.06 }
 			}
 		},
@@ -43,5 +43,7 @@ const EcommerceSchema = new Schema(
 	},
 	{ timestamps: true, versionKey: false }
 );
+
+// Hook removed to move logic to Service layer
 
 export const EcommerceConfig = model('EcommerceConfig', EcommerceSchema);

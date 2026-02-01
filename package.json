@@ -44,7 +44,8 @@
 		"ts-lib": "^0.0.5",
 		"ts-node": "^10.9.1",
 		"tslib": "^2.8.1",
-		"ualabis-nodejs": "^1.0.1"
+		"ualabis-nodejs": "^1.0.1",
+		"uuid": "^13.0.0"
 	},
 	"devDependencies": {
 		"@types/cookie-parser": "^1.4.9",

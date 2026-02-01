@@ -11,6 +11,7 @@ import orderRoutes from './routes/orderRoutes.routes';
 import shippingRoutes from './routes/shippingRoutes.routes';
 import paymentMethodRoutes from './routes/paymentMethodRoutes.routes';
 import homeRoutes from './routes/home.routes';
+import ecommerceConfigRoutes from './routes/EcommerceConfig.routes';
 import { initUalaCheckOut } from './config/ualabis';
 import { socketManager } from './sockets/socketManager';
 import cookie_parser from 'cookie-parser';
@@ -29,16 +30,16 @@ const allowedOrigins =
 	process.env.NODE_ENV === 'production'
 		? ['https://www.electromix.com.ar', 'https://electromix.com.ar']
 		: [
-				'http://localhost:3000',
-				'http://localhost:3001',
-				'http://localhost:5173',
-				'http://localhost:4200',
-				'http://localhost:4300',
-				'http://localhost:4000',
-				'https://www.electromix.com.ar',
-				'https://electromix.com.ar',
-				'https://0rxf1t1jlv0j4ylas2rhatrnc8efqzeufyfvw0lggpthyb0r2m-h839267052.scf.usercontent.goog'
-			];
+			'http://localhost:3000',
+			'http://localhost:3001',
+			'http://localhost:5173',
+			'http://localhost:4200',
+			'http://localhost:4300',
+			'http://localhost:4000',
+			'https://www.electromix.com.ar',
+			'https://electromix.com.ar',
+			'https://0rxf1t1jlv0j4ylas2rhatrnc8efqzeufyfvw0lggpthyb0r2m-h839267052.scf.usercontent.goog'
+		];
 
 app.use(helmet());
 app.use(
@@ -83,6 +84,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/shipping', shippingRoutes);
 app.use('/api/payment-methods', paymentMethodRoutes);
 app.use('/api/home', homeRoutes);
+app.use('/api/config', ecommerceConfigRoutes);
 
 // Error handler middleware
 app.use(errorMiddleware);
@@ -116,6 +118,7 @@ const startServer = async (): Promise<void> => {
 		await connectDB();
 		// Inicializar configuración de comercio
 		// await EcommerceService.seedDefaultConfig();
+
 		// Inicializar Uala Checkout
 		await initUalaCheckOut();
 		// Inicializar WebSockets

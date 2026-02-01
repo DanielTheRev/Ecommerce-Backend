@@ -3,6 +3,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import DataURIParser from 'datauri/parser';
 import path from 'path';
 import dotenv from 'dotenv';
+import { v4 as uuidv4 } from 'uuid';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -14,6 +15,9 @@ cloudinary.config({
 });
 
 export class ImageService {
+	private constructor() {
+
+	}
 	/**
 	 * Upload an image to cloudinary from file or URL
 	 * @param source - Express.Multer.File o string (URL)
@@ -37,7 +41,7 @@ export class ImageService {
 		try {
 			// 2. Subida con parámetros de optimización
 			const img_uploaded = await cloudinary.uploader.upload(contentToUpload, {
-				public_id: id,
+				public_id: `${id}-${uuidv4()}`,
 				overwrite: true,
 				folder: folder,
 				resource_type: 'auto', // Detecta si es jpg, png, webp, etc.

@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { IProduct, IProductDocument, IProductCategories } from '../interfaces/product.interface';
+import { IProductCategories, IProductDocument } from '../interfaces/product.interface';
 
 const ProductSchema = new Schema(
 	{
@@ -37,6 +37,26 @@ const ProductSchema = new Schema(
 		},
 		slug: { type: String, unique: true },
 		prices: {
+			costPrice: {
+				type: Number,
+				required: true,
+				select: false
+			},
+			profitMargin: {
+				type: Number,
+				default: 1.30, // Ejemplo: 30% de ganancia por defecto
+				select: false
+			},
+			baseCommission: {
+				type: Number,
+				default: 4.9, // Ejemplo: 4.9% de comisión base por defecto
+				select: false
+			},
+			cft6Cuotas: {
+				type: Number,
+				default: 18.9, // Ejemplo: 18.9% de CFT 6 cuotas por defecto
+				select: false
+			},
 			efectivo_transferencia: {
 				type: Number,
 				required: true,
@@ -48,12 +68,12 @@ const ProductSchema = new Schema(
 				default: 0
 			},
 			cuotas: {
-				'3_cuotas_sin_interes': {
+				cuotas_3_si: {
 					type: Number,
 					required: true,
 					default: 0
 				},
-				'6_cuotas_sin_interes': {
+				cuotas_6_si: {
 					type: Number,
 					required: true,
 					default: 0

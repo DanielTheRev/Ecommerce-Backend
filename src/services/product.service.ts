@@ -1,6 +1,6 @@
 import { AppError } from '@/errors/app.error';
 import { IOrderItem } from '@/interfaces/order.interface';
-import { IProduct, IProductCreateDTO } from '@/interfaces/product.interface';
+import { IProduct, IProductCreateDTO, IProductUpdateDTO } from '@/interfaces/product.interface';
 import { Product } from '@/models/Product.model';
 import slugify from 'slugify';
 import { getDolar } from './dolar.service';
@@ -24,8 +24,8 @@ export class ProductService {
 			);
 
 			if (imagesDTO.length === 0) throw new AppError('No images provided', 'No se proporcionaron imágenes', 400);
-			const rawImages = imagesDTO.map((image, index) => ({
-				id: `${data.brand}-${data.model}-${index}`,
+			const rawImages = imagesDTO.map((image) => ({
+				id: `${data.brand}-${data.model}`,
 				source: image
 			}));
 			// TODO mejorar la ruta de las images en cloudinary
@@ -52,6 +52,28 @@ export class ProductService {
 			throw new AppError('Failed to create product', 'Error al crear el producto', 500);
 		}
 	}
+
+	static async getProductsWCompletePrices(): Promise<IProduct[]> {
+		try {
+			const products = await Product.find().select('+prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas').lean() as unknown as IProduct[];
+			return products;
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError('Failed to fetch products', 'Error al obtener los productos', 500);
+		}
+
+	}
+	static async getProductWCompletePrices(id: string): Promise<IProduct> {
+		try {
+			const product = await Product.findById(id).select('+prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas').lean() as unknown as IProduct;
+			return product;
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError('Failed to fetch products', 'Error al obtener los productos', 500);
+		}
+
+	}
+
 
 	static async getAllProducts(): Promise<IProduct[]> {
 		try {
@@ -95,6 +117,67 @@ export class ProductService {
 		} catch (error) {
 			if (error instanceof AppError) throw error;
 			throw new AppError('Failed to fetch products', 'Error al obtener los productos', 500);
+		}
+	}
+
+	static async updateProductById(id: string, updateData: Partial<IProductUpdateDTO>, files: Express.Multer.File[]): Promise<IProduct> {
+		try {
+			const imagesToDelete = JSON.parse((updateData.deletedImages || '[]') as string) as string[];
+
+			const product = await ProductService.getProductById(id);
+			if (!product) {
+				throw new AppError('No product find by given id', 'Producto no encontrado', 404);
+			}
+
+			let currentImages = [...product.images];
+
+
+			if (imagesToDelete.length > 0) {
+				await Promise.all(imagesToDelete.map((pubId) => ImageService.DeleteImage(pubId)));
+				currentImages = currentImages.filter((img) => !imagesToDelete.includes(img.public_id));
+			}
+
+			if (files && files.length > 0) {
+				const brand = updateData.brand || product.brand;
+				const model = updateData.model || product.model;
+
+				const rawImages = files.map((file) => ({
+					id: `${brand}-${model}`,
+					source: file
+				}));
+
+				const newImages = await ImageService.UploadImages(rawImages, 'electromix/product-images');
+				updateData.images = [...currentImages, ...newImages];
+			} else if (imagesToDelete.length > 0) {
+				updateData.images = currentImages;
+			}
+
+
+			if (updateData.brand || updateData.model) {
+				const newBrand = updateData.brand || product.brand;
+				const newModel = updateData.model || product.model;
+				updateData.slug = this.generateSlug(newBrand, newModel);
+			}
+
+			const fieldsToSelect = Object.keys(updateData).join(' ') + (updateData.slug ? ' slug' : '');
+
+			const updatedProduct = await Product.findByIdAndUpdate(
+				id,
+				{ $set: updateData },
+				{
+					new: true,
+					runValidators: true,
+					select: fieldsToSelect // <--- Solo devuelve lo que cambió + _id
+				}
+			).lean();
+
+			if (!updatedProduct) {
+				throw new AppError('Error updating product', 'No se pudo actualizar el producto', 404);
+			}
+			return updatedProduct as unknown as IProduct;
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError('Failed to update product', 'Error al actualizar el producto', 500);
 		}
 	}
 

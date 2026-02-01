@@ -115,11 +115,15 @@ export class PaymentService {
 			const price6Installments = Math.round(targetPrice / (1 - totalTasa6Cuotas));
 
 			return {
+				costPrice: cost_price,
+				profitMargin: profitFactor,
+				baseCommission: baseCommFactor,
+				cft6Cuotas: cft6Factor,
 				efectivo_transferencia: Math.round(targetPrice),
 				tarjeta_credito_debito: price6Installments,
 				cuotas: {
-					'3_cuotas_sin_interes': Math.round(price6Installments / 3),
-					'6_cuotas_sin_interes': Math.round(price6Installments / 6)
+					cuotas_3_si: Math.round(price6Installments / 3),
+					cuotas_6_si: Math.round(price6Installments / 6)
 				}
 			};
 		} catch (error) {

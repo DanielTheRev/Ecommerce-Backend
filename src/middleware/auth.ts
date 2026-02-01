@@ -16,6 +16,13 @@ interface JwtPayload {
 }
 
 // Middleware para proteger rutas
+/**
+ * Protect routes from unauthenticated users
+ * @param {AuthRequest} req - Request
+ * @param {Response} res - Response
+ * @param {NextFunction} next - Next function
+ * @returns {Promise<Response | void>} - Response or void
+*/
 export const protect = async (
 	req: AuthRequest,
 	res: Response,
@@ -23,17 +30,10 @@ export const protect = async (
 ): Promise<Response | void> => {
 	try {
 		let token: string | undefined = req.cookies.token_b;
-		console.log('VERIFICANDO COOKIES');
-		console.log(req.cookies);
-		console.log('VERIFICANDO HEADERS');
-		console.log(req.headers.authorization);
-
 		// Verificar que existe el token
 		if (!token) throw new AppError('Token not found', 'No se proporciono token', 401);
 		// Verificar token
 		const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
-		console.log('VERIFICANDO DATOS DEL TOKEN');
-		console.log(decoded);
 		// Buscar usuario actual
 		const user = await UserService.getUserByID(decoded.userID);
 		if (!user) throw new AppError('User not found', 'Usuario no encontrado', 401);
@@ -70,10 +70,22 @@ export const authorize = (...roles: string[]) => {
 	};
 };
 
-// Middleware para verificar si el usuario es admin
+/**
+ * Middleware para verificar si el usuario es admin
+ * @param {AuthRequest} req - Request
+ * @param {Response} res - Response
+ * @param {NextFunction} next - Next function
+ * @returns {Promise<Response | void>} - Response or void
+*/
 export const adminOnly = authorize('admin');
 
-// Middleware para verificar si el usuario es propietario del recurso o admin
+/**
+ * Middleware para verificar si el usuario es propietario del recurso o admin
+ * @param {AuthRequest} req - Request
+ * @param {Response} res - Response
+ * @param {NextFunction} next - Next function
+ * @returns {Promise<Response | void>} - Response or void
+*/
 export const ownerOrAdmin = (resourceUserIDField: string = 'userID') => {
 	return (req: AuthRequest, res: Response, next: NextFunction) => {
 		if (!req.user) {
@@ -97,7 +109,13 @@ export const ownerOrAdmin = (resourceUserIDField: string = 'userID') => {
 	};
 };
 
-// Middleware opcional para obtener usuario si está autenticado
+/**
+ * Middleware opcional para obtener usuario si está autenticado
+ * @param {AuthRequest} req - Request
+ * @param {Response} res - Response
+ * @param {NextFunction} next - Next function
+ * @returns {Promise<Response | void>} - Response or void
+*/
 export const optionalAuth = async (req: AuthRequest, res: Response, next: NextFunction) => {
 	try {
 		let token: string | undefined;

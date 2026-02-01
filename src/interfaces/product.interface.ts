@@ -36,11 +36,15 @@ export enum IProductCategories {
 }
 
 export interface IProductPrices {
+	costPrice: number;
+	profitMargin: number;
+	baseCommission: number;
+	cft6Cuotas: number;
 	efectivo_transferencia: number;
 	tarjeta_credito_debito: number;
 	cuotas: {
-		'3_cuotas_sin_interes': number;
-		'6_cuotas_sin_interes': number;
+		cuotas_3_si: number;
+		cuotas_6_si: number;
 	};
 }
 
@@ -64,6 +68,9 @@ export interface IProductSpec {
 
 export interface IProductUpdateDTO extends Partial<IProductCreateDTO> {
 	_id: string;
+	deletedImages?: string[];
+	images?: IProductImage[];
+	slug?: string;
 }
 
 export interface IProductDocument extends Document, Omit<IProduct, 'model' | '_id'> {

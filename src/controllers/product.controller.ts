@@ -2,8 +2,27 @@ import { NextFunction, Request, Response } from 'express';
 import { Product } from '@/models/Product.model';
 import { IProductCreateDTO, IProductSpec, IProductUpdateDTO } from '@/interfaces/product.interface';
 import { ProductService } from '@/services/product.service';
+import { ImageService } from '@/services/images.service';
+import { AppError } from '@/errors/app.error';
 
 export class ProductController {
+	static async getProducts(req: Request, res: Response, next: NextFunction) {
+		try {
+			const products = await ProductService.getProductsWCompletePrices();
+			res.status(200).json(products);
+		} catch (error) {
+			next(error);
+		}
+	}
+	static async getProductWCompletePrices(req: Request, res: Response, next: NextFunction) {
+		try {
+			const { id } = req.params;
+			const product = await ProductService.getProductWCompletePrices(id);
+			res.status(200).json(product);
+		} catch (error) {
+			next(error);
+		}
+	}
 	// GET /api/products/all - Obtener todos los productos sin Paginación
 	static async getAllProductWOPagination(req: Request, res: Response): Promise<void> {
 		try {
@@ -134,36 +153,16 @@ export class ProductController {
 	}
 
 	// PATCH /api/products/:id - Actualizar parcialmente un producto
-	static async patchProduct(req: Request, res: Response): Promise<void> {
+	static async patchProduct(req: Request, res: Response, next: NextFunction): Promise<void> {
 		try {
-			const { id } = req.params;
-			const updateData: Partial<IProductUpdateDTO> = req.body;
+			const id = req.params.id;
+			const data = req.body;
+			const files = req.files as Express.Multer.File[];
+			const updatedProduct = await ProductService.updateProductById(id, data, files);
 
-			const product = await Product.findByIdAndUpdate(
-				id,
-				{ $set: updateData },
-				{ new: true, runValidators: true }
-			);
-
-			if (!product) {
-				res.status(404).json({
-					success: false,
-					message: 'Producto no encontrado'
-				});
-				return;
-			}
-
-			res.status(200).json({
-				success: true,
-				message: 'Producto actualizado exitosamente',
-				data: product
-			});
+			res.status(200).json(updatedProduct);
 		} catch (error) {
-			res.status(400).json({
-				success: false,
-				message: 'Error al actualizar el producto',
-				error: error instanceof Error ? error.message : 'Error desconocido'
-			});
+			next(error);
 		}
 	}
 
