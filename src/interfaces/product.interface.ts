@@ -71,6 +71,7 @@ export interface IProductUpdateDTO extends Partial<IProductCreateDTO> {
 	deletedImages?: string[];
 	images?: IProductImage[];
 	slug?: string;
+	prices?: number | IProductPrices;
 }
 
 export interface IProductDocument extends Document, Omit<IProduct, 'model' | '_id'> {
