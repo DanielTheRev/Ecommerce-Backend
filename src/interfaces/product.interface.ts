@@ -46,6 +46,11 @@ export interface IProductPrices {
 		cuotas_3_si: number;
 		cuotas_6_si: number;
 	};
+	earnings?: {
+		cash_transfer: number;
+		card_3_installments: number;
+		card_6_installments: number;
+	};
 }
 
 export interface IProductCreateDTO {

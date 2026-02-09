@@ -8,12 +8,27 @@ export enum PaymentType {
 	CARD = 'Tarjeta de crédito / débito'
 }
 
-// Principal Interface
-export interface IPaymentMethod extends Document {
+export interface IPaymentMethod {
 	type: PaymentType;
 	name: string;
 	description?: string;
 	isActive: boolean;
 	createdAt: Date;
 	updatedAt: Date;
+}
+
+// Principal Interface
+export interface IPaymentMethodDocument extends Document {
+	type: PaymentType;
+	name: string;
+	description?: string;
+	isActive: boolean;
+	createdAt: Date;
+	updatedAt: Date;
+}
+
+export interface IPaymentMethodQuery {
+	type?: PaymentType;
+	name?: string;
+	isActive?: boolean;
 }

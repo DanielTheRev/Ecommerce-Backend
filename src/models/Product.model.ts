@@ -1,5 +1,6 @@
 import mongoose, { Schema } from 'mongoose';
 import { IProductCategories, IProductDocument } from '../interfaces/product.interface';
+import { EarningsSchema } from './schemas/earning.schema';
 
 const ProductSchema = new Schema(
 	{
@@ -78,6 +79,10 @@ const ProductSchema = new Schema(
 					required: true,
 					default: 0
 				}
+			},
+			earnings: {
+				type: EarningsSchema,
+				select: false
 			}
 		},
 		discount: {

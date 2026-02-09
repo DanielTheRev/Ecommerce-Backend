@@ -1,143 +1,99 @@
-import { ShippingType } from '@/interfaces/shippingMethods.interface';
-import { ShippingOption } from '@/models/ShippingOption.model';
-import { Request, Response } from 'express';
+import { ShippingMethodService } from '@/services/shippingMethod.service';
+import { NextFunction, Request, Response } from 'express';
 
 export class ShippingController {
 	// Obtener todas las opciones de envío
-	static async getAllShippingOptions(req: Request, res: Response) {
+	static async getAllShippingOptions(req: Request, res: Response, next: NextFunction) {
 		try {
-			const shippingOptions = await ShippingOption.find();
-			res.json({
-				success: true,
-				data: shippingOptions
-			});
+			const shippingOptions = await ShippingMethodService.getShippingOptionsBy({ isActive: true });
+			return res.json(shippingOptions);
 		} catch (error) {
-			res.status(500).json({
-				success: false,
-				message: 'Error al obtener las opciones de envío',
-				error: error instanceof Error ? error.message : 'Error desconocido'
-			});
+			return next(error);
+		}
+	}
+
+	static async getAdminShippingOptions(req: Request, res: Response, next: NextFunction) {
+		try {
+			const shippingOptions = await ShippingMethodService.getShippingMethods();
+			return res.json(shippingOptions);
+		} catch (error) {
+			return next(error);
+		}
+	}
+
+	static async getShippingOptionById(req: Request, res: Response, next: NextFunction) {
+		try {
+			const { id } = req.params;
+			const shippingOption = await ShippingMethodService.getShippingMethodBy({ _id: id });
+			if (!shippingOption) {
+
+				throw new Error('Opción de envío no encontrada');
+			}
+			return res.json(shippingOption);
+		} catch (error) {
+			return next(error);
 		}
 	}
 
 	// Obtener opciones de envío por método de pago
-	static async getShippingOptionsByPaymentMethod(req: Request, res: Response) {
-		try {
-			const { paymentMethod } = req.query;
+	// static async getShippingOptionsByPaymentMethod(req: Request, res: Response, next: NextFunction) {
+	// 	try {
+	// 		const { paymentMethod } = req.query;
 
-			let shippingOptions;
+	// 		let shippingQuery: any = {};
 
-			if (paymentMethod === 'cash') {
-				// Solo puntos de venta para pago en efectivo
-				shippingOptions = await ShippingOption.find({
-					type: ShippingType.PICKUP,
-					isDefaultForCash: true
-				});
-			} else {
-				// Todas las opciones para otros métodos de pago
-				shippingOptions = await ShippingOption.find();
-			}
+	// 		if (paymentMethod === PaymentType.CASH) {
+	// 			shippingQuery.type = ShippingType.PICKUP;
+	// 			shippingQuery.isDefaultForCash = true;
+	// 		}
 
-			res.json({
-				success: true,
-				data: shippingOptions
-			});
-		} catch (error) {
-			res.status(500).json({
-				success: false,
-				message: 'Error al obtener las opciones de envío',
-				error: error instanceof Error ? error.message : 'Error desconocido'
-			});
-		}
-	}
+	// 		const shippingOptions = await ShippingMethodService.getShippingOptionsBy(shippingQuery);
+
+	// 		return res.json({
+	// 			success: true,
+	// 			data: shippingOptions
+	// 		});
+	// 	} catch (error) {
+	// 		return next(error);
+	// 	}
+	// }
 
 	// Crear nueva opción de envío (solo admin)
-	static async createShippingOption(req: Request, res: Response) {
+	static async createShippingOption(req: Request, res: Response, next: NextFunction) {
 		try {
-			const shippingOption = new ShippingOption(req.body);
-			await shippingOption.save();
+			const shippingOption = await ShippingMethodService.createShippingOption(req.body);
 
-			res.status(201).json({
-				success: true,
-				data: shippingOption,
-				message: 'Opción de envío creada exitosamente'
-			});
+			return res.status(201).json(shippingOption);
 		} catch (error) {
-			res.status(400).json({
-				success: false,
-				message: 'Error al crear la opción de envío',
-				error: error instanceof Error ? error.message : 'Error desconocido'
-			});
+			return next(error);
 		}
 	}
 
 	// Actualizar opción de envío (solo admin)
-	static async updateShippingOption(req: Request, res: Response) {
-		if (req.params.id === undefined || req.body === undefined) {
-			res.status(500).json({
-				success: false,
-				message: 'Error al actualizar la opción de envío',
-				error: 'No hay id o no hay body'
-			});
-		}
+	static async updateShippingOption(req: Request, res: Response, next: NextFunction) {
+
 		try {
 			const { id } = req.params;
-			const shippingOption = await ShippingOption.findByIdAndUpdate(id, req.body, {
-				new: true,
-				runValidators: true
-			});
+			const shippingOption = await ShippingMethodService.updateShippingOption(id, req.body);
 
-			if (!shippingOption) {
-				return res.status(404).json({
-					success: false,
-					message: 'Opción de envío no encontrada'
-				});
-			}
-
-			return res.json({
-				success: true,
-				data: shippingOption,
-				message: 'Opción de envío actualizada exitosamente'
-			});
+			return res.json(shippingOption);
 		} catch (error) {
-			return res.status(400).json({
-				success: false,
-				message: 'Error al actualizar la opción de envío',
-				error: error instanceof Error ? error.message : 'Error desconocido'
-			});
+			return next(error);
 		}
 	}
 
 	// Eliminar opción de envío (solo admin)
-	static async deleteShippingOption(req: Request, res: Response) {
-		if (req.params.id === undefined) {
-			return res.status(500).json({
-				success: false,
-				message: 'Error al eliminar la opción de envío',
-				error: 'No hay id al cual actualizar'
-			});
-		}
+	static async deleteShippingOption(req: Request, res: Response, next: NextFunction) {
 		try {
 			const { id } = req.params;
-			const shippingOption = await ShippingOption.findByIdAndDelete(id);
-
-			if (!shippingOption) {
-				return res.status(404).json({
-					success: false,
-					message: 'Opción de envío no encontrada'
-				});
-			}
+			await ShippingMethodService.deleteShippingOption(id);
 
 			return res.json({
 				success: true,
-				message: 'Opción de envío eliminada exitosamente'
+				id
 			});
 		} catch (error) {
-			return res.status(500).json({
-				success: false,
-				message: 'Error al eliminar la opción de envío',
-				error: error instanceof Error ? error.message : 'Error desconocido'
-			});
+			return next(error);
 		}
 	}
 }

@@ -1,6 +1,8 @@
 import { IBrandSection, IHomeOffer } from '@/interfaces/home.interface';
 import { IProduct } from '@/interfaces/product.interface';
 import { ProductService } from './product.service';
+import { BannerService } from './banner.service';
+import { HeroService } from './hero.service'; // New import
 import { AppError } from '@/errors/app.error';
 
 export class HomeService {
@@ -33,68 +35,18 @@ export class HomeService {
 			iconColor: 'text-green-600'
 		}
 	];
-	private static readonly brandConfig: Record<
-		string,
-		Omit<IBrandSection, 'products' | 'brandName'>
-	> = {
-		Apple: {
-			description: 'Diseño en titanio. Creado para Apple Intelligence.',
-			image: 'https://www.apple.com/v/iphone-17/c/images/overview/cameras/back-camera/hero_rear_camera__cz6f2qdjc0q6_xlarge_2x.png',
-			title: 'iPhone 16 Pro',
-			subtitle: 'Titanium Design',
-			textClass: 'text-white',
-			buttonClass: 'bg-white text-black hover:bg-gray-200',
-			icon: 'Apple'
-		},
-		Samsung: {
-			description: 'El smartphone definitivo. Titanio. Inteligencia Artificial.',
-			image: 'https://images.samsung.com/ar/smartphones/galaxy-s25-ultra/images/galaxy-s25-ultra-features-kv-g.jpg?imbypass=true',
-			title: 'Galaxy S25 Ultra',
-			subtitle: 'Galaxy AI is here',
-			textClass: 'text-white',
-			buttonClass: 'bg-white text-black hover:bg-gray-200',
-			icon: 'Smartphone'
-		},
-		Xiaomi: {
-			description: 'Lentes ópticos Leica. Potencia y diseño sin límites.',
-			image: 'https://xiaomistore.com.ar/desarrollos/landings/smartphones/redmi-14t/desktop/main-files/img01.jpg',
-			title: 'Xiaomi 14T Series',
-			subtitle: 'Master light, capture night',
-			textClass: 'text-white',
-			buttonClass: 'bg-white text-black hover:bg-gray-200',
-			icon: 'Smartphone'
-		},
-		Motorola: {
-			description: 'Descubre la fusión perfecta entre tecnología y estilo.',
-			image: 'https://armoto.vteximg.com.br/arquivos/moto-edge-60-pro-pdp-CMF-Modal-static-01-D-zf1ke1kz.jpg',
-			title: 'Diseño Sin Límites',
-			subtitle: 'Hello Moto',
-			textClass: 'text-white',
-			buttonClass: 'bg-white text-black hover:bg-gray-200',
-			icon: 'Smartphone'
-		},
-		POCO: {
-			description: 'Rendimiento extremo para gaming y creadores.',
-			image: 'https://i02.appmifile.com/mi-com-product/fly-birds/poco-f7/pc/837222dcf1c0c4a47659f44e9ac81b2a.jpg?f=webp',
-			title: 'Pura Potencia',
-			subtitle: 'Everything you need',
-			textClass: 'text-white',
-			buttonClass: 'bg-[#FFD700] text-black hover:bg-yellow-400',
-			icon: 'Zap'
-		}
-	};
+
 
 	private static async getProductsGroupByBrand(): Promise<IBrandSection[]> {
 		try {
+			// 1. Get all active banners configured in CMS
+			const activeBanners = await BannerService.getActiveBanners();
+
+			// 2. Get all products to map them (opt: optimize to query by brand first if needed)
 			const products = await ProductService.getAllProducts();
-			// if products is empty, return empty array
-			if (!products || products.length === 0) {
-				console.log('No products found in getProductsGroupByBrand at HomeService');
-				return [];
-			}
-			// Group products by brand
+
+			// 3. Group products by brand for O(1) access
 			const brandProductsMap = new Map<string, IProduct[]>();
-			// Iterate over products and group them by brand
 			products.forEach((product) => {
 				const brand = product.brand;
 				if (!brandProductsMap.has(brand)) {
@@ -102,38 +54,32 @@ export class HomeService {
 				}
 				brandProductsMap.get(brand)!.push(product);
 			});
-			// Create brand sections array
-			const brandGroups: IBrandSection[] = [];
-			// Iterate over each brand and create the section if config exists
-			brandProductsMap.forEach((brandProducts, brand) => {
-				const sortedProducts = [...brandProducts].sort((a, b) =>
+
+			const brandSections: IBrandSection[] = [];
+
+			// 4. Iterate over active banners and build sections
+			for (const banner of activeBanners) {
+				const productsForBrand = brandProductsMap.get(banner.brandName) || [];
+				
+				// Sort products by model as requested
+				const sortedProducts = productsForBrand.sort((a, b) =>
 					b.model!.localeCompare(a.model!)
 				);
-				const config = this.brandConfig[brand];
 
-				if (config) {
-					brandGroups.push({
-						brandName: brand,
-						products: sortedProducts.slice(0, 4),
-						...config
-					});
-				}
-			});
-			// Order according to desired brand priority: Apple, Samsung, Xiaomi, POCO
-			const desiredOrder = ['Apple', 'Samsung', 'Xiaomi', 'POCO'];
-			brandGroups.sort((a, b) => {
-				const ia = desiredOrder.indexOf(a.brandName);
-				const ib = desiredOrder.indexOf(b.brandName);
-				// If one of the brands is in the desired order, it gets priority
-				if (ia !== -1 || ib !== -1) {
-					if (ia === -1) return 1; // a goes after b
-					if (ib === -1) return -1; // a goes before b
-					return ia - ib; // both in desiredOrder: preserve specified order
-				}
-				// Fallback: alphabetical
-				return a.brandName.localeCompare(b.brandName);
-			});
-			return brandGroups;
+				brandSections.push({
+					brandName: banner.brandName,
+					title: banner.title,
+					subtitle: banner.subtitle,
+					description: banner.description,
+					image: banner.image,
+					textClass: banner.textClass,
+					buttonClass: banner.buttonClass,
+					icon: banner.icon,
+					products: sortedProducts.slice(0, 4)
+				});
+			}
+
+			return brandSections;
 		} catch (error) {
 			throw new AppError(
 				'Error grouping products by brand',
@@ -145,7 +91,11 @@ export class HomeService {
 
 	static async getHomeConfig() {
 		const productByBrand = await this.getProductsGroupByBrand();
+		// Fetch Hero Slides
+		const heroSlides = await HeroService.getActiveSlides();
+
 		return {
+			heroSlides, // New field
 			offers: this.offers,
 			productByBrand
 		};

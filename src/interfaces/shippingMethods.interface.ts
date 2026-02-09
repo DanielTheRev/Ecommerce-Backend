@@ -12,11 +12,34 @@ export interface IPickupPoint {
 	address: string;
 }
 
-export interface IShippingOption extends Document {
+export interface IShippingOptionQuery {
+	_id?: string;
+	type?: ShippingType;
+	isActive?: boolean;
+	isDefaultForCash?: boolean;
+}
+
+export interface IShippingOption {
 	type: ShippingType;
 	name: string;
 	cost: number;
 	pickupPoints?: IPickupPoint[];
+	isActive: boolean;
+	isDefaultForCash: boolean;
+	createdAt: Date;
+	updatedAt: Date;
+}
+
+export type IShippingOptionCreate = Omit<IShippingOption, 'createdAt' | 'updatedAt'>;
+
+export type IShippingOptionUpdate = Partial<Omit<IShippingOption, 'createdAt' | 'updatedAt'>>;
+
+export interface IShippingOptionDoc extends Document {
+	type: ShippingType;
+	name: string;
+	cost: number;
+	pickupPoints?: IPickupPoint[];
+	isActive: boolean;
 	isDefaultForCash: boolean;
 	createdAt: Date;
 	updatedAt: Date;

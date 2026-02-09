@@ -95,10 +95,12 @@ export class PaymentService {
 			// 1. Obtenemos los valores y los normalizamos inmediatamente
 			const rawProfit = config.profit; // Puede ser 10 o 0.1
 			const rawBaseComm = ualaConfig.baseCommission; // Puede ser 4.9 o 0.049
+			const rawCFT3 = ualaConfig.cft3cuotas; // Puede ser 18.9 o 0.189
 			const rawCFT6 = ualaConfig.cft6Cuotas; // Puede ser 18.9 o 0.189
 
 			const profitFactor = this.normalizePercentage(rawProfit);
 			const baseCommFactor = this.normalizePercentage(rawBaseComm);
+			const cft3Factor = this.normalizePercentage(rawCFT3);
 			const cft6Factor = this.normalizePercentage(rawCFT6);
 			const ivaFactor = 1 + config.taxes.iva / 100; // El IVA siempre suele ser 21, así que 1.21
 
@@ -111,8 +113,13 @@ export class PaymentService {
 			// 4. Cálculo de la Tasa Total de Ualá con IVA
 			// (Comisión Base + CFT) * 1.21
 			const totalTasa6Cuotas = (baseCommFactor + cft6Factor) * ivaFactor;
+			const totalTasa3Cuotas = (baseCommFactor + cft3Factor) * ivaFactor;
 
 			const price6Installments = Math.round(targetPrice / (1 - totalTasa6Cuotas));
+
+			// 1. Calculamos cuánto nos descuenta Ualá realmente en cada caso
+			const ualaTake6 = price6Installments * totalTasa6Cuotas;
+			const ualaTake3 = price6Installments * totalTasa3Cuotas; // Usamos price6 porque es tu base de cobro
 
 			return {
 				costPrice: cost_price,
@@ -124,6 +131,16 @@ export class PaymentService {
 				cuotas: {
 					cuotas_3_si: Math.round(price6Installments / 3),
 					cuotas_6_si: Math.round(price6Installments / 6)
+				},
+				earnings: {
+					// En efectivo, tu ganancia es simplemente el sobreprecio aplicados
+					cash_transfer: Math.round(targetPrice - basePriceInArs),
+
+					// En 3 cuotas: cobrás el precio de 6, pero Ualá te descuenta la tasa de 3
+					card_3_installments: Math.round(price6Installments - basePriceInArs - ualaTake3),
+
+					// En 6 cuotas: cobrás el precio de 6 y Ualá te descuenta la tasa de 6 (debería ser igual a tu profit original)
+					card_6_installments: Math.round(price6Installments - basePriceInArs - ualaTake6)
 				}
 			};
 		} catch (error) {
@@ -135,7 +152,7 @@ export class PaymentService {
 		}
 	}
 	// TODO: Implementar cálculo de precios con MercadoPago
-	private static calculatePricesWithMercadoPago(cost_price: number) {}
+	private static calculatePricesWithMercadoPago(cost_price: number) { }
 
 	getOrderProcessedItems() {
 		return this.itemsFromCart.map((item) => ({
@@ -174,6 +191,8 @@ export class PaymentService {
 	getDescriptionQuantity() {
 		return `${this.itemsFromCart.length} ${this.itemsFromCart.length > 1 ? 'productos' : 'producto'}`;
 	}
+
+
 	private static normalizePercentage(value: number): number {
 		if (!value) return 0;
 		// Si alguien pone 18 o 10, lo llevamos a 0.18 o 0.10

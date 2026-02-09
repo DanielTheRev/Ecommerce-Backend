@@ -1,22 +1,22 @@
-import express, { Application, Request, Response } from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import morgan from 'morgan';
-import dotenv from 'dotenv';
-import { createServer } from 'http';
-import { connectDB } from './config/database';
-import productRoutes from './routes/productRoutes.routes';
-import authRoutes from './routes/auth.routes';
-import orderRoutes from './routes/orderRoutes.routes';
-import shippingRoutes from './routes/shippingRoutes.routes';
-import paymentMethodRoutes from './routes/paymentMethodRoutes.routes';
-import homeRoutes from './routes/home.routes';
-import ecommerceConfigRoutes from './routes/EcommerceConfig.routes';
-import { initUalaCheckOut } from './config/ualabis';
-import { socketManager } from './sockets/socketManager';
 import cookie_parser from 'cookie-parser';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import express, { Application, Request, Response } from 'express';
+import helmet from 'helmet';
+import { createServer } from 'http';
+import morgan from 'morgan';
+import { connectDB } from './config/database';
+import { initUalaCheckOut } from './config/ualabis';
 import { errorMiddleware } from './middleware/error.middleware';
-import { EcommerceService } from './services/ecommerce.service';
+import authRoutes from './routes/auth.routes';
+import ecommerceConfigRoutes from './routes/EcommerceConfig.routes';
+import heroRoutes from './routes/hero.routes'; // New import
+import homeRoutes from './routes/home.routes';
+import orderRoutes from './routes/orderRoutes.routes';
+import paymentMethodRoutes from './routes/paymentMethodRoutes.routes';
+import productRoutes from './routes/productRoutes.routes';
+import shippingRoutes from './routes/shippingRoutes.routes';
+import { socketManager } from './sockets/socketManager';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -84,6 +84,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/shipping', shippingRoutes);
 app.use('/api/payment-methods', paymentMethodRoutes);
 app.use('/api/home', homeRoutes);
+app.use('/api/hero', heroRoutes);
 app.use('/api/config', ecommerceConfigRoutes);
 
 // Error handler middleware

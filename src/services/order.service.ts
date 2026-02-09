@@ -98,9 +98,9 @@ export class OrderService {
 				};
 			});
 			/* get shipping method */
-			const shippingMethod = await ShippingMethodService.getShippingMethodById(
-				data.shippingMethod._id
-			);
+			const shippingMethod = await ShippingMethodService.getShippingMethodBy({
+				_id: data.shippingMethod._id
+			});
 			/* get payment method */
 			const paymentMethod = await PaymentMethodService.getPaymentMethodById(
 				data.paymentMethod._id

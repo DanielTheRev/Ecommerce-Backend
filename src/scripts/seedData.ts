@@ -1,9 +1,8 @@
-import mongoose from 'mongoose';
-import dotenv from 'dotenv';
-import { Product } from '../models/Product.model';
-import slugify from 'slugify';
 import { IProductCategories, IProductCreateDTO } from '@/interfaces/product.interface';
 import { ProductService } from '@/services/product.service';
+import dotenv from 'dotenv';
+import mongoose from 'mongoose';
+import { Product } from '../models/Product.model';
 
 // Cargar variables de entorno
 dotenv.config();

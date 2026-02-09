@@ -28,6 +28,10 @@ const shippingOptionSchema = new Schema<IShippingOption>(
 			required: true
 		},
 		pickupPoints: [pickupPointSchema],
+		isActive: {
+			type: Boolean,
+			default: true
+		},
 		isDefaultForCash: {
 			type: Boolean,
 			default: false

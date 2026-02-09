@@ -110,7 +110,7 @@ export class ProductService {
 
 	static async createProduct(data: IProductCreateDTO, imagesDTO: Express.Multer.File[]): Promise<IProduct> {
 		try {
-			this.checkFields(data);
+			// Validated by Zod Middleware
 			const slug = this.generateSlug(data.brand, data.model);
 			const { venta } = await getDolar();
 
@@ -152,7 +152,9 @@ export class ProductService {
 
 	static async getProductsWCompletePrices(): Promise<IProduct[]> {
 		try {
-			const products = await Product.find().select('+prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas').lean() as unknown as IProduct[];
+			const products = await Product.find()
+				.select('+prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.earnings')
+				.lean() as unknown as IProduct[];
 			return products;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
@@ -292,33 +294,7 @@ export class ProductService {
 		}
 	}
 
-	private static checkFields(data: IProductCreateDTO) {
-		try {
-			const { brand, shortDescription, largeDescription, model, price, features } = data;
-			if (
-				!brand ||
-				!model ||
-				!shortDescription ||
-				!largeDescription ||
-				!price ||
-				features.length === 0
-			) {
-				throw new AppError(
-					'ProductService.createProduct: Missing fields when user creates a product',
-					'Todos los campos son requeridos',
-					400
-				);
-			}
-			return true;
-		} catch (error) {
-			if (error instanceof AppError) throw error;
-			throw new AppError(
-				'ProductService.createProduct: Error checking fields',
-				'Error al verificar los campos',
-				500
-			);
-		}
-	}
+
 
 	private static sanitizeDescription(description: string): string {
 		const window = new JSDOM(description).window;

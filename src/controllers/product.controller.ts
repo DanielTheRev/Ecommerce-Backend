@@ -1,6 +1,9 @@
 import { NextFunction, Request, Response } from 'express';
 import { IProductCreateDTO, IProductSpec, IProductUpdateDTO } from '@/interfaces/product.interface';
 import { ProductService } from '@/services/product.service';
+import { getDolar } from '@/services/dolar.service';
+import { PaymentService } from '@/services/Payment.service';
+import { EcommercePaymentProviders } from '@/interfaces/ecommerce.interface';
 
 export class ProductController {
 	static async getProducts(req: Request, res: Response, next: NextFunction) {
@@ -21,19 +24,16 @@ export class ProductController {
 		}
 	}
 	// GET /api/products/all - Obtener todos los productos sin Paginación
-	static async getAllProductWOPagination(req: Request, res: Response): Promise<void> {
+	static async getAllProductWOPagination(req: Request, res: Response, next: NextFunction): Promise<void> {
 		try {
 			const products = await ProductService.getAllProducts();
 			res.status(200).json(products);
 		} catch (error) {
-			res.status(500).json({
-				message: 'Error al obtener los productos',
-				error: error instanceof Error ? error.message : 'Error desconocido'
-			});
+			next(error);
 		}
 	}
 	// GET /api/products - Obtener todos los productos
-	static async getAllProducts(req: Request, res: Response): Promise<void> {
+	static async getAllProducts(req: Request, res: Response, next: NextFunction): Promise<void> {
 		try {
 			const page = parseInt(req.query.page as string) || 1;
 			const limit = parseInt(req.query.limit as string) || 20;
@@ -42,28 +42,19 @@ export class ProductController {
 
 			res.status(200).json(result);
 		} catch (error) {
-			res.status(500).json({
-				message: 'Error al obtener los productos',
-				error: error instanceof Error ? error.message : 'Error desconocido'
-			});
+			next(error);
 		}
 	}
 
 	// GET /api/products/:id - Obtener un producto por ID
-	static async getProductBySlug(req: Request, res: Response): Promise<void> {
+	static async getProductBySlug(req: Request, res: Response, next: NextFunction): Promise<void> {
 		try {
 			const { slug } = req.params;
 			const product = await ProductService.getProductBySlug(slug);
 
 			res.status(200).json(product);
 		} catch (error) {
-			// If error is 404 handled in service, it will be caught here but we might want to ensure status code
-			// For now, mirroring previous behavior but assuming AppError handling in middleware or manual response
-			// Previous code manually checked !product. Service throws if not found.
-			res.status(404).json({
-				success: false,
-				message: 'Producto no encontrado'
-			});
+			next(error);
 		}
 	}
 
@@ -88,7 +79,7 @@ export class ProductController {
 	}
 
 	// PUT /api/products/:id - Actualizar un producto completo
-	static async updateProduct(req: Request, res: Response): Promise<void> {
+	static async updateProduct(req: Request, res: Response, next: NextFunction): Promise<void> {
 		try {
 			const { id } = req.params;
 			const updateData: IProductUpdateDTO = req.body;
@@ -101,11 +92,7 @@ export class ProductController {
 				data: product
 			});
 		} catch (error) {
-			res.status(400).json({
-				success: false,
-				message: 'Error al actualizar el producto',
-				error: error instanceof Error ? error.message : 'Error desconocido'
-			});
+			next(error);
 		}
 	}
 
@@ -124,7 +111,7 @@ export class ProductController {
 	}
 
 	// DELETE /api/products/:id - Eliminar un producto
-	static async deleteProduct(req: Request, res: Response): Promise<void> {
+	static async deleteProduct(req: Request, res: Response, next: NextFunction): Promise<void> {
 		try {
 			const { id } = req.params;
 			const product = await ProductService.deleteProduct(id);
@@ -135,19 +122,15 @@ export class ProductController {
 				data: product
 			});
 		} catch (error) {
-			res.status(500).json({
-				success: false,
-				message: 'Error al eliminar el producto',
-				error: error instanceof Error ? error.message : 'Error desconocido'
-			});
+			next(error);
 		}
 	}
 
 	// GET /api/products/search - Buscar productos
-	static async searchProducts(req: Request, res: Response): Promise<void> {
+	static async searchProducts(req: Request, res: Response, next: NextFunction): Promise<void> {
 		try {
 			const { q, minPrice, maxPrice, minRating, suggestions } = req.query;
-			
+
 			// if suggestions is true, return only brand and model matches without pagination
 			if (suggestions) {
 				const products = await ProductService.getSearchSuggestions(q as string);
@@ -171,11 +154,24 @@ export class ProductController {
 				pagination: result.pagination
 			});
 		} catch (error) {
-			res.status(500).json({
-				success: false,
-				message: 'Error al buscar productos',
-				error: error instanceof Error ? error.message : 'Error desconocido'
-			});
+			next(error);
+		}
+	}
+
+	// POST /api/products/calculate-prices - Calcular precios antes de guardar
+	static async calculatePrice(req: Request, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { costPrice } = req.body;
+			const { venta } = await getDolar();
+			const prices = await PaymentService.CalculatePrices(
+				EcommercePaymentProviders.UALA,
+				costPrice,
+				venta
+			);
+
+			res.status(200).json(prices);
+		} catch (error) {
+			next(error);
 		}
 	}
 }
