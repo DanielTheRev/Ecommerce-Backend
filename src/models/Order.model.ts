@@ -59,6 +59,11 @@ const orderSchema = new Schema<IOrder, IOrderModel>(
 			required: true,
 			min: 0
 		},
+		earnings: {
+			type: Number,
+			required: true,
+			default: 0
+		},
 		orderNumber: {
 			type: String,
 			unique: true,
@@ -80,51 +85,7 @@ orderSchema.index({ user: 1, createdAt: -1 });
 orderSchema.index({ status: 1 });
 orderSchema.index({ 'paymentInfo.status': 1 });
 
-// Middleware para generar número de orden antes de guardar
-orderSchema.pre('save', async function (next) {
-	if (!this.orderNumber) {
-		const shortId = Math.random().toString(36).substring(2, 10).toUpperCase();
-		this.orderNumber = `REV-${shortId}`;
-	}
 
-	// Validar que el pago en efectivo solo sea permitido con pickup
-	if (
-		this.paymentInfo.method === PaymentType.CASH &&
-		this.shippingInfo.type !== ShippingType.PICKUP
-	) {
-		return next(
-			new Error('El pago en efectivo solo está disponible para retiro en punto de venta')
-		);
-	}
-
-	if (this.isModified('status')) {
-		this.history.push({
-			status: this.status,
-			timestamp: new Date(),
-		});
-
-		// 2. Lógica para fechas específicas
-		if (this.status === OrderStatus.SHIPPED) {
-			this.shippingInfo.shippedAt = new Date();
-		}
-
-		if (this.status === OrderStatus.DELIVERED) {
-			this.shippingInfo.deliveredAt = new Date();
-			// Si se entrega en mano (Efectivo), el pago también se aprueba en ese instante
-			if (this.paymentInfo.method === PaymentType.CASH) {
-				this.paymentInfo.status = PaymentStatus.APPROVED;
-				this.paymentInfo.paymentDate = new Date();
-			}
-			if (this.paymentInfo.method !== PaymentType.CASH && this.paymentInfo.status === PaymentStatus.PENDING) {
-				throw new Error("No podés entregar un pedido que no tiene el pago aprobado (Transferencia/Tarjeta)");
-			}
-		}
-
-
-	}
-
-	next();
-});
 
 
 

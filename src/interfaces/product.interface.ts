@@ -36,7 +36,11 @@ export enum IProductCategories {
 }
 
 export interface IProductPrices {
-	costPrice: number;
+	costPrice: {
+		inUSD: number;
+		inARS: number;
+	};
+	dolarPrice: number;
 	profitMargin: number;
 	baseCommission: number;
 	cft6Cuotas: number;

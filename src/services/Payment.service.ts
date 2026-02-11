@@ -89,6 +89,7 @@ export class PaymentService {
 		dolar: number
 	): Promise<IProductPrices> {
 		try {
+			// * cost_price es el precio de compra del product viene en USD o deberia.
 			const config = await EcommerceService.getConfig();
 			const ualaConfig = config.paymentGateways.uala;
 
@@ -122,7 +123,11 @@ export class PaymentService {
 			const ualaTake3 = price6Installments * totalTasa3Cuotas; // Usamos price6 porque es tu base de cobro
 
 			return {
-				costPrice: cost_price,
+				costPrice: {
+					inUSD: cost_price,
+					inARS: basePriceInArs
+				},
+				dolarPrice: dolar,
 				profitMargin: profitFactor,
 				baseCommission: baseCommFactor,
 				cft6Cuotas: cft6Factor,
@@ -154,19 +159,7 @@ export class PaymentService {
 	// TODO: Implementar cálculo de precios con MercadoPago
 	private static calculatePricesWithMercadoPago(cost_price: number) { }
 
-	getOrderProcessedItems() {
-		return this.itemsFromCart.map((item) => ({
-			product: item.data._id,
-			quantity: item.quantity,
-			price: this.isPreferredPaymentType
-				? item.data.prices.efectivo_transferencia
-				: item.data.prices.tarjeta_credito_debito,
-			name: item.data.brand + ' ' + item.data.model,
-
-			image: item.data.images[0].url
-		}));
-	}
-
+	
 	getFinalCost() {
 		if (this.isPreferredPaymentType) {
 			return this.CalculatePricesWithOutCard() + this.shippingCost;
@@ -192,6 +185,26 @@ export class PaymentService {
 		return `${this.itemsFromCart.length} ${this.itemsFromCart.length > 1 ? 'productos' : 'producto'}`;
 	}
 
+
+	getEarnings(installments: number = 1): number {
+		return this.itemsFromCart.reduce((total, item) => {
+			const earnings = item.data.prices.earnings;
+			let earningPerUnit = 0;
+
+			if (this.isPreferredPaymentType) {
+				earningPerUnit = earnings?.cash_transfer || 0;
+			} else {
+				// Mapeo de cuotas a earnings disponibles
+				if (installments <= 3) {
+					earningPerUnit = earnings?.card_3_installments || 0;
+				} else {
+					// Para 6 o más cuotas (o cualquier otro caso > 3) usamos el de 6
+					earningPerUnit = earnings?.card_6_installments || 0;
+				}
+			}
+			return total + (earningPerUnit * item.quantity);
+		}, 0);
+	}
 
 	private static normalizePercentage(value: number): number {
 		if (!value) return 0;

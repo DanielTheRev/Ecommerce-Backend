@@ -11,3 +11,9 @@ export enum UalaOrderStatus {
 	Procesando = 'PROCESSED',
 	Declinada = 'REJECTED'
 }
+
+export interface UalaTokenResponse {
+	access_token: string;
+	expires_in: number;
+	token_type: string;
+}

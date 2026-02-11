@@ -25,16 +25,14 @@ export const getNotificationsUala = async (req: AuthRequest, res: Response) => {
 export const ualaWebhook = async (req: AuthRequest, res: Response) => {
 	console.log('Uala biss notification received');
 	const data = req.body as UalaWebhook;
-	const id = req.query.id;
-	const order = await OrderService.getOrderById(id as string);
-	if (!order) {
-		console.log('ERROR AL ACTUALIZAR PAGO DE UNA ORDEN, NO SE ENCONTRÓ');
-		console.log('ID de la orden =>', id);
-		return res.status(200);
+	const id = req.query.id as string;
+
+	try {
+		await OrderService.confirmCardPayment(id, data.status);
+	} catch (error) {
+		console.error('Error processing Uala webhook:', error);
+		// Return 200 even on error to acknowledge receipt to Uala
 	}
-	const newStatus =
-		data.status === UalaOrderStatus.Aprobado ? PaymentStatus.APPROVED : PaymentStatus.REJECTED;
-	await OrderService.updateOrderStatus(order.id, newStatus);
 	return res.sendStatus(200);
 };
 
@@ -85,18 +83,34 @@ export const getOrderById = async (req: AuthRequest, res: Response, next: NextFu
 	try {
 		const { id } = req.params;
 		const userId = req.user?._id;
-		console.log({ productID: id, userID: userId });
 
 		if (!userId) {
 			return res.status(401).json({ message: 'Usuario no autenticado' });
 		}
 
 		const order = await OrderService.getOrderById(id);
-
 		// verify order ownership
 		if (order.user._id.toString() !== userId.toString()) {
 			return res.status(403).json({ message: 'No tienes permiso para ver esta orden' });
 		}
+
+		return res.json(order);
+	} catch (error) {
+		return next(error);
+	}
+};
+
+export const getOrderByIdAdmin = async (req: AuthRequest, res: Response, next: NextFunction) => {
+	try {
+		const { id } = req.params;
+		const userId = req.user?._id;
+
+		if (!userId) {
+			return res.status(401).json({ message: 'Usuario no autenticado' });
+		}
+
+		const order = await OrderService.getFullyOrderBy({ _id: id });
+
 
 		return res.json(order);
 	} catch (error) {

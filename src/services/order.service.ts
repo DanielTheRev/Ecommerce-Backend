@@ -1,6 +1,7 @@
 import { AppError } from '@/errors/app.error';
 import {
 	CreateOrderDTO,
+	IOrder,
 	OrderStatus,
 	PaymentStatus,
 	updatePaymentStatusDTO,
@@ -16,13 +17,24 @@ import { PaymentType } from '@/interfaces/paymentMethod.interface';
 import { ShippingType } from '@/interfaces/shippingMethods.interface';
 import { UalaOrderStatus } from '@/interfaces/ualaWebhook.interface';
 import { Role } from '@/interfaces/user.interface';
-import mongoose from 'mongoose';
+import { FilterQuery } from 'mongoose';
 
 export class OrderService {
+	private static generateOrderNumber(): string {
+		const shortId = Math.random().toString(36).substring(2, 10).toUpperCase();
+		return `REV-${shortId}`;
+	}
+	/**
+	 * * Get order by id without select user field
+	 * @param id string
+	 * @returns order
+	 */
 	static async getOrderById(id: string) {
-		if (!id) throw new AppError('Order ID is required', 'El ID de la orden es requerido', 400);
 		try {
-			const order = await OrderModel.findById(id);
+			if (!id) throw new AppError('Order ID is required', 'El ID de la orden es requerido', 400);
+			const order = await OrderModel.findById(id).populate([
+				{ path: 'items.product' },
+			]).lean() as IOrder;
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
 			return order;
 		} catch (error) {
@@ -35,7 +47,31 @@ export class OrderService {
 		}
 	}
 
-	static async getOrderByIdPopulated(id: string) {
+	static async getFullyOrderBy(query: FilterQuery<IOrder>) {
+		try {
+			const order = await OrderModel.findOne(query).populate([
+				{ path: 'items.product', select: '+prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.earnings' },
+				{ path: 'user', select: 'name email profilePhoto role' }
+			]) as IOrder;
+
+			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
+			return order;
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError(
+				'Failed to retrieve order',
+				'Error al intentar recuperar la orden',
+				500
+			);
+		}
+	}
+
+	/* 
+	* * Get order by id fully populated (user and items.product)
+	* @param id string
+	* @returns order
+	*/
+	static async getOrderByIdFullyPopulated(id: string) {
 		try {
 			const order = await OrderModel.findById(id)
 				.populate('user', 'name email')
@@ -52,9 +88,18 @@ export class OrderService {
 		}
 	}
 
+	/* 
+	* * Update order status
+	* @param id string
+	* @param orderStatus PaymentStatus
+	* @returns order fully populated
+	*/
 	static async updateOrderStatus(id: string, orderStatus: PaymentStatus) {
 		try {
-			const order = await OrderModel.findByIdAndUpdate(id, { orderStatus }, { new: true });
+			const order = await OrderModel.findByIdAndUpdate(id, { orderStatus }, { new: true, runValidators: true }).populate([
+				{ path: 'user', select: 'name email' },
+				{ path: 'items.product', select: 'name price image' }
+			]);
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
 			return order;
 		} catch (error) {
@@ -67,6 +112,12 @@ export class OrderService {
 		}
 	}
 
+	/* 
+	* * Create order
+	* @param data CreateOrderDTO
+	* @param userId string
+	* @returns order fully populated
+	*/
 	static async createOrder(data: CreateOrderDTO, userId: string) {
 		try {
 			/* Validate user and order data */
@@ -86,16 +137,15 @@ export class OrderService {
 			const items = (await ProductService.getProductsByIds(data.items.map((item) => item._id)))
 				.map((product) => {
 					const itemInTheCart = data.items.find((e) => e._id === product._id.toString());
+					if (!itemInTheCart) throw new AppError('Item not found', 'Item no encontrado', 404);
 					return {
 						data: product,
-						quantity: itemInTheCart?.quantity || 0
+						quantity: itemInTheCart.quantity
 					};
 				});
 
 			/* verifying product stock*/
-			await ProductService.verifyProductStockFromIds(
-				data.items.map((item) => ({ _id: item._id, quantity: item.quantity }))
-			);
+			await ProductService.verifyProductStock(items);
 
 			/* get shipping method */
 			const shippingMethod = await ShippingMethodService.getShippingMethodBy({
@@ -109,17 +159,26 @@ export class OrderService {
 			const paymentService = new PaymentService(
 				items,
 				paymentMethod.type,
-				shippingMethod!.cost
+				shippingMethod.cost
 			);
 
+			// Validar que el pago en efectivo solo sea permitido con pickup
+			if (
+				paymentMethod.type === PaymentType.CASH &&
+				shippingMethod.type !== ShippingType.PICKUP
+			) {
+				throw new AppError(
+					'Invalid payment method',
+					'El pago en efectivo solo está disponible para retiro en punto de venta',
+					400
+				);
+			}
+
 			const finalCost = paymentService.getFinalCost();
-			const processedItems = paymentService.getOrderProcessedItems();
-
-
 
 
 			const status =
-				shippingMethod!.type === ShippingType.HOME_DELIVERY
+				shippingMethod.type === ShippingType.HOME_DELIVERY
 					? OrderStatus.PROCESSING_SHIPPING
 					: OrderStatus.PENDING;
 
@@ -128,12 +187,17 @@ export class OrderService {
 				data.items.map((item) => ({ _id: item._id, quantity: item.quantity })),
 			);
 
+
 			/* creating order in DB */
 			const newOrder = await (await OrderModel.create(
 				{
 					user: userId,
 					status,
-					items: processedItems,
+					items: items.map((item) => ({
+						product: item.data._id,
+						quantity: item.quantity,
+						price: paymentMethod.type === PaymentType.CARD ? item.data.prices.tarjeta_credito_debito : item.data.prices.efectivo_transferencia
+					})),
 					shippingInfo: {
 						type: shippingMethod.type,
 						pickupPoint: data.shippingMethod.pickupPoint,
@@ -143,8 +207,17 @@ export class OrderService {
 						method: paymentMethod.type,
 						amount: finalCost
 					},
-					total: finalCost
+					total: finalCost,
+					orderNumber: this.generateOrderNumber(),
+					history: [{
+						status: status,
+						timestamp: new Date()
+					}],
+					earnings: PaymentService.theOrderIsPreferredPayment(paymentMethod.type)
+						? paymentService.getEarnings()
+						: 0
 				}
+
 			)).populate([
 				{ path: 'user', select: 'name email' },
 				{ path: 'items.product', select: 'name price images' }
@@ -173,7 +246,17 @@ export class OrderService {
 			throw new AppError('Failed to create order', 'Error al intentar crear la orden', 500);
 		}
 	}
-
+	/* 
+	* * Get orders by user id
+	* @param userId string
+	* @param query {
+	* 	status: string;
+	* 	dateRange: string;
+	* 	page: number;
+	* 	limit: number;
+	* }
+	* @returns orders fully populated
+	*/
 	static async getOrdersByUserId(userId: string, query: {
 		status: string;
 		dateRange: string;
@@ -247,7 +330,7 @@ export class OrderService {
 			const userOrders = await OrderModel.find(filters)
 				.populate({
 					path: 'items.product',
-					select: 'name price images description category'
+					select: 'brand model price images'
 				})
 				.sort({ createdAt: -1 }) // Ordenar por fecha de creación descendente
 				.skip(skip)
@@ -273,6 +356,11 @@ export class OrderService {
 		}
 	}
 
+	/* 
+	* * Update payment status
+	* @param data updatePaymentStatusDTO
+	* @returns order fully populated
+	*/
 	static async updatePaymentStatus(data: updatePaymentStatusDTO) {
 		if (!data.orderID)
 			throw new AppError(
@@ -281,7 +369,7 @@ export class OrderService {
 				400
 			);
 		try {
-			let order = await this.getOrderByIdPopulated(data.orderID);
+			let order = await this.getOrderByIdFullyPopulated(data.orderID);
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
 			let newStatus: string;
 			const isCard = order.paymentInfo.method === PaymentType.CARD;
@@ -320,6 +408,11 @@ export class OrderService {
 		}
 	}
 
+	/* 
+	* * Update order shipping status
+	* @param data updateShippingStatusDTO
+	* @returns order fully populated
+	*/
 	static async updateOrderShippingStatus(data: updateShippingStatusDTO) {
 		if (!data.orderID)
 			throw new AppError(
@@ -329,17 +422,47 @@ export class OrderService {
 			);
 		try {
 			const order = await OrderModel.findById(data.orderID)
-				.populate('user', 'name email profilePhoto role')
-				.populate({
-					path: 'items.product',
-					select: 'name price images description category'
-				});
+				.populate([
+					{ path: 'user', select: 'name email profilePhoto role' },
+					{ path: 'items.product', select: 'name price images description category' }
+				]).lean() as IOrder;
 
 			if (!order) {
 				throw new AppError('Order not found', 'Orden no encontrada', 404);
 			}
+			const oldStatus = order.status;
 			order.status = data.status;
+
+			if (oldStatus !== order.status) {
+				order.history.push({
+					status: order.status,
+					timestamp: new Date()
+				});
+
+				if (order.status === OrderStatus.SHIPPED) {
+					order.shippingInfo.shippedAt = new Date();
+				}
+
+				if (order.status === OrderStatus.DELIVERED) {
+					order.shippingInfo.deliveredAt = new Date();
+
+					if (order.paymentInfo.method === PaymentType.CASH) {
+						order.paymentInfo.status = PaymentStatus.APPROVED;
+						order.paymentInfo.paymentDate = new Date();
+					}
+
+					if (order.paymentInfo.method !== PaymentType.CASH && order.paymentInfo.status === PaymentStatus.PENDING) {
+						throw new AppError(
+							"Invalid action",
+							"No podés entregar un pedido que no tiene el pago aprobado (Transferencia/Tarjeta)",
+							400
+						);
+					}
+				}
+			}
+
 			const orderUpdated = await order.save();
+
 			return orderUpdated;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
@@ -350,7 +473,78 @@ export class OrderService {
 			);
 		}
 	}
-	/* only admin */
+
+	/* 
+	* * Confirm card payment and calculate earnings
+	* @param orderID string
+	* @param status UalaOrderStatus
+	* @returns order fully populated
+	*/
+	static async confirmCardPayment(orderID: string, status: UalaOrderStatus) {
+		try {
+			const order = await OrderModel.findById(orderID)
+				.populate([
+					{ path: 'user', select: 'name email' },
+					{ path: 'items.product', select: '+prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas' }
+				]);
+
+			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
+
+			// Update payment status
+			order.paymentInfo.status = status === UalaOrderStatus.Aprobado
+				? PaymentStatus.APPROVED
+				: PaymentStatus.REJECTED;
+
+			// If approved, calculate earnings based on installments
+			if (order.paymentInfo.status === PaymentStatus.APPROVED) {
+				if (!order.paymentInfo.transactionId) {
+					console.error('Transaction ID missing for approved card order:', orderID);
+					// Fallback to default earnings or log error? Continuing with 0 or conservative.
+				} else {
+					const { orderStatus, error } = await PaymentService.getOrderStatus(order.paymentInfo.transactionId);
+					if (!error && orderStatus) {
+						// Extract installments from Uala response
+						// Assuming structure: customer.card.installments.number (based on user request)
+						const installments = (orderStatus as any).customer?.card?.installments?.number || 1;
+
+						// Map order items to PaymentService structure
+						const itemsForPaymentService = order.items.map(item => ({
+							data: item.product as any, // Cast to any or IProduct if imported
+							quantity: item.quantity
+						}));
+
+						const paymentService = new PaymentService(
+							itemsForPaymentService,
+							PaymentType.CARD,
+							order.shippingInfo.cost
+						);
+
+						order.earnings = paymentService.getEarnings(installments);
+					}
+				}
+				order.paymentInfo.paymentDate = new Date();
+			}
+
+			await order.save();
+			return order;
+
+		} catch (error) {
+			console.error('Error confirming card payment:', error);
+			if (error instanceof AppError) throw error;
+			throw new AppError(
+				'Failed to confirm card payment',
+				'Error al confirmar el pago con tarjeta',
+				500
+			);
+		}
+	}
+
+	/* 
+	* * Get all orders
+	* @param role admin
+	* @param query 
+	* @returns all orders
+	*/
 	static async getAllOrders(
 		role: Role,
 		query: {
@@ -487,6 +681,13 @@ export class OrderService {
 		}
 	}
 
+	/* 
+	* * Cancel order
+	* @param id order ID
+	* @param userID user ID
+	* @param role admin
+	* @returns order fully populated
+	*/
 	static async cancelOrder(id: string, userID: string, role: Role) {
 		if (!id)
 			throw new AppError(
@@ -525,12 +726,17 @@ export class OrderService {
 
 			// Actualizar estado a cancelado
 			order.status = OrderStatus.CANCELLED;
+			order.history.push({
+				status: OrderStatus.CANCELLED,
+				timestamp: new Date()
+			});
+
 			order.paymentInfo.status = PaymentStatus.CANCELLED;
 			await order.save();
 
 			// restore product stock
 			await ProductService.restoreProductStock(order.items);
-			const updatedOrder = await this.getOrderByIdPopulated(id);
+			const updatedOrder = await this.getOrderByIdFullyPopulated(id);
 			return updatedOrder;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
@@ -538,6 +744,11 @@ export class OrderService {
 		}
 	}
 
+	/* 
+	* * Get order stats
+	* @param role admin
+	* @returns order stats
+	*/
 	static async getOrderStats(role: Role) {
 		/* Verify role exist and its Admin */
 		if (!role || role !== Role.admin)

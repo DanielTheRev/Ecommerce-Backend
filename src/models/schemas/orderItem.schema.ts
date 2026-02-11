@@ -1,5 +1,5 @@
 import { IOrderItem } from '@/interfaces/order.interface';
-import mongoose, { Schema } from 'mongoose';
+import { Schema } from 'mongoose';
 
 export const orderItemSchema = new Schema<IOrderItem>({
   product: {
@@ -16,14 +16,5 @@ export const orderItemSchema = new Schema<IOrderItem>({
     type: Number,
     required: true,
     min: 0
-  },
-  name: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  image: {
-    type: String,
-    trim: true
   }
 });

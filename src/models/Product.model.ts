@@ -1,6 +1,7 @@
 import mongoose, { Schema } from 'mongoose';
 import { IProductCategories, IProductDocument } from '../interfaces/product.interface';
 import { EarningsSchema } from './schemas/earning.schema';
+import { CostPriceSchema } from './schemas/costPrice.schema';
 
 const ProductSchema = new Schema(
 	{
@@ -39,6 +40,11 @@ const ProductSchema = new Schema(
 		slug: { type: String, unique: true },
 		prices: {
 			costPrice: {
+				type: CostPriceSchema,
+				required: true,
+				select: false
+			},
+			dolarPrice: {
 				type: Number,
 				required: true,
 				select: false

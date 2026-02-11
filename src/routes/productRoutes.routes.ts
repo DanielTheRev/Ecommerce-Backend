@@ -8,6 +8,7 @@ import { CreateProductSchema, UpdateProductSchema, PriceCalculatorSchema } from 
 
 const router: Router = Router();
 
+
 const multerConfig = multer().array('images', 5);
 // Rutas protegidas (solo administradores)
 router.get('/list', protect, adminOnly, ProductController.getProducts); // products con precios completos

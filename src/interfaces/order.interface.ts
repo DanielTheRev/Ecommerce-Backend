@@ -56,8 +56,6 @@ export interface IOrderItem {
 	product: mongoose.Types.ObjectId;
 	quantity: number;
 	price: number;
-	name: string;
-	image?: string;
 }
 
 // Interface for shipping address
@@ -105,6 +103,7 @@ export interface IOrder extends Document {
 	status: OrderStatus;
 	shippingCost: number;
 	total: number;
+	earnings: number;
 	orderNumber: string;
 	notes?: string;
 	createdAt: Date;

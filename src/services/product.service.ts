@@ -94,9 +94,10 @@ export class ProductService {
 				{
 					new: true,
 					runValidators: true,
-					select: fieldsToSelect // <--- Solo devuelve lo que cambió + _id
+					select: fieldsToSelect
 				}
 			).lean();
+
 
 			if (!updatedProduct) {
 				throw new AppError('Error updating product', 'No se pudo actualizar el producto', 404);
@@ -200,7 +201,7 @@ export class ProductService {
 		try {
 			const products = (await Product.find({
 				_id: { $in: ids }
-			}).lean()) as unknown as IProduct[];
+			}).select('+prices.costPrice').lean()) as unknown as IProduct[];
 			if (products.length === 0)
 				throw new AppError(
 					'No products found for the given IDs',
@@ -220,22 +221,15 @@ export class ProductService {
 		}
 	}
 
-	static async verifyProductStockFromIds(
-		products: { _id: string; quantity: number }[]
+	static async verifyProductStock(
+		products: { data: IProduct; quantity: number }[]
 	): Promise<boolean> {
 		try {
 			for (const item of products) {
-				const prod = await Product.findById(item._id).lean();
-				if (!prod)
+				if (item.data.stock < item.quantity)
 					throw new AppError(
-						`Product with ID ${item._id} not found`,
-						`Producto ${item._id} no encontrado`,
-						404
-					);
-				if (prod.stock < item.quantity)
-					throw new AppError(
-						`Insufficient stock for product ID ${item._id}`,
-						`Stock insuficiente para el producto ${item._id}`,
+						`Insufficient stock for product ID ${item.data._id}`,
+						`Stock insuficiente para el producto ${item.data._id}`,
 						400
 					);
 			}
