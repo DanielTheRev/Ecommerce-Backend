@@ -251,19 +251,29 @@ export class ProductService {
 	}
 
 	static async reduceProductStock(
-		products: { _id: string; quantity: number }[]
+		products: { _id: string; quantity: number }[],
 	): Promise<boolean> {
 		try {
-			for (const item of products) {
-				const prod = await Product.findById(item._id);
-				if (!prod)
-					throw new AppError(
-						`Product with ID ${item._id} not found`,
-						`Producto ${item._id} no encontrado`,
-						404
-					);
-				await Product.findByIdAndUpdate(item._id, { $inc: { stock: -item.quantity } });
+			const operations = products.map((item) => ({
+				updateOne: {
+					filter: {
+						_id: item._id,
+						stock: { $gte: item.quantity }
+					},
+					update: { $inc: { stock: -item.quantity } },
+				},
+			}));
+
+			const result = await Product.bulkWrite(operations, { ordered: true });
+
+			if (result.modifiedCount !== products.length) {
+				throw new AppError(
+					'One or more products failed stock reduction (insufficient stock or invalid ID)',
+					'Uno o más productos no pudieron reducir stock (stock insuficiente o ID inválido)',
+					400
+				);
 			}
+
 			return true;
 		} catch (error) {
 			if (error instanceof AppError) throw error;

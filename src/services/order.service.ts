@@ -16,6 +16,7 @@ import { PaymentType } from '@/interfaces/paymentMethod.interface';
 import { ShippingType } from '@/interfaces/shippingMethods.interface';
 import { UalaOrderStatus } from '@/interfaces/ualaWebhook.interface';
 import { Role } from '@/interfaces/user.interface';
+import mongoose from 'mongoose';
 
 export class OrderService {
 	static async getOrderById(id: string) {
@@ -67,36 +68,35 @@ export class OrderService {
 	}
 
 	static async createOrder(data: CreateOrderDTO, userId: string) {
-		/* Validate user and order data */
-		if (!userId)
-			throw new AppError(
-				'User ID is required to create an order',
-				'El ID del usuario es requerido para crear una orden',
-				400
-			);
-		if (!data || data.items.length === 0)
-			throw new AppError(
-				'Order items are required',
-				'Los items de la orden son requeridos',
-				400
-			);
-		const orderIDS = data.items.map((item) => item.productId);
 		try {
-			/* fetching products in the cart from DB */
-			/* if any product is not found, throw an error */
-			const items = await ProductService.getProductsByIds(orderIDS);
+			/* Validate user and order data */
+			if (!userId)
+				throw new AppError(
+					'User ID is required to create an order',
+					'El ID del usuario es requerido para crear una orden',
+					401
+				);
+			if (!data || data.items.length === 0)
+				throw new AppError(
+					'Order items are required',
+					'Los items de la orden son requeridos',
+					401
+				);
+
+			const items = (await ProductService.getProductsByIds(data.items.map((item) => item._id)))
+				.map((product) => {
+					const itemInTheCart = data.items.find((e) => e._id === product._id.toString());
+					return {
+						data: product,
+						quantity: itemInTheCart?.quantity || 0
+					};
+				});
+
 			/* verifying product stock*/
 			await ProductService.verifyProductStockFromIds(
-				data.items.map((item) => ({ _id: item.productId, quantity: item.quantity }))
+				data.items.map((item) => ({ _id: item._id, quantity: item.quantity }))
 			);
-			/* formatting items for payment service */
-			const itemsFormatted = items.map((product) => {
-				const itemInTheCart = data.items.find((e) => e.productId === product._id.toString());
-				return {
-					data: product,
-					quantity: itemInTheCart?.quantity || 0
-				};
-			});
+
 			/* get shipping method */
 			const shippingMethod = await ShippingMethodService.getShippingMethodBy({
 				_id: data.shippingMethod._id
@@ -107,38 +107,53 @@ export class OrderService {
 			);
 			/* creating payment service instance */
 			const paymentService = new PaymentService(
-				itemsFormatted,
+				items,
 				paymentMethod.type,
 				shippingMethod!.cost
 			);
+
+			const finalCost = paymentService.getFinalCost();
+			const processedItems = paymentService.getOrderProcessedItems();
+
+
+
 
 			const status =
 				shippingMethod!.type === ShippingType.HOME_DELIVERY
 					? OrderStatus.PROCESSING_SHIPPING
 					: OrderStatus.PENDING;
 
+			/* reducing product stock */
+			await ProductService.reduceProductStock(
+				data.items.map((item) => ({ _id: item._id, quantity: item.quantity })),
+			);
+
 			/* creating order in DB */
-			const order = new OrderModel({
-				user: userId,
-				status,
-				items: paymentService.getOrderProcessedItems(),
-				shippingInfo: {
-					type: shippingMethod!.type,
-					pickupPoint: data.shippingMethod.pickupPoint,
-					cost: shippingMethod!.cost
-				},
-				paymentInfo: {
-					method: paymentMethod.type,
-					amount: paymentService.getFinalCost()
-				},
-				total: paymentService.getFinalCost()
-				// notes
-			});
+			const newOrder = await (await OrderModel.create(
+				{
+					user: userId,
+					status,
+					items: processedItems,
+					shippingInfo: {
+						type: shippingMethod.type,
+						pickupPoint: data.shippingMethod.pickupPoint,
+						cost: shippingMethod.cost
+					},
+					paymentInfo: {
+						method: paymentMethod.type,
+						amount: finalCost
+					},
+					total: finalCost
+				}
+			)).populate([
+				{ path: 'user', select: 'name email' },
+				{ path: 'items.product', select: 'name price images' }
+			])
 
 			let extras;
 			if (paymentMethod.type === PaymentType.CARD) {
-				const { ualaOrder, error } = await paymentService.withUalaBiss(order.id);
-				order.paymentInfo.transactionId = ualaOrder?.uuid || '';
+				const { ualaOrder, error } = await paymentService.withUalaBiss(newOrder.id);
+				newOrder.paymentInfo.transactionId = ualaOrder?.uuid || '';
 				if (error) {
 					throw new AppError(
 						'Failed to create order',
@@ -148,18 +163,12 @@ export class OrderService {
 				}
 				extras = ualaOrder;
 			}
-			await order.save();
-			/* reducing product stock */
-			await ProductService.reduceProductStock(
-				data.items.map((item) => ({ _id: item.productId, quantity: item.quantity }))
-			);
-			// return order with populated fields
-			const populatedOrder = await OrderModel.findById(order._id)
-				.populate('user', 'name email')
-				.populate('items.product', 'name price images');
 
-			return { order: populatedOrder, extras };
+
+
+			return { order: newOrder, extras };
 		} catch (error) {
+			console.log(error);
 			if (error instanceof AppError) throw error;
 			throw new AppError('Failed to create order', 'Error al intentar crear la orden', 500);
 		}

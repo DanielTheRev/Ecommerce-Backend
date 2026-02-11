@@ -5,11 +5,7 @@ import { PaymentType } from './paymentMethod.interface';
 import { IPickupPoint, ShippingType } from './shippingMethods.interface';
 
 export interface CreateOrderDTO {
-	items: ICartItemDTO[];
-	subtotal: number;
-	total: number;
-	desc: string | number;
-	shippingCost: string | number;
+	items: { _id: string, quantity: number }[];
 	shippingMethod: {
 		_id: string;
 		type: ShippingType;

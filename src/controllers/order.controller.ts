@@ -54,6 +54,7 @@ export const createOrder = async (req: AuthRequest, res: Response, next: NextFun
 			extras
 		});
 	} catch (error) {
+		console.log(error);
 		return next(error);
 	}
 };

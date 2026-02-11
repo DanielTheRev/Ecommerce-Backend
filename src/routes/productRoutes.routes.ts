@@ -14,7 +14,6 @@ router.get('/list', protect, adminOnly, ProductController.getProducts); // produ
 router.post('/calculate-prices', protect, adminOnly, validateSchema(PriceCalculatorSchema), ProductController.calculatePrice); // Calculadora de precios
 router.get('/complete/:id', protect, adminOnly, ProductController.getProductWCompletePrices); // product con precios completos
 router.post('/', protect, adminOnly, multerConfig, validateSchema(CreateProductSchema), ProductController.createProduct); // Crear producto
-router.put('/:id', protect, adminOnly, validateSchema(UpdateProductSchema), ProductController.updateProduct); // Actualizar producto completo
 router.patch('/:id', protect, adminOnly, multerConfig, validateSchema(UpdateProductSchema), ProductController.patchProduct); // Actualización parcial
 router.delete('/:id', protect, adminOnly, ProductController.deleteProduct); // Eliminar producto
 

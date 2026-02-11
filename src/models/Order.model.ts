@@ -77,8 +77,6 @@ const orderSchema = new Schema<IOrder, IOrderModel>(
 
 // Índices para optimizar consultas
 orderSchema.index({ user: 1, createdAt: -1 });
-// `orderNumber` tiene `unique: true` en su definición de campo, por lo que
-// Mongoose/Natively Mongo crea el índice. Evitamos declaración duplicada.
 orderSchema.index({ status: 1 });
 orderSchema.index({ 'paymentInfo.status': 1 });
 

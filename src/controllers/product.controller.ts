@@ -68,11 +68,7 @@ export class ProductController {
 			data.storage = JSON.parse(data.storage as string) as string[];
 			data.features = JSON.parse(data.features as string) as string[];
 			const newProduct = await ProductService.createProduct(data, files);
-			res.status(201).json({
-				success: true,
-				message: 'Producto creado exitosamente',
-				data: newProduct
-			});
+			res.status(201).json(newProduct);
 		} catch (error) {
 			next(error);
 		}
