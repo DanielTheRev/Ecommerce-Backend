@@ -140,12 +140,18 @@ export class OrderService {
 					if (!itemInTheCart) throw new AppError('Item not found', 'Item no encontrado', 404);
 					return {
 						data: product,
+						variantSku: itemInTheCart.variantSku,
 						quantity: itemInTheCart.quantity
 					};
 				});
 
-			/* verifying product stock*/
-			await ProductService.verifyProductStock(items);
+			/* verifying variant stock */
+			const variantItems = data.items.map(item => ({
+				productId: item._id,
+				variantSku: item.variantSku,
+				quantity: item.quantity
+			}));
+			await ProductService.verifyVariantStock(variantItems);
 
 			/* get shipping method */
 			const shippingMethod = await ShippingMethodService.getShippingMethodBy({
@@ -176,28 +182,39 @@ export class OrderService {
 
 			const finalCost = paymentService.getFinalCost();
 
-
 			const status =
 				shippingMethod.type === ShippingType.HOME_DELIVERY
 					? OrderStatus.PROCESSING_SHIPPING
 					: OrderStatus.PENDING;
 
-			/* reducing product stock */
-			await ProductService.reduceProductStock(
-				data.items.map((item) => ({ _id: item._id, quantity: item.quantity })),
-			);
-
+			/* reducing variant stock */
+			await ProductService.reduceVariantStock(variantItems);
 
 			/* creating order in DB */
 			const newOrder = await (await OrderModel.create(
 				{
 					user: userId,
 					status,
-					items: items.map((item) => ({
-						product: item.data._id,
-						quantity: item.quantity,
-						price: paymentMethod.type === PaymentType.CARD ? item.data.prices.tarjeta_credito_debito : item.data.prices.efectivo_transferencia
-					})),
+					items: items.map((item) => {
+						// Buscar la variante para generar el label
+						const variant = item.data.variants?.find((v: any) => v.sku === item.variantSku);
+						const variantLabel = variant?.attributes?.map((a: any) => a.value).join(' - ') || '';
+
+						return {
+							product: item.data._id,
+							variantSku: item.variantSku,
+							variantLabel,
+							quantity: item.quantity,
+							price: paymentMethod.type === PaymentType.CARD
+								? item.data.prices.tarjeta_credito_debito
+								: item.data.prices.efectivo_transferencia,
+							productSnapshot: {
+								brand: item.data.brand,
+								model: item.data.model,
+								image: item.data.images?.[0]?.url || ''
+							}
+						};
+					}),
 					shippingInfo: {
 						type: shippingMethod.type,
 						pickupPoint: data.shippingMethod.pickupPoint,
@@ -220,7 +237,7 @@ export class OrderService {
 
 			)).populate([
 				{ path: 'user', select: 'name email' },
-				{ path: 'items.product', select: 'name price images' }
+				{ path: 'items.product', select: 'brand model prices images' }
 			])
 
 			let extras;
@@ -236,8 +253,6 @@ export class OrderService {
 				}
 				extras = ualaOrder;
 			}
-
-
 
 			return { order: newOrder, extras };
 		} catch (error) {
@@ -734,8 +749,14 @@ export class OrderService {
 			order.paymentInfo.status = PaymentStatus.CANCELLED;
 			await order.save();
 
-			// restore product stock
-			await ProductService.restoreProductStock(order.items);
+			// restore variant stock
+			await ProductService.restoreVariantStock(
+				order.items.map((item: any) => ({
+					product: item.product,
+					variantSku: item.variantSku,
+					quantity: item.quantity
+				}))
+			);
 			const updatedOrder = await this.getOrderByIdFullyPopulated(id);
 			return updatedOrder;
 		} catch (error) {

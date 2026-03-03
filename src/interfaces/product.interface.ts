@@ -1,7 +1,35 @@
 import { Document, ObjectId } from 'mongoose';
+import { IVariant } from './variant.interface';
+
+// ============ ENUMS ============
+
+export enum ProductType {
+	TECH = 'TechProduct',
+	CLOTHING = 'ClothingProduct'
+}
+
+export enum IProductCategories {
+	// Tech
+	Electrodomesticos = 'Electrodomésticos',
+	Smartphones = 'Smartphones',
+	Pantallas = 'TV / Monitores',
+	PC = 'PC',
+	Consolas = 'Consolas',
+	// Clothing
+	Remeras = 'Remeras',
+	Pantalones = 'Pantalones',
+	Buzos = 'Buzos / Hoodies',
+	Camperas = 'Camperas',
+	Zapatillas = 'Zapatillas',
+	Accesorios = 'Accesorios',
+	Shorts = 'Shorts'
+}
+
+// ============ BASE PRODUCT ============
 
 export interface IProduct {
 	_id: string;
+	productType: ProductType;
 	slug: string;
 	category: IProductCategories;
 	shortDescription: string;
@@ -12,13 +40,37 @@ export interface IProduct {
 	discount: number;
 	rating: number | null;
 	reviews: number | null;
-	stock: number;
 	images: IProductImage[];
 	features: string[];
-	colors: string[];
-	storage: string[];
 	specifications: IProductSpec[];
+	variants: IVariant[];
+	lowStockThreshold?: number;
 }
+
+// ============ TYPE-SPECIFIC PRODUCTS ============
+
+export interface ITechProduct extends IProduct {
+	productType: ProductType.TECH;
+	storage: string[];
+	ram?: string;
+	processor?: string;
+	screenSize?: string;
+	os?: string;
+	connectivity?: string[];
+}
+
+export interface IClothingProduct extends IProduct {
+	productType: ProductType.CLOTHING;
+	gender: 'Hombre' | 'Mujer' | 'Unisex' | 'Niños';
+	fit: 'Regular' | 'Slim' | 'Oversized' | 'Relaxed';
+	material: string;
+	composition?: { material: string; percentage: number }[];
+	sizeType: 'Ropa' | 'Calzado' | 'Numérico';
+	careInstructions?: string[];
+	season?: string;
+}
+
+// ============ SUB-INTERFACES ============
 
 export interface IProductImage {
 	url: string;
@@ -27,12 +79,9 @@ export interface IProductImage {
 	height?: number;
 }
 
-export enum IProductCategories {
-	Electrodomesticos = 'Electrodomésticos',
-	Smartphones = 'Smartphones',
-	Pantallas = 'TV / Monitores',
-	PC = 'PC',
-	Consolas = 'Consolas'
+export interface IProductSpec {
+	key: string;
+	value: string;
 }
 
 export interface IProductPrices {
@@ -57,22 +106,34 @@ export interface IProductPrices {
 	};
 }
 
+// ============ DTOs ============
+
 export interface IProductCreateDTO {
+	productType: ProductType;
 	brand: string;
+	model: string;
 	shortDescription: string;
 	largeDescription: string;
-	model: string;
 	price: number;
 	category: IProductCategories;
-	colors: string | string[];
-	storage: string | string[];
 	features: string | string[];
 	specifications: string | IProductSpec[];
-}
+	variants: string | IVariant[];
 
-export interface IProductSpec {
-	key: string;
-	value: string;
+	// Tech-specific (opcionales a nivel DTO, Mongoose valida por discriminator)
+	storage?: string | string[];
+	ram?: string;
+	processor?: string;
+	screenSize?: string;
+	os?: string;
+
+	// Clothing-specific (opcionales a nivel DTO, Mongoose valida por discriminator)
+	gender?: string;
+	fit?: string;
+	material?: string;
+	composition?: string | { material: string; percentage: number }[];
+	sizeType?: string;
+	careInstructions?: string | string[];
 }
 
 export interface IProductUpdateDTO extends Partial<IProductCreateDTO> {
@@ -82,6 +143,8 @@ export interface IProductUpdateDTO extends Partial<IProductCreateDTO> {
 	slug?: string;
 	prices?: number | IProductPrices;
 }
+
+// ============ DOCUMENT ============
 
 export interface IProductDocument extends Document, Omit<IProduct, 'model' | '_id'> {
 	_id: ObjectId;

@@ -5,7 +5,7 @@ import { PaymentType } from './paymentMethod.interface';
 import { IPickupPoint, ShippingType } from './shippingMethods.interface';
 
 export interface CreateOrderDTO {
-	items: { _id: string, quantity: number }[];
+	items: { _id: string; variantSku: string; quantity: number }[];
 	shippingMethod: {
 		_id: string;
 		type: ShippingType;
@@ -54,8 +54,16 @@ export enum PaymentStatus {
 // Interface for order items
 export interface IOrderItem {
 	product: mongoose.Types.ObjectId;
+	variantSku: string;
+	variantLabel: string;
 	quantity: number;
 	price: number;
+	// Snapshot del producto al momento de la compra (para integridad de datos)
+	productSnapshot: {
+		brand: string;
+		model: string;
+		image?: string;
+	};
 }
 
 // Interface for shipping address

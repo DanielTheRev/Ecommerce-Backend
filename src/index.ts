@@ -18,6 +18,10 @@ import productRoutes from './routes/productRoutes.routes';
 import shippingRoutes from './routes/shippingRoutes.routes';
 import { socketManager } from './sockets/socketManager';
 
+// Registrar discriminators de producto (side-effect imports)
+import './models/discriminators/TechProduct.discriminator';
+import './models/discriminators/ClothingProduct.discriminator';
+
 // Cargar variables de entorno
 dotenv.config();
 

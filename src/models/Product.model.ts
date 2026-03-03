@@ -2,8 +2,9 @@ import mongoose, { Schema } from 'mongoose';
 import { IProductCategories, IProductDocument } from '../interfaces/product.interface';
 import { EarningsSchema } from './schemas/earning.schema';
 import { CostPriceSchema } from './schemas/costPrice.schema';
+import { VariantSchema } from './schemas/variant.schema';
 
-const ProductSchema = new Schema(
+const BaseProductSchema = new Schema(
 	{
 		brand: {
 			type: String,
@@ -22,20 +23,18 @@ const ProductSchema = new Schema(
 			required: [true, 'La categoría es obligatoria'],
 			enum: {
 				values: Object.values(IProductCategories),
-				message: '{VALUE} no es una categoría válida' // Mensaje de error personalizado
+				message: '{VALUE} no es una categoría válida'
 			}
 		},
 		shortDescription: {
 			type: String,
 			required: true,
 			trim: true,
-			// maxlength: 200
 		},
 		largeDescription: {
 			type: String,
 			required: true,
 			trim: true,
-			// maxlength: 200
 		},
 		slug: { type: String, unique: true },
 		prices: {
@@ -51,17 +50,17 @@ const ProductSchema = new Schema(
 			},
 			profitMargin: {
 				type: Number,
-				default: 1.30, // Ejemplo: 30% de ganancia por defecto
+				default: 1.30,
 				select: false
 			},
 			baseCommission: {
 				type: Number,
-				default: 4.9, // Ejemplo: 4.9% de comisión base por defecto
+				default: 4.9,
 				select: false
 			},
 			cft6Cuotas: {
 				type: Number,
-				default: 18.9, // Ejemplo: 18.9% de CFT 6 cuotas por defecto
+				default: 18.9,
 				select: false
 			},
 			efectivo_transferencia: {
@@ -75,16 +74,8 @@ const ProductSchema = new Schema(
 				default: 0
 			},
 			cuotas: {
-				cuotas_3_si: {
-					type: Number,
-					required: true,
-					default: 0
-				},
-				cuotas_6_si: {
-					type: Number,
-					required: true,
-					default: 0
-				}
+				cuotas_3_si: { type: Number, required: true, default: 0 },
+				cuotas_6_si: { type: Number, required: true, default: 0 }
 			},
 			earnings: {
 				type: EarningsSchema,
@@ -116,28 +107,48 @@ const ProductSchema = new Schema(
 			}
 		],
 		features: [{ type: String }],
-		colors: [{ type: String }],
-		storage: [{ type: String }],
 		specifications: [
 			{
 				key: { type: String, required: true },
 				value: { type: String, required: true }
 			}
 		],
-		stock: {
+		// ============ NUEVO: Variantes con SKU + stock ============
+		variants: {
+			type: [VariantSchema],
+			default: []
+		},
+		lowStockThreshold: {
 			type: Number,
-			required: true,
-			default: 0,
+			default: 3,
 			min: 0
 		}
 	},
 	{
 		timestamps: true,
-		versionKey: false
+		versionKey: false,
+		discriminatorKey: 'productType'
 	}
 );
 
-ProductSchema.index({ slug: -1 });
-ProductSchema.index({ brand: 1, model: 1 });
+// ========= VIRTUALS =========
+BaseProductSchema.virtual('totalStock').get(function () {
+	return this.variants
+		.filter((v: any) => v.isActive)
+		.reduce((sum: number, v: any) => sum + v.stock, 0);
+});
 
-export const Product = mongoose.model<IProductDocument>('Product', ProductSchema);
+BaseProductSchema.virtual('hasStock').get(function () {
+	return this.variants.some((v: any) => v.isActive && v.stock > 0);
+});
+
+BaseProductSchema.set('toJSON', { virtuals: true });
+BaseProductSchema.set('toObject', { virtuals: true });
+
+// ========= INDEXES =========
+BaseProductSchema.index({ slug: -1 });
+BaseProductSchema.index({ brand: 1, model: 1 });
+BaseProductSchema.index({ productType: 1 });
+BaseProductSchema.index({ 'variants.sku': 1 }, { unique: true, sparse: true });
+
+export const Product = mongoose.model<IProductDocument>('Product', BaseProductSchema);
