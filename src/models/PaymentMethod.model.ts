@@ -31,4 +31,7 @@ const paymentMethodSchema = new Schema<IPaymentMethod>(
 // Índice para mejorar las consultas
 paymentMethodSchema.index({ type: 1, isActive: 1 });
 
+// Schema exportado para multi-tenancy (model registry)
+export { paymentMethodSchema };
+
 export const PaymentMethod = mongoose.model<IPaymentMethod>('PaymentMethod', paymentMethodSchema);

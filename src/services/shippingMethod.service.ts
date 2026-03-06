@@ -1,12 +1,12 @@
 import { AppError } from '@/errors/app.error';
 import { IShippingOption, IShippingOptionQuery, IShippingOptionUpdate } from '@/interfaces/shippingMethods.interface';
-import { ShippingOption } from '@/models/ShippingOption.model';
+import { TenantModels } from '@/config/modelRegistry';
 
 export class ShippingMethodService {
 
-	static async getShippingMethods(): Promise<IShippingOption[]> {
+	static async getShippingMethods(models: TenantModels): Promise<IShippingOption[]> {
 		try {
-			const shippingMethods = await ShippingOption.find().lean() as IShippingOption[];
+			const shippingMethods = await models.ShippingOption.find().lean() as IShippingOption[];
 			return shippingMethods;
 		} catch (error) {
 			throw new AppError(
@@ -17,10 +17,10 @@ export class ShippingMethodService {
 		}
 	}
 
-	static async getShippingMethodBy(query: IShippingOptionQuery): Promise<IShippingOption> {
+	static async getShippingMethodBy(models: TenantModels, query: IShippingOptionQuery): Promise<IShippingOption> {
 
 		try {
-			const shippingOptions = await ShippingOption.findOne(query).lean() as IShippingOption;
+			const shippingOptions = await models.ShippingOption.findOne(query).lean() as IShippingOption;
 			return shippingOptions;
 		} catch (error) {
 			throw new AppError(
@@ -31,10 +31,10 @@ export class ShippingMethodService {
 		}
 	}
 
-	static async getShippingOptionsBy(query: IShippingOptionQuery): Promise<IShippingOption[]> {
+	static async getShippingOptionsBy(models: TenantModels, query: IShippingOptionQuery): Promise<IShippingOption[]> {
 
 		try {
-			const shippingOptions = await ShippingOption.find(query).lean() as IShippingOption[];
+			const shippingOptions = await models.ShippingOption.find(query).lean() as IShippingOption[];
 			return shippingOptions;
 		} catch (error) {
 			throw new AppError(
@@ -45,9 +45,9 @@ export class ShippingMethodService {
 		}
 	}
 
-	static async createShippingOption(data: IShippingOption): Promise<IShippingOption> {
+	static async createShippingOption(models: TenantModels, data: IShippingOption): Promise<IShippingOption> {
 		try {
-			const shippingOption = await ShippingOption.create(data);
+			const shippingOption = await models.ShippingOption.create(data);
 			return shippingOption;
 		} catch (error) {
 			throw new AppError(
@@ -59,7 +59,7 @@ export class ShippingMethodService {
 
 	}
 
-	static async updateShippingOption(id: string, data: IShippingOptionUpdate): Promise<IShippingOption> {
+	static async updateShippingOption(models: TenantModels, id: string, data: IShippingOptionUpdate): Promise<IShippingOption> {
 		try {
 			if (!id || !data)
 				throw new AppError(
@@ -69,7 +69,7 @@ export class ShippingMethodService {
 				);
 
 			const fieldsToSelect = Object.keys(data).join(' ');
-			const shippingOption = await ShippingOption.findByIdAndUpdate(id, data, {
+			const shippingOption = await models.ShippingOption.findByIdAndUpdate(id, data, {
 				new: true,
 				runValidators: true,
 				select: fieldsToSelect
@@ -85,7 +85,7 @@ export class ShippingMethodService {
 		}
 	}
 
-	static async deleteShippingOption(id: string): Promise<{ success: boolean }> {
+	static async deleteShippingOption(models: TenantModels, id: string): Promise<{ success: boolean }> {
 		try {
 			if (!id)
 				throw new AppError(
@@ -93,7 +93,7 @@ export class ShippingMethodService {
 					'Error al eliminar la opción de envío',
 					500
 				);
-			await ShippingOption.findByIdAndDelete(id);
+			await models.ShippingOption.findByIdAndDelete(id);
 			return { success: true };
 		} catch (error) {
 			throw new AppError(

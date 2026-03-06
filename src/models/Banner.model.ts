@@ -27,4 +27,7 @@ const BannerSchema = new Schema(
 // Index for faster queries when sorting by order
 BannerSchema.index({ order: 1 });
 
+// Schema exportado para multi-tenancy (model registry)
+export { BannerSchema };
+
 export const Banner = mongoose.model<IBanner>('Banner', BannerSchema);

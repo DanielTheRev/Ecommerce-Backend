@@ -30,4 +30,7 @@ const HeroSlideSchema = new Schema<IHeroSlide>(
   }
 );
 
+// Schema exportado para multi-tenancy (model registry)
+export { HeroSlideSchema };
+
 export const HeroSlide = model<IHeroSlide>('HeroSlide', HeroSlideSchema);

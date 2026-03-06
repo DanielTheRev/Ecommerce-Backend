@@ -5,22 +5,19 @@ import express, { Application, Request, Response } from 'express';
 import helmet from 'helmet';
 import { createServer } from 'http';
 import morgan from 'morgan';
-import { connectDB } from './config/database';
-import { initUalaCheckOut } from './config/ualabis';
+import { connectionManager } from './config/multitenancy';
 import { errorMiddleware } from './middleware/error.middleware';
+import { resolveTenant } from './middleware/tenant';
+import { ITenant } from './interfaces/tenant.interface';
 import authRoutes from './routes/auth.routes';
 import ecommerceConfigRoutes from './routes/EcommerceConfig.routes';
-import heroRoutes from './routes/hero.routes'; // New import
+import heroRoutes from './routes/hero.routes';
 import homeRoutes from './routes/home.routes';
 import orderRoutes from './routes/orderRoutes.routes';
 import paymentMethodRoutes from './routes/paymentMethodRoutes.routes';
 import productRoutes from './routes/productRoutes.routes';
 import shippingRoutes from './routes/shippingRoutes.routes';
 import { socketManager } from './sockets/socketManager';
-
-// Registrar discriminators de producto (side-effect imports)
-import './models/discriminators/TechProduct.discriminator';
-import './models/discriminators/ClothingProduct.discriminator';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -30,34 +27,56 @@ const app: Application = express();
 const PORT = process.env.PORT || 3000;
 
 // Middlewares de seguridad
-const allowedOrigins =
-	process.env.NODE_ENV === 'production'
-		? ['https://www.electromix.com.ar', 'https://electromix.com.ar']
-		: [
-			'http://localhost:3000',
-			'http://localhost:3001',
-			'http://localhost:5173',
-			'http://localhost:4200',
-			'http://localhost:4300',
-			'http://localhost:4000',
-			'https://www.electromix.com.ar',
-			'https://electromix.com.ar',
-			'https://0rxf1t1jlv0j4ylas2rhatrnc8efqzeufyfvw0lggpthyb0r2m-h839267052.scf.usercontent.goog'
-		];
+// CORS dinámico: los origins permitidos vienen de la config de cada tenant
+const devOrigins = [
+	'http://localhost:3000',
+	'http://localhost:3001',
+	'http://localhost:5173',
+	'http://localhost:4200',
+	'http://localhost:4300',
+	'http://localhost:4000'
+];
+
+// Cache de origins por tenant para no consultar la DB en cada request
+const tenantOriginsCache = new Map<string, string[]>();
+
+async function loadAllTenantOrigins(): Promise<void> {
+	try {
+		const masterDb = connectionManager.getMasterDb();
+		const TenantModel = masterDb.model<ITenant>('Tenant');
+		const tenants = await TenantModel.find({ isActive: true }).lean();
+		for (const tenant of tenants) {
+			if (tenant.settings?.allowedOrigins) {
+				tenantOriginsCache.set(tenant.slug, tenant.settings.allowedOrigins);
+			}
+		}
+		console.log(`🔒 CORS: ${tenantOriginsCache.size} tenants cargados`);
+	} catch (error) {
+		console.error('⚠️ No se pudieron cargar origins de tenants (se cargarán después)');
+	}
+}
+
+function getAllAllowedOrigins(): string[] {
+	const allOrigins = [...devOrigins];
+	for (const origins of tenantOriginsCache.values()) {
+		allOrigins.push(...origins);
+	}
+	return allOrigins;
+}
 
 app.use(helmet());
 app.use(
 	cors({
 		origin: (origin, callback) => {
 			if (process.env.NODE_ENV !== 'production') {
-				// En desarrollo, permitir cualquier origen
 				return callback(null, true);
 			}
 
-			if (!origin || allowedOrigins.includes(origin)) {
+			const allowed = getAllAllowedOrigins();
+			if (!origin || allowed.includes(origin)) {
 				callback(null, true);
 			} else {
-				console.log('El origen de la petición => ', origin);
+				console.log('CORS bloqueado:', origin);
 				callback(new Error('ORIGEN NO PERMITIDO POR CORS'));
 			}
 		},
@@ -71,7 +90,7 @@ app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Ruta de salud
+// Ruta de salud (no necesita tenant)
 app.get('/health', (req: Request, res: Response) => {
 	res.status(200).json({
 		success: true,
@@ -81,26 +100,30 @@ app.get('/health', (req: Request, res: Response) => {
 	});
 });
 
-// Rutas
-app.use('/api/products', productRoutes);
-app.use('/api/auth', authRoutes);
-app.use('/api/orders', orderRoutes);
-app.use('/api/shipping', shippingRoutes);
-app.use('/api/payment-methods', paymentMethodRoutes);
-app.use('/api/home', homeRoutes);
-app.use('/api/hero', heroRoutes);
-app.use('/api/config', ecommerceConfigRoutes);
+// ============================
+// RUTAS MULTI-TENANT
+// Todas las rutas de negocio pasan primero por resolveTenant
+// que identifica el tenant y prepara req.models
+// ============================
+app.use('/api/products', resolveTenant, productRoutes);
+app.use('/api/auth', resolveTenant, authRoutes);
+app.use('/api/orders', resolveTenant, orderRoutes);
+app.use('/api/shipping', resolveTenant, shippingRoutes);
+app.use('/api/payment-methods', resolveTenant, paymentMethodRoutes);
+app.use('/api/home', resolveTenant, homeRoutes);
+app.use('/api/hero', resolveTenant, heroRoutes);
+app.use('/api/config', resolveTenant, ecommerceConfigRoutes);
 
 // Error handler middleware
 app.use(errorMiddleware);
 
-// Root route
+// Root route (no necesita tenant)
 app.get('/', (req: Request, res: Response) => {
 	res.status(200).json({
 		success: true,
-		message: 'Bienvenido a Electro Hub API',
-		version: '1.0.0',
-		documentation: '/api/products para ver los endpoints disponibles'
+		message: 'NexoCommerce API — Multi-Tenant',
+		version: '2.0.0',
+		documentation: 'Envía header x-tenant-id para acceder a los endpoints'
 	});
 });
 
@@ -119,13 +142,12 @@ const httpServer = createServer(app);
 // Función para iniciar el servidor
 const startServer = async (): Promise<void> => {
 	try {
-		// Conectar a la base de datos
-		await connectDB();
-		// Inicializar configuración de comercio
-		// await EcommerceService.seedDefaultConfig();
+		// Conectar a MongoDB con el ConnectionManager multi-tenant
+		await connectionManager.connect();
 
-		// Inicializar Uala Checkout
-		await initUalaCheckOut();
+		// Cargar origins de todos los tenants para CORS dinámico
+		await loadAllTenantOrigins();
+
 		// Inicializar WebSockets
 		socketManager.initialize(httpServer);
 
@@ -133,6 +155,7 @@ const startServer = async (): Promise<void> => {
 		httpServer.listen(PORT, () => {
 			console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
 			console.log(`📊 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+			console.log(`🏢 Modo: Multi-Tenant (DB por cliente)`);
 			console.log(`🔗 API Endpoints disponibles en http://localhost:${PORT}/api/products`);
 			console.log(`🔌 WebSocket Server disponible en ws://localhost:${PORT}`);
 		});

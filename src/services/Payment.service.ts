@@ -7,6 +7,7 @@ import { IProduct, IProductPrices } from '@/interfaces/product.interface';
 import UalaApiCheckout from 'ualabis-nodejs';
 import { EcommerceService } from './ecommerce.service';
 import { AppError } from '@/errors/app.error';
+import { TenantModels } from '@/config/modelRegistry';
 
 export class PaymentService {
 	private preferredPaymentTypes = [
@@ -64,7 +65,8 @@ export class PaymentService {
 	static async CalculatePrices(
 		paymentProvider: EcommercePaymentProviders,
 		cost_price: number,
-		dolar: number
+		dolar: number,
+		models?: TenantModels
 	) {
 		try {
 			//TODO: implementar mas tarde esto↓
@@ -73,7 +75,7 @@ export class PaymentService {
 			// 	[EcommercePaymentProviders.MERCADOPAGO]: this.calculatePricesWithMercadoPago
 			// };
 			// const prices = await paymentGateways[paymentGateway](cost_price, dolar);
-			const prices = await this.calculatePricesWithUala(cost_price, dolar);
+			const prices = await this.calculatePricesWithUala(cost_price, dolar, models);
 			return prices;
 		} catch (error) {
 			throw new AppError(
@@ -86,11 +88,12 @@ export class PaymentService {
 
 	private static async calculatePricesWithUala(
 		cost_price: number,
-		dolar: number
+		dolar: number,
+		models?: TenantModels
 	): Promise<IProductPrices> {
 		try {
 			// * cost_price es el precio de compra del product viene en USD o deberia.
-			const config = await EcommerceService.getConfig();
+			const config = await EcommerceService.getConfig(models!);
 			const ualaConfig = config.paymentGateways.uala;
 
 			// 1. Obtenemos los valores y los normalizamos inmediatamente

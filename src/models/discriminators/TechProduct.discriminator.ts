@@ -10,4 +10,7 @@ const TechProductSchema = new Schema({
 	connectivity: [{ type: String }]
 });
 
+// Schema exportado para multi-tenancy (model registry)
+export { TechProductSchema };
+
 export const TechProduct = Product.discriminator('TechProduct', TechProductSchema);

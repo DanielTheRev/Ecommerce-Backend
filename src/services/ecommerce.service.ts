@@ -1,18 +1,18 @@
 import { AppError } from '@/errors/app.error';
 import { EcommercePaymentProviders, IEcommerceConfig } from '@/interfaces/ecommerce.interface';
-import { EcommerceConfig } from '@/models/Ecommerce.model';
+import { TenantModels } from '@/config/modelRegistry';
 import { decrypt, encrypt } from '@/utils/encryption';
 
 export class EcommerceService {
 	private constructor() { }
 
-	static seedDefaultConfig = async () => {
+	static seedDefaultConfig = async (models: TenantModels) => {
 		try {
-			const configExists = await EcommerceConfig.findOne({ key: 'global_config' });
+			const configExists = await models.EcommerceConfig.findOne({ key: 'global_config' });
 
 			if (!configExists) {
 				console.log('🌱 Creando configuración inicial del Ecommerce...');
-				await EcommerceConfig.create();
+				await models.EcommerceConfig.create({ key: 'global_config' });
 				console.log('✅ Configuración inicial creada con éxito.');
 			}
 		} catch (error) {
@@ -20,9 +20,9 @@ export class EcommerceService {
 		}
 	};
 
-	static getConfig = async (): Promise<IEcommerceConfig> => {
+	static getConfig = async (models: TenantModels): Promise<IEcommerceConfig> => {
 		try {
-			const config = await EcommerceConfig.findOne({ key: 'global_config' }).lean();
+			const config = await models.EcommerceConfig.findOne({ key: 'global_config' }).lean() as unknown as IEcommerceConfig;
 			if (!config)
 				throw new AppError(
 					'Ecommerce config not found',
@@ -42,9 +42,9 @@ export class EcommerceService {
 		}
 	};
 
-	static createConfig = async (data: IEcommerceConfig, userId?: string): Promise<IEcommerceConfig> => {
+	static createConfig = async (models: TenantModels, data: IEcommerceConfig, userId?: string): Promise<IEcommerceConfig> => {
 		try {
-			const existingConfig = await EcommerceConfig.findOne({ key: 'global_config' });
+			const existingConfig = await models.EcommerceConfig.findOne({ key: 'global_config' });
 			if (existingConfig) {
 				throw new AppError('Config already exists', 'La configuración ya existe. Use PUT para actualizar.', 400);
 			}
@@ -59,11 +59,8 @@ export class EcommerceService {
 				data.lastModifiedBy = userId;
 			}
 
-			const newConfig = await EcommerceConfig.create(data);
+			const newConfig = await models.EcommerceConfig.create(data);
 			
-			// Devolvemos la config desencriptada para que el front la vea correctamente si es necesario
-			// O podemos devolver newConfig directamente si preferimos que se vea encriptado (generalmente create retorna lo creado)
-			// Para consistencia con getConfig, retornamos el objeto ya procesado (aunque create retorna mongoose doc)
 			return this.decryptEcommerceConfig(newConfig.toObject() as IEcommerceConfig);
 		} catch (error) {
 			if (error instanceof AppError) throw error;
@@ -75,12 +72,8 @@ export class EcommerceService {
 		}
 	};
 
-	static updateConfig = async (data: IEcommerceConfig, userId?: string): Promise<IEcommerceConfig> => {
+	static updateConfig = async (models: TenantModels, data: IEcommerceConfig, userId?: string): Promise<IEcommerceConfig> => {
 		try {
-			// Encriptar credenciales
-			// IMPORTANTE: El frontend debe enviar las credenciales SOLO si cambiaron, o enviarlas en texto plano si quiere actualizarlas.
-			// Si el frontend envía *** o un hash asumiendo que es "seguro", esto las re-encriptará.
-			// Asumimos que la data que llega AQUÍ es raw y necesita encriptación.
 			this.encryptEcommerceConfig(data);
 
 			if (userId) {
@@ -88,8 +81,7 @@ export class EcommerceService {
 				data.lastModifiedBy = userId;
 			}
 
-			// Actualizar
-			const updatedConfig = await EcommerceConfig.findOneAndUpdate(
+			const updatedConfig = await models.EcommerceConfig.findOneAndUpdate(
 				{ key: 'global_config' },
 				{ $set: data },
 				{ new: true, runValidators: true, upsert: true }
@@ -97,7 +89,7 @@ export class EcommerceService {
 
 			if (!updatedConfig) throw new AppError('Failed to update config', 'Error al actualizar configuración', 500);
 
-			return this.decryptEcommerceConfig(updatedConfig as IEcommerceConfig);
+			return this.decryptEcommerceConfig(updatedConfig as unknown as IEcommerceConfig);
 		} catch (error) {
 			if (error instanceof AppError) throw error;
 			throw new AppError(
@@ -108,9 +100,9 @@ export class EcommerceService {
 		}
 	};
 
-	static deleteConfig = async (): Promise<void> => {
+	static deleteConfig = async (models: TenantModels): Promise<void> => {
 		try {
-			await EcommerceConfig.findOneAndDelete({ key: 'global_config' });
+			await models.EcommerceConfig.findOneAndDelete({ key: 'global_config' });
 		} catch (error) {
 			if (error instanceof AppError) throw error;
 			throw new AppError(
@@ -121,9 +113,9 @@ export class EcommerceService {
 		}
 	};
 
-	static getCredentials = async (provider: EcommercePaymentProviders) => {
+	static getCredentials = async (models: TenantModels, provider: EcommercePaymentProviders) => {
 		try {
-			const config = await this.getConfig();
+			const config = await this.getConfig(models);
 			switch (provider) {
 				case EcommercePaymentProviders.UALA:
 					return config.paymentGateways.uala.credentials;
@@ -142,9 +134,9 @@ export class EcommerceService {
 		}
 	};
 
-	static async getPaymentGateway(provider: EcommercePaymentProviders) {
+	static async getPaymentGateway(models: TenantModels, provider: EcommercePaymentProviders) {
 		try {
-			const config = await this.getConfig();
+			const config = await this.getConfig(models);
 			const paymentGateways = {
 				[EcommercePaymentProviders.UALA]: config.paymentGateways.uala,
 				[EcommercePaymentProviders.MERCADOPAGO]: config.paymentGateways.mercadopago
@@ -201,7 +193,6 @@ export class EcommerceService {
 						mp.accessToken = decrypt(JSON.parse(mp.accessToken));
 					} catch (e) {
 						// Si falla es porque tal vez no estaba encriptado (legacy o default)
-						// Mantener el valor original o logear error
 					}
 				}
 				if (mp.publicKey && mp.publicKey !== 'no asignado') {

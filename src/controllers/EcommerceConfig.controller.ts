@@ -7,7 +7,7 @@ export class EcommerceConfigController {
 	// GET /api/ecommerce/config - Obtener la configuración global
 	static async getConfig(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
-			const configObj = await EcommerceService.getConfig();
+			const configObj = await EcommerceService.getConfig(req.models!);
 			res.status(200).json(configObj);
 		} catch (error) {
 			next(error);
@@ -20,7 +20,7 @@ export class EcommerceConfigController {
 			const data = req.body;
 			const userId = req.user ? (req.user._id as string).toString() : undefined;
 
-			const newConfig = await EcommerceService.createConfig(data, userId);
+			const newConfig = await EcommerceService.createConfig(req.models!, data, userId);
 
 			res.status(201).json({
 				success: true,
@@ -38,7 +38,7 @@ export class EcommerceConfigController {
 			const data = req.body;
 			const userId = req.user ? (req.user._id as string).toString() : undefined;
 
-			const updatedConfig = await EcommerceService.updateConfig(data, userId);
+			const updatedConfig = await EcommerceService.updateConfig(req.models!, data, userId);
 
 			res.status(200).json({
 				success: true,
@@ -53,7 +53,7 @@ export class EcommerceConfigController {
 	// DELETE /api/ecommerce/config - Resetear/Eliminar configuración
 	static async deleteConfig(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
-			await EcommerceService.deleteConfig();
+			await EcommerceService.deleteConfig(req.models!);
 			res.status(200).json({
 				success: true,
 				message: 'Configuración eliminada/reseteada exitosamente'

@@ -89,4 +89,7 @@ orderSchema.index({ 'paymentInfo.status': 1 });
 
 
 
+// Schema exportado para multi-tenancy (model registry)
+export { orderSchema };
+
 export default mongoose.model<IOrder, IOrderModel>('Order', orderSchema) as IOrderModel;

@@ -4,11 +4,13 @@ import {
 	IEcommerceUalaCredentials
 } from '@/interfaces/ecommerce.interface';
 import { EcommerceService } from '@/services/ecommerce.service';
+import { TenantModels } from '@/config/modelRegistry';
 import UalaApiCheckout from 'ualabis-nodejs';
 
-export async function initUalaCheckOut() {
+export async function initUalaCheckOut(models: TenantModels) {
 	try {
 		const credentials = (await EcommerceService.getCredentials(
+			models,
 			EcommercePaymentProviders.UALA
 		)) as IEcommerceUalaCredentials;
 		return await UalaApiCheckout.setUp({

@@ -45,6 +45,9 @@ const shippingOptionSchema = new Schema<IShippingOption>(
 // Índice para mejorar las consultas de puntos de venta
 shippingOptionSchema.index({ type: 1, isDefaultForCash: 1 });
 
+// Schema exportado para multi-tenancy (model registry)
+export { shippingOptionSchema };
+
 export const ShippingOption = mongoose.model<IShippingOption>(
 	'ShippingOption',
 	shippingOptionSchema

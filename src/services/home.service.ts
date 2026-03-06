@@ -2,8 +2,9 @@ import { IBrandSection, IHomeOffer } from '@/interfaces/home.interface';
 import { IProduct } from '@/interfaces/product.interface';
 import { ProductService } from './product.service';
 import { BannerService } from './banner.service';
-import { HeroService } from './hero.service'; // New import
+import { HeroService } from './hero.service';
 import { AppError } from '@/errors/app.error';
+import { TenantModels } from '@/config/modelRegistry';
 
 export class HomeService {
 	private static readonly offers: IHomeOffer[] = [
@@ -37,13 +38,13 @@ export class HomeService {
 	];
 
 
-	private static async getProductsGroupByBrand(): Promise<IBrandSection[]> {
+	private static async getProductsGroupByBrand(models: TenantModels): Promise<IBrandSection[]> {
 		try {
 			// 1. Get all active banners configured in CMS
-			const activeBanners = await BannerService.getActiveBanners();
+			const activeBanners = await BannerService.getActiveBanners(models);
 
-			// 2. Get all products to map them (opt: optimize to query by brand first if needed)
-			const products = await ProductService.getAllProducts();
+			// 2. Get all products to map them
+			const products = await ProductService.getAllProducts(models);
 
 			// 3. Group products by brand for O(1) access
 			const brandProductsMap = new Map<string, IProduct[]>();
@@ -89,13 +90,13 @@ export class HomeService {
 		}
 	}
 
-	static async getHomeConfig() {
-		const productByBrand = await this.getProductsGroupByBrand();
+	static async getHomeConfig(models: TenantModels) {
+		const productByBrand = await this.getProductsGroupByBrand(models);
 		// Fetch Hero Slides
-		const heroSlides = await HeroService.getActiveSlides();
+		const heroSlides = await HeroService.getActiveSlides(models);
 
 		return {
-			heroSlides, // New field
+			heroSlides,
 			offers: this.offers,
 			productByBrand
 		};

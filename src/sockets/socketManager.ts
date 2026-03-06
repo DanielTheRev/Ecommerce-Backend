@@ -7,7 +7,8 @@ import {
 	NotificationType
 } from '@/interfaces/notification.interface';
 import { IUser, Role } from '@/interfaces/user.interface';
-import { UserService } from '@/services/user.service';
+import { connectionManager } from '@/config/multitenancy';
+import { getModelsForConnection } from '@/config/modelRegistry';
 import { parse } from 'cookie';
 import { Server as HTTPServer } from 'http';
 import jwt from 'jsonwebtoken';
@@ -25,17 +26,9 @@ class SocketManager {
 	initialize(server: HTTPServer) {
 		this.io = new SocketIOServer(server, {
 			cors: {
-				origin:
-					process.env.NODE_ENV === 'production'
-						? ['https://www.electromix.com.ar']
-						: [
-								'http://localhost:3000',
-								'http://localhost:3001',
-								'http://localhost:5173',
-								'http://localhost:4200',
-								'http://localhost:4300',
-								'http://localhost:4000'
-							],
+				// En producción el tenant se valida en el middleware del socket
+				// Permitimos todas las conexiones y validamos por x-tenant-id
+				origin: true,
 				credentials: true
 			},
 			path: '/api/socket.io',
@@ -52,7 +45,6 @@ class SocketManager {
 		if (!this.io) return;
 
 		this.io.use(async (socket: AuthSocket, next) => {
-			// console.log('alguien se quiere conectar...');
 			try {
 				const cookies = socket.handshake.headers.cookie;
 
@@ -65,7 +57,23 @@ class SocketManager {
 					userID: string;
 				};
 
-				const user = await UserService.getUserByID(decoded.userID);
+				// WebSocket: resolve tenant from handshake headers or query
+				const tenantSlug = (socket.handshake.headers['x-tenant-id'] as string)
+					|| (socket.handshake.query['tenantId'] as string);
+				console.log(tenantSlug);
+
+				if (!tenantSlug) {
+					console.log('no tentant slug');
+					return next(new Error('No tenant specified'));
+				}
+
+				const tenant = await connectionManager.getTenantBySlug(tenantSlug);
+				if (!tenant) return next(new Error('Tenant not found'));
+
+				const tenantDb = connectionManager.getTenantDb(tenant.dbName);
+				const models = getModelsForConnection(tenantDb);
+
+				const user = await models.User.findById(decoded.userID).lean() as IUser;
 				socket.user = user;
 
 				next();
@@ -120,7 +128,7 @@ class SocketManager {
 	 */
 	notifyNewOrderToAdmins(order: any) {
 		if (!this.io) return;
-		
+
 		const notification: CreateAdminNotificationDto = {
 			type: NotificationType.NEW_ORDER,
 			title: 'Nueva Orden Recibida',
@@ -157,7 +165,7 @@ class SocketManager {
 
 		// Ensure we are not leaking unintended data, though TS types help, runtime check is good practice
 		// Here we trust the DTO passed by the controller/service layer
-		
+
 		const finalNotification = this.buildNotification(notificationPayload, NotificationAudience.USER);
 
 		this.io
@@ -170,7 +178,7 @@ class SocketManager {
 	 */
 	notifyAllClients(notificationPayload: CreateClientNotificationDto) {
 		if (!this.io) return;
-		
+
 		const finalNotification = this.buildNotification(notificationPayload, NotificationAudience.USER);
 
 		// Emit to all connected clients room or iterate
@@ -178,7 +186,7 @@ class SocketManager {
 		// Broadcasting to everyone except admins is tricky without a specific room. 
 		// Assuming we want to emit to all sockets that are NOT in 'admins'?
 		// For simplicity, let's iterate connected clients map which we maintain.
-		
+
 		for (const socket of this.connectedClients.values()) {
 			socket.emit('client-notification', finalNotification);
 		}
@@ -186,7 +194,7 @@ class SocketManager {
 
 	// Helper unificado
 	private buildNotification(
-		dto: CreateAdminNotificationDto | CreateClientNotificationDto, 
+		dto: CreateAdminNotificationDto | CreateClientNotificationDto,
 		audience: NotificationAudience
 	): INotification {
 		return {

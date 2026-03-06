@@ -7,7 +7,6 @@ import {
 	updatePaymentStatusDTO,
 	updateShippingStatusDTO
 } from '@/interfaces/order.interface';
-import OrderModel from '@/models/Order.model';
 import { PaymentService } from './Payment.service';
 import { PaymentMethodService } from './paymentMethod.service';
 import { ProductService } from './product.service';
@@ -18,21 +17,18 @@ import { ShippingType } from '@/interfaces/shippingMethods.interface';
 import { UalaOrderStatus } from '@/interfaces/ualaWebhook.interface';
 import { Role } from '@/interfaces/user.interface';
 import { FilterQuery } from 'mongoose';
+import { TenantModels } from '@/config/modelRegistry';
 
 export class OrderService {
 	private static generateOrderNumber(): string {
 		const shortId = Math.random().toString(36).substring(2, 10).toUpperCase();
 		return `REV-${shortId}`;
 	}
-	/**
-	 * * Get order by id without select user field
-	 * @param id string
-	 * @returns order
-	 */
-	static async getOrderById(id: string) {
+
+	static async getOrderById(models: TenantModels, id: string) {
 		try {
 			if (!id) throw new AppError('Order ID is required', 'El ID de la orden es requerido', 400);
-			const order = await OrderModel.findById(id).populate([
+			const order = await models.Order.findById(id).populate([
 				{ path: 'items.product' },
 			]).lean() as IOrder;
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
@@ -47,9 +43,9 @@ export class OrderService {
 		}
 	}
 
-	static async getFullyOrderBy(query: FilterQuery<IOrder>) {
+	static async getFullyOrderBy(models: TenantModels, query: FilterQuery<IOrder>) {
 		try {
-			const order = await OrderModel.findOne(query).populate([
+			const order = await models.Order.findOne(query).populate([
 				{ path: 'items.product', select: '+prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.earnings' },
 				{ path: 'user', select: 'name email profilePhoto role' }
 			]) as IOrder;
@@ -66,14 +62,9 @@ export class OrderService {
 		}
 	}
 
-	/* 
-	* * Get order by id fully populated (user and items.product)
-	* @param id string
-	* @returns order
-	*/
-	static async getOrderByIdFullyPopulated(id: string) {
+	static async getOrderByIdFullyPopulated(models: TenantModels, id: string) {
 		try {
-			const order = await OrderModel.findById(id)
+			const order = await models.Order.findById(id)
 				.populate('user', 'name email')
 				.populate('items.product', 'name price images');
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
@@ -88,15 +79,9 @@ export class OrderService {
 		}
 	}
 
-	/* 
-	* * Update order status
-	* @param id string
-	* @param orderStatus PaymentStatus
-	* @returns order fully populated
-	*/
-	static async updateOrderStatus(id: string, orderStatus: PaymentStatus) {
+	static async updateOrderStatus(models: TenantModels, id: string, orderStatus: PaymentStatus) {
 		try {
-			const order = await OrderModel.findByIdAndUpdate(id, { orderStatus }, { new: true, runValidators: true }).populate([
+			const order = await models.Order.findByIdAndUpdate(id, { orderStatus }, { new: true, runValidators: true }).populate([
 				{ path: 'user', select: 'name email' },
 				{ path: 'items.product', select: 'name price image' }
 			]);
@@ -112,15 +97,8 @@ export class OrderService {
 		}
 	}
 
-	/* 
-	* * Create order
-	* @param data CreateOrderDTO
-	* @param userId string
-	* @returns order fully populated
-	*/
-	static async createOrder(data: CreateOrderDTO, userId: string) {
+	static async createOrder(models: TenantModels, data: CreateOrderDTO, userId: string) {
 		try {
-			/* Validate user and order data */
 			if (!userId)
 				throw new AppError(
 					'User ID is required to create an order',
@@ -134,7 +112,7 @@ export class OrderService {
 					401
 				);
 
-			const items = (await ProductService.getProductsByIds(data.items.map((item) => item._id)))
+			const items = (await ProductService.getProductsByIds(models, data.items.map((item) => item._id)))
 				.map((product) => {
 					const itemInTheCart = data.items.find((e) => e._id === product._id.toString());
 					if (!itemInTheCart) throw new AppError('Item not found', 'Item no encontrado', 404);
@@ -151,14 +129,14 @@ export class OrderService {
 				variantSku: item.variantSku,
 				quantity: item.quantity
 			}));
-			await ProductService.verifyVariantStock(variantItems);
+			await ProductService.verifyVariantStock(models, variantItems);
 
 			/* get shipping method */
-			const shippingMethod = await ShippingMethodService.getShippingMethodBy({
+			const shippingMethod = await ShippingMethodService.getShippingMethodBy(models, {
 				_id: data.shippingMethod._id
 			});
 			/* get payment method */
-			const paymentMethod = await PaymentMethodService.getPaymentMethodById(
+			const paymentMethod = await PaymentMethodService.getPaymentMethodById(models,
 				data.paymentMethod._id
 			);
 			/* creating payment service instance */
@@ -188,15 +166,14 @@ export class OrderService {
 					: OrderStatus.PENDING;
 
 			/* reducing variant stock */
-			await ProductService.reduceVariantStock(variantItems);
+			await ProductService.reduceVariantStock(models, variantItems);
 
 			/* creating order in DB */
-			const newOrder = await (await OrderModel.create(
+			const newOrder = await (await models.Order.create(
 				{
 					user: userId,
 					status,
 					items: items.map((item) => {
-						// Buscar la variante para generar el label
 						const variant = item.data.variants?.find((v: any) => v.sku === item.variantSku);
 						const variantLabel = variant?.attributes?.map((a: any) => a.value).join(' - ') || '';
 
@@ -261,18 +238,8 @@ export class OrderService {
 			throw new AppError('Failed to create order', 'Error al intentar crear la orden', 500);
 		}
 	}
-	/* 
-	* * Get orders by user id
-	* @param userId string
-	* @param query {
-	* 	status: string;
-	* 	dateRange: string;
-	* 	page: number;
-	* 	limit: number;
-	* }
-	* @returns orders fully populated
-	*/
-	static async getOrdersByUserId(userId: string, query: {
+
+	static async getOrdersByUserId(models: TenantModels, userId: string, query: {
 		status: string;
 		dateRange: string;
 		page: number;
@@ -287,17 +254,14 @@ export class OrderService {
 		try {
 			const skip = (query.page - 1) * query.limit;
 			const { status, dateRange, limit, page } = query
-			// Construir filtros
 			const filters: any = {
 				user: userId
 			};
 
-			// Filtro por estado
 			if (status) {
 				filters.status = status;
 			}
 
-			// Filtro por rango de fechas
 			if (dateRange) {
 				const now = new Date();
 				let startDate: Date;
@@ -307,50 +271,42 @@ export class OrderService {
 						startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 						filters.createdAt = { $gte: startDate };
 						break;
-
 					case 'this_week':
 						const startOfWeek = new Date(now);
-						startOfWeek.setDate(now.getDate() - now.getDay()); // Domingo
+						startOfWeek.setDate(now.getDate() - now.getDay());
 						startOfWeek.setHours(0, 0, 0, 0);
 						filters.createdAt = { $gte: startOfWeek };
 						break;
-
 					case 'this_month':
 						startDate = new Date(now.getFullYear(), now.getMonth(), 1);
 						filters.createdAt = { $gte: startDate };
 						break;
-
 					case 'last_3_months':
 						startDate = new Date(now.getFullYear(), now.getMonth() - 3, 1);
 						filters.createdAt = { $gte: startDate };
 						break;
-
 					case 'last_6_months':
 						startDate = new Date(now.getFullYear(), now.getMonth() - 6, 1);
 						filters.createdAt = { $gte: startDate };
 						break;
-
 					case 'this_year':
 						startDate = new Date(now.getFullYear(), 0, 1);
 						filters.createdAt = { $gte: startDate };
 						break;
-
 					default:
-						// 'all' o cualquier otro valor no aplica filtro de fecha
 						break;
 				}
 			}
 
-
-			const userOrders = await OrderModel.find(filters)
+			const userOrders = await models.Order.find(filters)
 				.populate({
 					path: 'items.product',
 					select: 'brand model price images'
 				})
-				.sort({ createdAt: -1 }) // Ordenar por fecha de creación descendente
+				.sort({ createdAt: -1 })
 				.skip(skip)
 				.limit(query.limit);
-			const total = await OrderModel.countDocuments(filters);
+			const total = await models.Order.countDocuments(filters);
 
 			return {
 				data: userOrders,
@@ -371,12 +327,7 @@ export class OrderService {
 		}
 	}
 
-	/* 
-	* * Update payment status
-	* @param data updatePaymentStatusDTO
-	* @returns order fully populated
-	*/
-	static async updatePaymentStatus(data: updatePaymentStatusDTO) {
+	static async updatePaymentStatus(models: TenantModels, data: updatePaymentStatusDTO) {
 		if (!data.orderID)
 			throw new AppError(
 				'Order ID is required to update payment status',
@@ -384,7 +335,7 @@ export class OrderService {
 				400
 			);
 		try {
-			let order = await this.getOrderByIdFullyPopulated(data.orderID);
+			let order = await this.getOrderByIdFullyPopulated(models, data.orderID);
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
 			let newStatus: string;
 			const isCard = order.paymentInfo.method === PaymentType.CARD;
@@ -423,12 +374,7 @@ export class OrderService {
 		}
 	}
 
-	/* 
-	* * Update order shipping status
-	* @param data updateShippingStatusDTO
-	* @returns order fully populated
-	*/
-	static async updateOrderShippingStatus(data: updateShippingStatusDTO) {
+	static async updateOrderShippingStatus(models: TenantModels, data: updateShippingStatusDTO) {
 		if (!data.orderID)
 			throw new AppError(
 				'Order ID is required to update shipping status',
@@ -436,7 +382,7 @@ export class OrderService {
 				400
 			);
 		try {
-			const order = await OrderModel.findById(data.orderID)
+			const order = await models.Order.findById(data.orderID)
 				.populate([
 					{ path: 'user', select: 'name email profilePhoto role' },
 					{ path: 'items.product', select: 'name price images description category' }
@@ -489,15 +435,9 @@ export class OrderService {
 		}
 	}
 
-	/* 
-	* * Confirm card payment and calculate earnings
-	* @param orderID string
-	* @param status UalaOrderStatus
-	* @returns order fully populated
-	*/
-	static async confirmCardPayment(orderID: string, status: UalaOrderStatus) {
+	static async confirmCardPayment(models: TenantModels, orderID: string, status: UalaOrderStatus) {
 		try {
-			const order = await OrderModel.findById(orderID)
+			const order = await models.Order.findById(orderID)
 				.populate([
 					{ path: 'user', select: 'name email' },
 					{ path: 'items.product', select: '+prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas' }
@@ -505,26 +445,20 @@ export class OrderService {
 
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
 
-			// Update payment status
 			order.paymentInfo.status = status === UalaOrderStatus.Aprobado
 				? PaymentStatus.APPROVED
 				: PaymentStatus.REJECTED;
 
-			// If approved, calculate earnings based on installments
 			if (order.paymentInfo.status === PaymentStatus.APPROVED) {
 				if (!order.paymentInfo.transactionId) {
 					console.error('Transaction ID missing for approved card order:', orderID);
-					// Fallback to default earnings or log error? Continuing with 0 or conservative.
 				} else {
 					const { orderStatus, error } = await PaymentService.getOrderStatus(order.paymentInfo.transactionId);
 					if (!error && orderStatus) {
-						// Extract installments from Uala response
-						// Assuming structure: customer.card.installments.number (based on user request)
 						const installments = (orderStatus as any).customer?.card?.installments?.number || 1;
 
-						// Map order items to PaymentService structure
 						const itemsForPaymentService = order.items.map(item => ({
-							data: item.product as any, // Cast to any or IProduct if imported
+							data: item.product as any,
 							quantity: item.quantity
 						}));
 
@@ -554,13 +488,8 @@ export class OrderService {
 		}
 	}
 
-	/* 
-	* * Get all orders
-	* @param role admin
-	* @param query 
-	* @returns all orders
-	*/
 	static async getAllOrders(
+		models: TenantModels,
 		role: Role,
 		query: {
 			status: string;
@@ -580,20 +509,16 @@ export class OrderService {
 		const limit = parseInt(query.limit as string) || 10;
 		const skip = (page - 1) * limit;
 
-		// Construir filtros
 		const filters: any = {};
 
-		// Filtro por estado
 		if (query.status) {
 			filters.status = query.status;
 		}
 
-		// Filtro por usuario
 		if (query.userId) {
 			filters.user = query.userId;
 		}
 
-		// Filtro por rango de fechas
 		if (query.dateRange) {
 			const now = new Date();
 			let startDate: Date;
@@ -603,56 +528,46 @@ export class OrderService {
 					startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 					filters.createdAt = { $gte: startDate };
 					break;
-
 				case 'this_week':
 					const startOfWeek = new Date(now);
-					startOfWeek.setDate(now.getDate() - now.getDay()); // Domingo
+					startOfWeek.setDate(now.getDate() - now.getDay());
 					startOfWeek.setHours(0, 0, 0, 0);
 					filters.createdAt = { $gte: startOfWeek };
 					break;
-
 				case 'this_month':
 					startDate = new Date(now.getFullYear(), now.getMonth(), 1);
 					filters.createdAt = { $gte: startDate };
 					break;
-
 				case 'last_3_months':
 					startDate = new Date(now.getFullYear(), now.getMonth() - 3, 1);
 					filters.createdAt = { $gte: startDate };
 					break;
-
 				case 'last_6_months':
 					startDate = new Date(now.getFullYear(), now.getMonth() - 6, 1);
 					filters.createdAt = { $gte: startDate };
 					break;
-
 				case 'this_year':
 					startDate = new Date(now.getFullYear(), 0, 1);
 					filters.createdAt = { $gte: startDate };
 					break;
-
 				default:
-					// 'all' o cualquier otro valor no aplica filtro de fecha
 					break;
 			}
 		}
 		try {
-			// Obtener órdenes con Paginación y populate mejorado
-			const orders = await OrderModel.find(filters)
+			const orders = await models.Order.find(filters)
 				.populate('user', 'name email profilePhoto role')
 				.populate({
 					path: 'items.product',
 					select: 'name price images description category'
 				})
-				.sort({ createdAt: -1 }) // Ordenar por fecha de creación descendente
+				.sort({ createdAt: -1 })
 				.skip(skip)
 				.limit(limit);
 
-			// Contar total de órdenes con los mismos filtros
-			const total = await OrderModel.countDocuments(filters);
+			const total = await models.Order.countDocuments(filters);
 
-			// Estadísticas adicionales (opcional)
-			const stats = await OrderModel.aggregate([
+			const stats = await models.Order.aggregate([
 				{ $match: filters },
 				{
 					$group: {
@@ -671,7 +586,6 @@ export class OrderService {
 					totalItems: total,
 					itemsPerPage: limit
 				},
-				// Incluir estadísticas si se desea
 				stats: stats.reduce((acc, stat) => {
 					acc[stat._id] = {
 						count: stat.count,
@@ -696,14 +610,7 @@ export class OrderService {
 		}
 	}
 
-	/* 
-	* * Cancel order
-	* @param id order ID
-	* @param userID user ID
-	* @param role admin
-	* @returns order fully populated
-	*/
-	static async cancelOrder(id: string, userID: string, role: Role) {
+	static async cancelOrder(models: TenantModels, id: string, userID: string, role: Role) {
 		if (!id)
 			throw new AppError(
 				'Order ID is required to cancel an order',
@@ -719,9 +626,8 @@ export class OrderService {
 		if (role !== Role.admin)
 			throw new AppError('Unauthorized access', 'Acceso no autorizado', 403);
 		try {
-			const order = await this.getOrderById(id);
+			const order = await this.getOrderById(models, id);
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
-			// verify if the user is the owner of the order or an admin if is admin can cancel the order
 			if (order.user.toString() !== userID && role !== 'admin') {
 				throw new AppError(
 					'You can only cancel your own orders',
@@ -730,7 +636,6 @@ export class OrderService {
 				);
 			}
 
-			// only pending orders can be cancelled
 			if (order.status !== OrderStatus.PENDING) {
 				throw new AppError(
 					'Only pending orders can be cancelled',
@@ -739,7 +644,6 @@ export class OrderService {
 				);
 			}
 
-			// Actualizar estado a cancelado
 			order.status = OrderStatus.CANCELLED;
 			order.history.push({
 				status: OrderStatus.CANCELLED,
@@ -750,14 +654,14 @@ export class OrderService {
 			await order.save();
 
 			// restore variant stock
-			await ProductService.restoreVariantStock(
+			await ProductService.restoreVariantStock(models,
 				order.items.map((item: any) => ({
 					product: item.product,
 					variantSku: item.variantSku,
 					quantity: item.quantity
 				}))
 			);
-			const updatedOrder = await this.getOrderByIdFullyPopulated(id);
+			const updatedOrder = await this.getOrderByIdFullyPopulated(models, id);
 			return updatedOrder;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
@@ -765,13 +669,7 @@ export class OrderService {
 		}
 	}
 
-	/* 
-	* * Get order stats
-	* @param role admin
-	* @returns order stats
-	*/
-	static async getOrderStats(role: Role) {
-		/* Verify role exist and its Admin */
+	static async getOrderStats(models: TenantModels, role: Role) {
 		if (!role || role !== Role.admin)
 			throw new AppError('Unauthorized access', 'Acceso no autorizado', 403);
 		try {
@@ -784,13 +682,13 @@ export class OrderService {
 				cancelledOrders,
 				totalRevenue
 			] = await Promise.all([
-				OrderModel.countDocuments(),
-				OrderModel.countDocuments({ status: OrderStatus.PENDING }),
-				OrderModel.countDocuments({ status: OrderStatus.PROCESSING_SHIPPING }),
-				OrderModel.countDocuments({ status: OrderStatus.SHIPPED }),
-				OrderModel.countDocuments({ status: OrderStatus.DELIVERED }),
-				OrderModel.countDocuments({ status: OrderStatus.CANCELLED }),
-				OrderModel.aggregate([
+				models.Order.countDocuments(),
+				models.Order.countDocuments({ status: OrderStatus.PENDING }),
+				models.Order.countDocuments({ status: OrderStatus.PROCESSING_SHIPPING }),
+				models.Order.countDocuments({ status: OrderStatus.SHIPPED }),
+				models.Order.countDocuments({ status: OrderStatus.DELIVERED }),
+				models.Order.countDocuments({ status: OrderStatus.CANCELLED }),
+				models.Order.aggregate([
 					{ $match: { status: { $ne: OrderStatus.CANCELLED } } },
 					{ $group: { _id: null, total: { $sum: '$total' } } }
 				])

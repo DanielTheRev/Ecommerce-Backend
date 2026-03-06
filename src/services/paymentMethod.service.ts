@@ -1,12 +1,12 @@
 import { AppError } from '@/errors/app.error';
-import { IPaymentMethod, IPaymentMethodDocument, IPaymentMethodQuery } from '@/interfaces/paymentMethod.interface';
-import { PaymentMethod } from '@/models/PaymentMethod.model';
+import { IPaymentMethod, IPaymentMethodQuery } from '@/interfaces/paymentMethod.interface';
+import { TenantModels } from '@/config/modelRegistry';
 
 export class PaymentMethodService {
 
-	static async getPaymentMethods(): Promise<IPaymentMethod[]> {
+	static async getPaymentMethods(models: TenantModels): Promise<IPaymentMethod[]> {
 		try {
-			const paymentMethods = await PaymentMethod.find().lean();
+			const paymentMethods = await models.PaymentMethod.find().lean();
 			return paymentMethods;
 		} catch (error) {
 			throw new AppError(
@@ -17,9 +17,9 @@ export class PaymentMethodService {
 		}
 	}
 
-	static async getPaymentMethodBy(query: IPaymentMethodQuery): Promise<IPaymentMethod> {
+	static async getPaymentMethodBy(models: TenantModels, query: IPaymentMethodQuery): Promise<IPaymentMethod> {
 		try {
-			const paymentMethod = await PaymentMethod.findOne(query).lean();
+			const paymentMethod = await models.PaymentMethod.findOne(query).lean();
 			if (!paymentMethod)
 				throw new AppError('Payment method not found', 'No se encontró el método de pago', 404);
 			return paymentMethod;
@@ -32,9 +32,9 @@ export class PaymentMethodService {
 		}
 	}
 
-	static async getPaymentMethodsBy(query: IPaymentMethodQuery): Promise<IPaymentMethod[]> {
+	static async getPaymentMethodsBy(models: TenantModels, query: IPaymentMethodQuery): Promise<IPaymentMethod[]> {
 		try {
-			const paymentMethods = await PaymentMethod.find(query).lean() as IPaymentMethod[];
+			const paymentMethods = await models.PaymentMethod.find(query).lean() as IPaymentMethod[];
 			if (!paymentMethods)
 				throw new AppError('Payment method not found', 'No se encontró el método de pago', 404);
 			return paymentMethods;
@@ -47,9 +47,9 @@ export class PaymentMethodService {
 		}
 	}
 
-	static async getPaymentMethodById(id: string): Promise<IPaymentMethod> {
+	static async getPaymentMethodById(models: TenantModels, id: string): Promise<IPaymentMethod> {
 		try {
-			const paymentMethod = await PaymentMethod.findById(id).lean();
+			const paymentMethod = await models.PaymentMethod.findById(id).lean();
 			if (!paymentMethod)
 				throw new AppError('Payment method not found', 'No se encontró el método de pago', 404);
 			return paymentMethod;
@@ -62,10 +62,10 @@ export class PaymentMethodService {
 		}
 	}
 
-	static async create(data: IPaymentMethod): Promise<IPaymentMethod> {
+	static async create(models: TenantModels, data: IPaymentMethod): Promise<IPaymentMethod> {
 
 		try {
-			const newPaymentMethod = PaymentMethod.create(data);
+			const newPaymentMethod = models.PaymentMethod.create(data);
 			return newPaymentMethod;
 		} catch (error) {
 			throw new AppError(
@@ -76,13 +76,13 @@ export class PaymentMethodService {
 		}
 	}
 
-	static async update(id: string, data: Partial<IPaymentMethod>): Promise<IPaymentMethod> {
+	static async update(models: TenantModels, id: string, data: Partial<IPaymentMethod>): Promise<IPaymentMethod> {
 		try {
 			if (!id || !data) throw new AppError('Payment method not found', 'No se encontró el método de pago', 404);
 
 			const fieldsToSelect = Object.keys(data).join(' ');
 
-			const updatedPaymentMethod = await PaymentMethod.findByIdAndUpdate(id, data, { new: true, runValidators: true, select: fieldsToSelect });
+			const updatedPaymentMethod = await models.PaymentMethod.findByIdAndUpdate(id, data, { new: true, runValidators: true, select: fieldsToSelect });
 
 			if (!updatedPaymentMethod)
 				throw new AppError('Payment method not found', 'No se encontró el método de pago', 404);
@@ -97,10 +97,10 @@ export class PaymentMethodService {
 		}
 	}
 
-	static async delete(id: string): Promise<IPaymentMethod> {
+	static async delete(models: TenantModels, id: string): Promise<IPaymentMethod> {
 		try {
 			if (!id) throw new AppError('Payment method not found', 'No se encontró el método de pago', 404);
-			const deletedPaymentMethod = await PaymentMethod.findByIdAndDelete(id);
+			const deletedPaymentMethod = await models.PaymentMethod.findByIdAndDelete(id);
 
 			if (!deletedPaymentMethod)
 				throw new AppError('Payment method not found', 'No se encontró el método de pago', 404);

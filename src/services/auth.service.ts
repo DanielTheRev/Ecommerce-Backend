@@ -2,6 +2,7 @@ import { AppError } from '@/errors/app.error';
 import { AuthError } from '@/errors/auth.error';
 import { AuthProvider } from '@/interfaces/auth.interface';
 import { ISecureUser, Role } from '@/interfaces/user.interface';
+import { TenantModels } from '@/config/modelRegistry';
 import dotenv from 'dotenv';
 import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
@@ -46,14 +47,13 @@ export class AuthService {
 	}
 
 	static generateToken(userID: string): string {
-		console.log('GENERANDO TOKEN');
-		console.log(userID);
 		return jwt.sign({ userID }, process.env.JWT_SECRET!, {
 			expiresIn: '7d'
 		});
 	}
 
 	static async loginUserWith(
+		models: TenantModels,
 		provider: AuthProvider,
 		token?: string,
 		loginData?: { email: string; password: string }
@@ -61,8 +61,8 @@ export class AuthService {
 		/* If is an user, role will be defined */
 		const role = Role.user;
 		// Implement login logic based on provider
-		if (provider === AuthProvider.GOOGLE) return this.loginWithGoogle(role, token!);
-		if (provider === AuthProvider.Email) return this.loginWithEmail(loginData!, role!);
+		if (provider === AuthProvider.GOOGLE) return this.loginWithGoogle(models, role, token!);
+		if (provider === AuthProvider.Email) return this.loginWithEmail(models, loginData!, role!);
 		throw new AppError(
 			'Unsupported authentication provider',
 			'Proveedor de autenticación no soportado',
@@ -70,9 +70,8 @@ export class AuthService {
 		);
 	}
 
-	private static async loginWithGoogle(role: Role, googleToken: string) {
+	private static async loginWithGoogle(models: TenantModels, role: Role, googleToken: string) {
 		if (!googleToken) throw new AppError('no token provided', 'No se proporcionó token', 500);
-		// try to get user data from google token
 		try {
 			const userData = await AuthService.getDataFromGoogleToken(googleToken);
 			if (!userData) {
@@ -84,7 +83,7 @@ export class AuthService {
 			}
 			const { name, email, sub: googleID, picture } = userData;
 
-			const user = await UserService.getUserByGoogleID(googleID);
+			const user = await UserService.getUserByGoogleID(models, googleID);
 			/* user already registered with google */
 			if (user) return user;
 
@@ -96,7 +95,7 @@ export class AuthService {
 				profilePhoto: picture,
 				isActive: true
 			};
-			const newUser = await UserService.createUser(newUserData);
+			const newUser = await UserService.createUser(models, newUserData);
 			return newUser;
 		} catch (error) {
 			console.log(error);
@@ -105,12 +104,12 @@ export class AuthService {
 		}
 	}
 
-	private static async loginWithEmail(loginData: { email: string; password: string }, role: Role) {
+	private static async loginWithEmail(models: TenantModels, loginData: { email: string; password: string }, role: Role) {
 		if (!loginData.email || !loginData.password) {
 			throw new AuthError('Missing email or password', 'Faltan email o contraseña', 400);
 		}
 		try {
-			const user = await UserService.getUserByEmail(loginData.email);
+			const user = await UserService.getUserByEmail(models, loginData.email);
 			if (!user) {
 				throw new AuthError('Invalid credentials', 'Credenciales invalidas', 401);
 			}

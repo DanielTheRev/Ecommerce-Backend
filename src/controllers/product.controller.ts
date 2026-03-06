@@ -1,28 +1,31 @@
-import { NextFunction, Request, Response } from 'express';
+import { NextFunction, Response } from 'express';
 import { IProductCreateDTO, IProductSpec } from '@/interfaces/product.interface';
 import { IVariant } from '@/interfaces/variant.interface';
 import { ProductService } from '@/services/product.service';
 import { getDolar } from '@/services/dolar.service';
 import { PaymentService } from '@/services/Payment.service';
 import { EcommercePaymentProviders } from '@/interfaces/ecommerce.interface';
+import { AuthRequest } from '@/middleware/auth';
 
 export class ProductController {
-	// GET /api/products/list - Productos con precios completos (admin)
-	static async getProducts(req: Request, res: Response, next: NextFunction) {
+	// GET /api/products/list - Productos con precios completos (admin) - paginado
+	static async getProducts(req: AuthRequest, res: Response, next: NextFunction) {
 		try {
+			const page = parseInt(req.query.page as string) || 1;
+			const limit = parseInt(req.query.limit as string) || 10;
 			const productType = req.query.type as string | undefined;
-			const products = await ProductService.getProductsWCompletePrices(productType);
-			res.status(200).json(products);
+			const result = await ProductService.getPaginatedProductsWCompletePrices(req.models!, page, limit, productType);
+			res.status(200).json(result);
 		} catch (error) {
 			next(error);
 		}
 	}
 
 	// GET /api/products/complete/:id - Producto con precios completos (admin)
-	static async getProductWCompletePrices(req: Request, res: Response, next: NextFunction) {
+	static async getProductWCompletePrices(req: AuthRequest, res: Response, next: NextFunction) {
 		try {
 			const { id } = req.params;
-			const product = await ProductService.getProductWCompletePrices(id);
+			const product = await ProductService.getProductWCompletePrices(req.models!, id);
 			res.status(200).json(product);
 		} catch (error) {
 			next(error);
@@ -30,10 +33,10 @@ export class ProductController {
 	}
 
 	// GET /api/products/all - Obtener todos los productos sin Paginación
-	static async getAllProductWOPagination(req: Request, res: Response, next: NextFunction): Promise<void> {
+	static async getAllProductWOPagination(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
 			const productType = req.query.type as string | undefined;
-			const products = await ProductService.getAllProducts(productType);
+			const products = await ProductService.getAllProducts(req.models!, productType);
 			res.status(200).json(products);
 		} catch (error) {
 			next(error);
@@ -41,13 +44,13 @@ export class ProductController {
 	}
 
 	// GET /api/products - Obtener todos los productos con paginación
-	static async getAllProducts(req: Request, res: Response, next: NextFunction): Promise<void> {
+	static async getAllProducts(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
 			const page = parseInt(req.query.page as string) || 1;
 			const limit = parseInt(req.query.limit as string) || 20;
 			const productType = req.query.type as string | undefined;
 
-			const result = await ProductService.getPaginatedProducts(page, limit, productType);
+			const result = await ProductService.getPaginatedProducts(req.models!, page, limit, productType);
 
 			res.status(200).json(result);
 		} catch (error) {
@@ -56,10 +59,10 @@ export class ProductController {
 	}
 
 	// GET /api/products/:slug - Obtener un producto por slug
-	static async getProductBySlug(req: Request, res: Response, next: NextFunction): Promise<void> {
+	static async getProductBySlug(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
 			const { slug } = req.params;
-			const product = await ProductService.getProductBySlug(slug);
+			const product = await ProductService.getProductBySlug(req.models!, slug);
 
 			res.status(200).json(product);
 		} catch (error) {
@@ -68,7 +71,7 @@ export class ProductController {
 	}
 
 	// POST /api/products - Crear nuevo producto
-	static async createProduct(req: Request, res: Response, next: NextFunction): Promise<void> {
+	static async createProduct(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		let data = req.body as IProductCreateDTO;
 		const files = req.files as Express.Multer.File[];
 		try {
@@ -83,7 +86,7 @@ export class ProductController {
 			if (data.composition) data.composition = JSON.parse(data.composition as string);
 			if (data.careInstructions) data.careInstructions = JSON.parse(data.careInstructions as string);
 
-			const newProduct = await ProductService.createProduct(data, files);
+			const newProduct = await ProductService.createProduct(req.models!, data, files, req.tenant?.slug);
 			res.status(201).json(newProduct);
 		} catch (error) {
 			next(error);
@@ -91,12 +94,12 @@ export class ProductController {
 	}
 
 	// PUT /api/products/:id - Actualizar un producto completo
-	static async updateProduct(req: Request, res: Response, next: NextFunction): Promise<void> {
+	static async updateProduct(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
 			const { id } = req.params;
 			const updateData = req.body;
 
-			const product = await ProductService.simpleUpdateProduct(id, updateData);
+			const product = await ProductService.simpleUpdateProduct(req.models!, id, updateData);
 
 			res.status(200).json({
 				success: true,
@@ -109,12 +112,12 @@ export class ProductController {
 	}
 
 	// PATCH /api/products/:id - Actualizar parcialmente un producto
-	static async patchProduct(req: Request, res: Response, next: NextFunction): Promise<void> {
+	static async patchProduct(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
 			const id = req.params.id;
 			const data = req.body;
 			const files = req.files as Express.Multer.File[];
-			const updatedProduct = await ProductService.updateProductById(id, data, files);
+			const updatedProduct = await ProductService.updateProductById(req.models!, id, data, files, req.tenant?.slug);
 
 			res.status(200).json(updatedProduct);
 		} catch (error) {
@@ -123,10 +126,10 @@ export class ProductController {
 	}
 
 	// DELETE /api/products/:id - Eliminar un producto
-	static async deleteProduct(req: Request, res: Response, next: NextFunction): Promise<void> {
+	static async deleteProduct(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
 			const { id } = req.params;
-			const product = await ProductService.deleteProduct(id);
+			const product = await ProductService.deleteProduct(req.models!, id);
 
 			res.status(200).json({
 				success: true,
@@ -139,14 +142,14 @@ export class ProductController {
 	}
 
 	// GET /api/products/search - Buscar productos
-	static async searchProducts(req: Request, res: Response, next: NextFunction): Promise<void> {
+	static async searchProducts(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
 			const { q, minPrice, maxPrice, minRating, suggestions } = req.query;
 			const productType = req.query.type as string | undefined;
 
 			// if suggestions is true, return only brand and model matches without pagination
 			if (suggestions) {
-				const products = await ProductService.getSearchSuggestions(q as string, 10, productType);
+				const products = await ProductService.getSearchSuggestions(req.models!, q as string, 10, productType);
 				res.status(200).json(products);
 				return;
 			}
@@ -154,7 +157,7 @@ export class ProductController {
 			const page = parseInt(req.query.page as string) || 1;
 			const limit = parseInt(req.query.limit as string) || 10;
 
-			const result = await ProductService.searchProducts({
+			const result = await ProductService.searchProducts(req.models!, {
 				q: q as string,
 				minPrice: minPrice ? parseFloat(minPrice as string) : undefined,
 				maxPrice: maxPrice ? parseFloat(maxPrice as string) : undefined,
@@ -172,7 +175,7 @@ export class ProductController {
 	}
 
 	// POST /api/products/calculate-prices - Calcular precios antes de guardar
-	static async calculatePrice(req: Request, res: Response, next: NextFunction): Promise<void> {
+	static async calculatePrice(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
 			const { costPrice } = req.body;
 			const { venta } = await getDolar();

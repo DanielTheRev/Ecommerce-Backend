@@ -1,10 +1,11 @@
 import { AuthService } from '@/services/auth.service';
-import { NextFunction, Request, Response } from 'express';
+import { NextFunction, Response } from 'express';
 import jwt from 'jsonwebtoken';
-import { ISecureUser, IUser } from '@/interfaces/user.interface';
+import { ISecureUser } from '@/interfaces/user.interface';
 import { UserService } from '@/services/user.service';
 import { AuthProvider, ILoginUserWithGoogle } from '@/interfaces/auth.interface';
 import { AppError } from '@/errors/app.error';
+import { AuthRequest } from '@/middleware/auth';
 
 /* Function to send response with token */
 const sendTokenResponse = (statusCode: number, res: Response, user: ISecureUser) => {
@@ -25,28 +26,26 @@ const sendTokenResponse = (statusCode: number, res: Response, user: ISecureUser)
 // @desc    Iniciar sesión con google
 // @route   POST /api/auth/login/google
 // @access  Public
-export const loginUser = async (req: Request, res: Response, next: NextFunction) => {
+export const loginUser = async (req: AuthRequest, res: Response, next: NextFunction) => {
 	const { provider, token: googleToken, email, password } = req.body as ILoginUserWithGoogle;
 
 	try {
-		const user = await AuthService.loginUserWith(provider, googleToken, {
+		const user = await AuthService.loginUserWith(req.models!, provider, googleToken, {
 			email,
 			password
 		});
-		console.log('USUARIO ENVIADO');
-		console.log(user);
 		return sendTokenResponse(201, res, user as unknown as ISecureUser);
 	} catch (error) {
 		return next(error);
 	}
 };
 
-export const LoginAdmin = async (req: Request, res: Response, next: NextFunction) => {
+export const LoginAdmin = async (req: AuthRequest, res: Response, next: NextFunction) => {
 	const data = req.body as { email: string; password: string };
 	const { email, password } = data;
 
 	try {
-		const user = await AuthService.loginUserWith(AuthProvider.Email, '', {
+		const user = await AuthService.loginUserWith(req.models!, AuthProvider.Email, '', {
 			email,
 			password
 		});
@@ -55,16 +54,16 @@ export const LoginAdmin = async (req: Request, res: Response, next: NextFunction
 		return next(error);
 	}
 };
+
 // @desc get user profile
 // @route GET /api/auth/getUser
-export const getUserProfile = async (req: Request, res: Response) => {
+export const getUserProfile = async (req: AuthRequest, res: Response) => {
 	const { token_b: token } = req.cookies as { token_b: string };
 
 	if (!token) return res.status(401).json({ message: 'no token provided' });
 	try {
 		const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userID: string };
-		console.log(decoded);
-		const user = await UserService.getUserByID(decoded.userID);
+		const user = await UserService.getUserByID(req.models!, decoded.userID);
 		if (!user) return res.status(404).json({ message: 'User not found' });
 		return res.json(user);
 	} catch (error) {
@@ -76,7 +75,7 @@ export const getUserProfile = async (req: Request, res: Response) => {
 // @desc    Cerrar sesión
 // @route   POST /api/auth/logout
 // @access  Private
-export const logout = async (req: Request, res: Response) => {
+export const logout = async (req: AuthRequest, res: Response) => {
 	try {
 		res.cookie('token_b', 'none', AuthService.cookieOptions);
 

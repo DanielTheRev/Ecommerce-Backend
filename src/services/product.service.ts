@@ -1,9 +1,7 @@
 import { AppError } from '@/errors/app.error';
 import { paginate } from '@/utils/pagination.util';
 import { IProduct, IProductCreateDTO, IProductUpdateDTO } from '@/interfaces/product.interface';
-import { Product } from '@/models/Product.model';
-import { TechProduct } from '@/models/discriminators/TechProduct.discriminator';
-import { ClothingProduct } from '@/models/discriminators/ClothingProduct.discriminator';
+import { TenantModels } from '@/config/modelRegistry';
 import slugify from 'slugify';
 import { getDolar } from './dolar.service';
 import { PaymentService } from './Payment.service';
@@ -26,23 +24,21 @@ export class ProductService {
 
 	/**
 	 * Retorna el modelo correcto según el tipo de producto.
-	 * - 'tech' → TechProduct (solo productos de tecnología)
-	 * - 'clothing' → ClothingProduct (solo productos de ropa)
-	 * - undefined → Product (TODOS los productos)
+	 * MULTI-TENANT: Usa los modelos registrados en la conexión del tenant.
 	 */
-	private static getModel(type?: string): any {
+	private static getModel(models: TenantModels, type?: string): any {
 		switch (type) {
-			case 'tech': return TechProduct;
-			case 'clothing': return ClothingProduct;
-			default: return Product;
+			case 'tech': return models.TechProduct;
+			case 'clothing': return models.ClothingProduct;
+			default: return models.Product;
 		}
 	}
 
 	// ============ READ METHODS ============
 
-	static async getAllProducts(productType?: string): Promise<IProduct[]> {
+	static async getAllProducts(models: TenantModels, productType?: string): Promise<IProduct[]> {
 		try {
-			const Model = this.getModel(productType);
+			const Model = this.getModel(models, productType);
 			const products = (await Model.find().lean()) as unknown as IProduct[];
 			return products;
 		} catch (error) {
@@ -51,9 +47,9 @@ export class ProductService {
 		}
 	}
 
-	static async getProductsWCompletePrices(productType?: string): Promise<IProduct[]> {
+	static async getProductsWCompletePrices(models: TenantModels, productType?: string): Promise<IProduct[]> {
 		try {
-			const Model = this.getModel(productType);
+			const Model = this.getModel(models, productType);
 			const products = await Model.find()
 				.select('+prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.earnings')
 				.lean() as unknown as IProduct[];
@@ -64,9 +60,9 @@ export class ProductService {
 		}
 	}
 
-	static async getProductWCompletePrices(id: string): Promise<IProduct> {
+	static async getProductWCompletePrices(models: TenantModels, id: string): Promise<IProduct> {
 		try {
-			const product = await Product.findById(id)
+			const product = await models.Product.findById(id)
 				.select('+prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas')
 				.lean() as unknown as IProduct;
 			return product;
@@ -76,9 +72,9 @@ export class ProductService {
 		}
 	}
 
-	static async getProductById(id: string): Promise<IProduct> {
+	static async getProductById(models: TenantModels, id: string): Promise<IProduct> {
 		try {
-			const product = (await Product.findById(id).lean()) as unknown as IProduct;
+			const product = (await models.Product.findById(id).lean()) as unknown as IProduct;
 			if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
 			return product;
 		} catch (error) {
@@ -87,9 +83,9 @@ export class ProductService {
 		}
 	}
 
-	static async getProductsByIds(ids: string[]): Promise<IProduct[]> {
+	static async getProductsByIds(models: TenantModels, ids: string[]): Promise<IProduct[]> {
 		try {
-			const products = (await Product.find({
+			const products = (await models.Product.find({
 				_id: { $in: ids }
 			}).select('+prices.costPrice').lean()) as unknown as IProduct[];
 			if (products.length === 0)
@@ -111,9 +107,9 @@ export class ProductService {
 		}
 	}
 
-	static async getPaginatedProducts(page: number = 1, limit: number = 20, productType?: string) {
+	static async getPaginatedProducts(models: TenantModels, page: number = 1, limit: number = 20, productType?: string) {
 		try {
-			const Model = this.getModel(productType);
+			const Model = this.getModel(models, productType);
 			const result = await paginate(Model, {}, {
 				page,
 				limit,
@@ -126,9 +122,25 @@ export class ProductService {
 		}
 	}
 
-	static async getProductBySlug(slug: string): Promise<IProduct> {
+	static async getPaginatedProductsWCompletePrices(models: TenantModels, page: number = 1, limit: number = 10, productType?: string) {
 		try {
-			const product = (await Product.findOne({ slug }).lean()) as unknown as IProduct;
+			const Model = this.getModel(models, productType);
+			const result = await paginate(Model, {}, {
+				page,
+				limit,
+				sort: { 'prices.efectivo_transferencia': -1 },
+				select: '+prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.earnings'
+			});
+			return result;
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError('Failed to fetch paginated products', 'Error al obtener los productos', 500);
+		}
+	}
+
+	static async getProductBySlug(models: TenantModels, slug: string): Promise<IProduct> {
+		try {
+			const product = (await models.Product.findOne({ slug }).lean()) as unknown as IProduct;
 			if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
 			return product;
 		} catch (error) {
@@ -137,9 +149,9 @@ export class ProductService {
 		}
 	}
 
-	static async getSearchSuggestions(queryText: string, limit: number = 10, productType?: string): Promise<IProduct[]> {
+	static async getSearchSuggestions(models: TenantModels, queryText: string, limit: number = 10, productType?: string): Promise<IProduct[]> {
 		try {
-			const Model = this.getModel(productType);
+			const Model = this.getModel(models, productType);
 			const query = {
 				$or: [
 					{ brand: { $regex: queryText, $options: 'i' } },
@@ -157,6 +169,7 @@ export class ProductService {
 	}
 
 	static async searchProducts(
+		models: TenantModels,
 		filters: {
 			q?: string;
 			minPrice?: number;
@@ -168,7 +181,7 @@ export class ProductService {
 		productType?: string
 	) {
 		try {
-			const Model = this.getModel(productType);
+			const Model = this.getModel(models, productType);
 			const query: any = {};
 
 			if (filters.q) {
@@ -204,7 +217,7 @@ export class ProductService {
 
 	// ============ CREATE ============
 
-	static async createProduct(data: IProductCreateDTO, imagesDTO: Express.Multer.File[]): Promise<IProduct> {
+	static async createProduct(models: TenantModels, data: IProductCreateDTO, imagesDTO: Express.Multer.File[], tenantSlug: string = 'general'): Promise<IProduct> {
 		try {
 			const slug = this.generateSlug(data.brand, data.model);
 			const { venta } = await getDolar();
@@ -212,7 +225,8 @@ export class ProductService {
 			const prices = await PaymentService.CalculatePrices(
 				EcommercePaymentProviders.UALA,
 				data.price,
-				venta
+				venta,
+				models
 			);
 
 			if (imagesDTO.length === 0) throw new AppError('No images provided', 'No se proporcionaron imágenes', 400);
@@ -220,11 +234,10 @@ export class ProductService {
 				id: `${data.brand}-${data.model}`,
 				source: image
 			}));
-			// TODO mejorar la ruta de las images en cloudinary
-			const images = await ImageService.UploadImages(rawImages, 'electromix/product-images');
+			const images = await ImageService.UploadImages(rawImages, `${tenantSlug}/product-images`);
 
 			// Elegir modelo según el tipo de producto
-			const Model = this.getModel(data.productType);
+			const Model = this.getModel(models, data.productType);
 
 			// Campos comunes
 			const baseData: any = {
@@ -271,11 +284,11 @@ export class ProductService {
 
 	// ============ UPDATE ============
 
-	static async updateProductById(id: string, updateData: Partial<IProductUpdateDTO>, files: Express.Multer.File[]): Promise<IProduct> {
+	static async updateProductById(models: TenantModels, id: string, updateData: Partial<IProductUpdateDTO>, files: Express.Multer.File[], tenantSlug: string = 'general'): Promise<IProduct> {
 		try {
 			const imagesToDelete = JSON.parse((updateData.deletedImages || '[]') as string) as string[];
 
-			const product = await ProductService.getProductById(id);
+			const product = await ProductService.getProductById(models, id);
 
 			if (!product) {
 				throw new AppError('No product find by given id', 'Producto no encontrado', 404);
@@ -305,7 +318,7 @@ export class ProductService {
 					source: file
 				}));
 
-				const newImages = await ImageService.UploadImages(rawImages, 'electromix/product-images');
+				const newImages = await ImageService.UploadImages(rawImages, `${tenantSlug}/product-images`);
 				updateData.images = [...currentImages, ...newImages];
 			} else if (imagesToDelete.length > 0) {
 				updateData.images = currentImages;
@@ -322,7 +335,8 @@ export class ProductService {
 				const prices = await PaymentService.CalculatePrices(
 					EcommercePaymentProviders.UALA,
 					updateData.price,
-					venta
+					venta,
+					models
 				);
 				updateData.prices = prices;
 			};
@@ -336,7 +350,7 @@ export class ProductService {
 
 			const fieldsToSelect = Object.keys(updateData).join(' ') + (updateData.slug ? ' slug' : '');
 
-			const updatedProduct = await Product.findByIdAndUpdate(
+			const updatedProduct = await models.Product.findByIdAndUpdate(
 				id,
 				{ $set: updateData },
 				{
@@ -357,9 +371,9 @@ export class ProductService {
 		}
 	}
 
-	static async simpleUpdateProduct(id: string, updateData: IProductUpdateDTO): Promise<IProduct> {
+	static async simpleUpdateProduct(models: TenantModels, id: string, updateData: IProductUpdateDTO): Promise<IProduct> {
 		try {
-			const product = await Product.findByIdAndUpdate(id, updateData, {
+			const product = await models.Product.findByIdAndUpdate(id, updateData, {
 				new: true,
 				runValidators: true
 			}).lean() as unknown as IProduct;
@@ -374,9 +388,9 @@ export class ProductService {
 
 	// ============ DELETE ============
 
-	static async deleteProduct(id: string): Promise<IProduct> {
+	static async deleteProduct(models: TenantModels, id: string): Promise<IProduct> {
 		try {
-			const product = await Product.findByIdAndDelete(id).lean() as unknown as IProduct;
+			const product = await models.Product.findByIdAndDelete(id).lean() as unknown as IProduct;
 			if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
 			return product;
 		} catch (error) {
@@ -387,15 +401,13 @@ export class ProductService {
 
 	// ============ VARIANT STOCK MANAGEMENT ============
 
-	/**
-	 * Verifica que hay stock suficiente para cada variante solicitada
-	 */
 	static async verifyVariantStock(
+		models: TenantModels,
 		items: { productId: string; variantSku: string; quantity: number }[]
 	): Promise<boolean> {
 		try {
 			for (const item of items) {
-				const product = await Product.findById(item.productId).lean() as any;
+				const product = await models.Product.findById(item.productId).lean() as any;
 				if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
 
 				const variant = product.variants.find(
@@ -430,10 +442,8 @@ export class ProductService {
 		}
 	}
 
-	/**
-	 * Reduce el stock de variantes específicas usando bulkWrite + arrayFilters
-	 */
 	static async reduceVariantStock(
+		models: TenantModels,
 		items: { productId: string; variantSku: string; quantity: number }[]
 	): Promise<boolean> {
 		try {
@@ -453,7 +463,7 @@ export class ProductService {
 				}
 			}));
 
-			const result = await Product.bulkWrite(operations, { ordered: true });
+			const result = await models.Product.bulkWrite(operations, { ordered: true });
 
 			if (result.modifiedCount !== items.length) {
 				throw new AppError(
@@ -474,15 +484,13 @@ export class ProductService {
 		}
 	}
 
-	/**
-	 * Restaura el stock de variantes (ej: cuando se cancela una orden)
-	 */
 	static async restoreVariantStock(
+		models: TenantModels,
 		items: { product: any; variantSku: string; quantity: number }[]
 	) {
 		for (const item of items) {
 			try {
-				await Product.findOneAndUpdate(
+				await models.Product.findOneAndUpdate(
 					{ _id: item.product, 'variants.sku': item.variantSku },
 					{ $inc: { 'variants.$[elem].stock': item.quantity } },
 					{ arrayFilters: [{ 'elem.sku': item.variantSku }] }

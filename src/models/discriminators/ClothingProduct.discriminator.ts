@@ -34,4 +34,7 @@ const ClothingProductSchema = new Schema({
 	}
 });
 
+// Schema exportado para multi-tenancy (model registry)
+export { ClothingProductSchema };
+
 export const ClothingProduct = Product.discriminator('ClothingProduct', ClothingProductSchema);

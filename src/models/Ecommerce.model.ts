@@ -46,4 +46,7 @@ const EcommerceSchema = new Schema(
 
 // Hook removed to move logic to Service layer
 
+// Schema exportado para multi-tenancy (model registry)
+export { EcommerceSchema };
+
 export const EcommerceConfig = model('EcommerceConfig', EcommerceSchema);

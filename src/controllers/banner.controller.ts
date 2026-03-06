@@ -1,55 +1,55 @@
-import { Request, Response, NextFunction } from 'express';
+import { NextFunction, Response } from 'express';
 import { BannerService } from '@/services/banner.service';
+import { AuthRequest } from '@/middleware/auth';
 
 export class BannerController {
-  static async createBanner(req: Request, res: Response, next: NextFunction) {
+  static async createBanner(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const banner = await BannerService.createBanner(req.body);
+      const banner = await BannerService.createBanner(req.models!, req.body);
       return res.status(201).json(banner);
     } catch (error) {
       return next(error);
     }
   }
 
-  static async getAllBanners(req: Request, res: Response, next: NextFunction) {
+  static async getAllBanners(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      // If ?active=true is passed, return only active ones
       if (req.query.active === 'true') {
-        const banners = await BannerService.getActiveBanners();
+        const banners = await BannerService.getActiveBanners(req.models!);
         return res.status(200).json(banners);
       }
 
-      const banners = await BannerService.getAllBanners();
+      const banners = await BannerService.getAllBanners(req.models!);
       return res.status(200).json(banners);
     } catch (error) {
       return next(error);
     }
   }
 
-  static async getBannerById(req: Request, res: Response, next: NextFunction) {
+  static async getBannerById(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const banner = await BannerService.getBannerById(id);
+      const banner = await BannerService.getBannerById(req.models!, id);
       return res.status(200).json(banner);
     } catch (error) {
       return next(error);
     }
   }
 
-  static async updateBanner(req: Request, res: Response, next: NextFunction) {
+  static async updateBanner(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const banner = await BannerService.updateBanner(id, req.body);
+      const banner = await BannerService.updateBanner(req.models!, id, req.body);
       res.status(200).json(banner);
     } catch (error) {
       next(error);
     }
   }
 
-  static async deleteBanner(req: Request, res: Response, next: NextFunction) {
+  static async deleteBanner(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      await BannerService.deleteBanner(id);
+      await BannerService.deleteBanner(req.models!, id);
       res.status(200).json({
         success: true,
         message: 'Banner deleted successfully'

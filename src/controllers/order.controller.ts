@@ -28,10 +28,9 @@ export const ualaWebhook = async (req: AuthRequest, res: Response) => {
 	const id = req.query.id as string;
 
 	try {
-		await OrderService.confirmCardPayment(id, data.status);
+		await OrderService.confirmCardPayment(req.models!, id, data.status);
 	} catch (error) {
 		console.error('Error processing Uala webhook:', error);
-		// Return 200 even on error to acknowledge receipt to Uala
 	}
 	return res.sendStatus(200);
 };
@@ -43,7 +42,7 @@ export const createOrder = async (req: AuthRequest, res: Response, next: NextFun
 	}
 	try {
 		const userId = req.user._id;
-		const { order, extras } = await OrderService.createOrder(req.body as CreateOrderDTO, userId);
+		const { order, extras } = await OrderService.createOrder(req.models!, req.body as CreateOrderDTO, userId);
 		socketManager.notifyNewOrderToAdmins(order);
 
 		return res.status(201).json({
@@ -71,7 +70,7 @@ export const getUserOrders = async (req: AuthRequest, res: Response, next: NextF
 			page,
 			limit
 		};
-		const userOrders = await OrderService.getOrdersByUserId(user!._id as string, query);
+		const userOrders = await OrderService.getOrdersByUserId(req.models!, user!._id as string, query);
 		return res.json(userOrders);
 	} catch (error) {
 		return next(error);
@@ -88,7 +87,7 @@ export const getOrderById = async (req: AuthRequest, res: Response, next: NextFu
 			return res.status(401).json({ message: 'Usuario no autenticado' });
 		}
 
-		const order = await OrderService.getOrderById(id);
+		const order = await OrderService.getOrderById(req.models!, id);
 		// verify order ownership
 		if (order.user._id.toString() !== userId.toString()) {
 			return res.status(403).json({ message: 'No tienes permiso para ver esta orden' });
@@ -109,7 +108,7 @@ export const getOrderByIdAdmin = async (req: AuthRequest, res: Response, next: N
 			return res.status(401).json({ message: 'Usuario no autenticado' });
 		}
 
-		const order = await OrderService.getFullyOrderBy({ _id: id });
+		const order = await OrderService.getFullyOrderBy(req.models!, { _id: id });
 
 
 		return res.json(order);
@@ -122,7 +121,7 @@ export const getOrderByIdAdmin = async (req: AuthRequest, res: Response, next: N
 export const updatePaymentStatus = async (req: AuthRequest, res: Response, next: NextFunction) => {
 	const { orderID, status } = req.body as updatePaymentStatusDTO;
 	try {
-		const order = await OrderService.updatePaymentStatus({ orderID, status });
+		const order = await OrderService.updatePaymentStatus(req.models!, { orderID, status });
 
 		// Notificar al cliente
 		socketManager.notifyClient(order.user._id.toString(), {
@@ -142,7 +141,7 @@ export const updatePaymentStatus = async (req: AuthRequest, res: Response, next:
 export const updateShippingStatus = async (req: AuthRequest, res: Response, next: NextFunction) => {
 	const { orderID, status } = req.body as updateShippingStatusDTO;
 	try {
-		const order = await OrderService.updateOrderShippingStatus({ orderID, status });
+		const order = await OrderService.updateOrderShippingStatus(req.models!, { orderID, status });
 		socketManager.notifyClient(order.user._id.toString(), {
 			type: NotificationType.ORDER_STATUS_CHANGED,
 			title: 'Estado de Envío Actualizado',
@@ -167,7 +166,7 @@ export const cancelOrder = async (req: AuthRequest, res: Response, next: NextFun
 		const userId = req.user!.id;
 		const role = req.user!.role;
 
-		const updatedOrder = await OrderService.cancelOrder(id, userId, role);
+		const updatedOrder = await OrderService.cancelOrder(req.models!, id, userId, role);
 
 		return res.json({
 			message: 'Orden cancelada exitosamente',
@@ -191,7 +190,7 @@ export const getAllOrders = async (req: AuthRequest, res: Response, next: NextFu
 			page,
 			limit
 		};
-		const response = await OrderService.getAllOrders(req.user!.role, query);
+		const response = await OrderService.getAllOrders(req.models!, req.user!.role, query);
 
 		return res.json(response);
 	} catch (error) {
@@ -203,7 +202,7 @@ export const getAllOrders = async (req: AuthRequest, res: Response, next: NextFu
 export const getOrderStats = async (req: AuthRequest, res: Response, next: NextFunction) => {
 	try {
 		const role = req.user!.role;
-		const data = await OrderService.getOrderStats(role);
+		const data = await OrderService.getOrderStats(req.models!, role);
 
 		return res.json({
 			message: 'Estadísticas obtenidas exitosamente',

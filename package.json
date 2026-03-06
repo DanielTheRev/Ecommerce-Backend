@@ -1,7 +1,7 @@
 {
-	"name": "electro-hub-backend",
-	"version": "1.0.0",
-	"description": "Backend para Electro Hub con Node.js, TypeScript, Express y Mongoose",
+	"name": "nexocommerce-backend",
+	"version": "2.0.0",
+	"description": "NexoCommerce — Plataforma multi-tenant SaaS para ecommerce",
 	"main": "dist/index.js",
 	"scripts": {
 		"dev": "nodemon src/index.ts",

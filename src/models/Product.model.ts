@@ -151,4 +151,7 @@ BaseProductSchema.index({ brand: 1, model: 1 });
 BaseProductSchema.index({ productType: 1 });
 BaseProductSchema.index({ 'variants.sku': 1 }, { unique: true, sparse: true });
 
+// Schema exportado para multi-tenancy (model registry)
+export { BaseProductSchema };
+
 export const Product = mongoose.model<IProductDocument>('Product', BaseProductSchema);

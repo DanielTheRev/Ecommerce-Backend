@@ -68,4 +68,7 @@ userSchema.methods.comparePassword = async function (candidatePassword: string):
 
 userSchema.index({ isActive: 1 });
 
+// Schema exportado para multi-tenancy (model registry)
+export { userSchema };
+
 export const User = model<IUser>('User', userSchema);

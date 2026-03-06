@@ -1,18 +1,19 @@
 import { EcommercePaymentProviders, IEcommerceUalaCredentials } from "@/interfaces/ecommerce.interface";
 import { EcommerceService } from "./ecommerce.service";
 import { UalaTokenResponse } from "@/interfaces/ualaWebhook.interface";
+import { TenantModels } from "@/config/modelRegistry";
 
 export class UalaService {
   private token: string | null = null;
   private url = 'https://auth.stage.developers.ar.ua.la/v2/api';
 
-  constructor() {
+  constructor(private models: TenantModels) {
     this.init();
   }
 
   private async init() {
     try {
-      const credentials = await EcommerceService.getCredentials(EcommercePaymentProviders.UALA) as IEcommerceUalaCredentials;
+      const credentials = await EcommerceService.getCredentials(this.models, EcommercePaymentProviders.UALA) as IEcommerceUalaCredentials;
       const options = {
         method: 'POST',
         headers: {
@@ -29,7 +30,4 @@ export class UalaService {
       process.exit(1);
     }
   }
-
-
-
 }

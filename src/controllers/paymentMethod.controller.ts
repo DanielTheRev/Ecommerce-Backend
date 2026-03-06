@@ -1,11 +1,12 @@
 import { PaymentMethodService } from '@/services/paymentMethod.service';
-import { NextFunction, Request, Response } from 'express';
+import { NextFunction, Response } from 'express';
+import { AuthRequest } from '@/middleware/auth';
 
 export class PaymentMethodController {
 	// Obtener todos los métodos de pago
-	static async getAllPaymentMethods(req: Request, res: Response, next: NextFunction) {
+	static async getAllPaymentMethods(req: AuthRequest, res: Response, next: NextFunction) {
 		try {
-			const paymentMethods = await PaymentMethodService.getPaymentMethods();
+			const paymentMethods = await PaymentMethodService.getPaymentMethods(req.models!);
 			return res.json(paymentMethods);
 		} catch (error) {
 			return next(error)
@@ -13,9 +14,9 @@ export class PaymentMethodController {
 	}
 
 	// Obtener métodos de pago activos
-	static async getActivePaymentMethods(req: Request, res: Response, next: NextFunction) {
+	static async getActivePaymentMethods(req: AuthRequest, res: Response, next: NextFunction) {
 		try {
-			const paymentMethods = await PaymentMethodService.getPaymentMethodsBy({ isActive: true });
+			const paymentMethods = await PaymentMethodService.getPaymentMethodsBy(req.models!, { isActive: true });
 			return res.json(paymentMethods);
 		} catch (error) {
 			return next(error)
@@ -23,10 +24,10 @@ export class PaymentMethodController {
 	}
 
 	// Obtener método de pago por ID
-	static async getPaymentMethodById(req: Request, res: Response, next: NextFunction) {
+	static async getPaymentMethodById(req: AuthRequest, res: Response, next: NextFunction) {
 		try {
 			const { id } = req.params;
-			const paymentMethod = await PaymentMethodService.getPaymentMethodById(id);
+			const paymentMethod = await PaymentMethodService.getPaymentMethodById(req.models!, id);
 			return res.json(paymentMethod);
 		} catch (error) {
 			return next(error)
@@ -34,10 +35,10 @@ export class PaymentMethodController {
 	}
 
 	// Crear nuevo método de pago (solo admin)
-	static async createPaymentMethod(req: Request, res: Response, next: NextFunction) {
+	static async createPaymentMethod(req: AuthRequest, res: Response, next: NextFunction) {
 		try {
 			const data = req.body;
-			const paymentMethod = await PaymentMethodService.create(data);
+			const paymentMethod = await PaymentMethodService.create(req.models!, data);
 
 			return res.status(201).json(paymentMethod);
 		} catch (error) {
@@ -46,11 +47,11 @@ export class PaymentMethodController {
 	}
 
 	// Actualizar método de pago (solo admin)
-	static async updatePaymentMethod(req: Request, res: Response, next: NextFunction) {
+	static async updatePaymentMethod(req: AuthRequest, res: Response, next: NextFunction) {
 		try {
 			const { id } = req.params;
 			const data = req.body;
-			const paymentMethod = await PaymentMethodService.update(id, data);
+			const paymentMethod = await PaymentMethodService.update(req.models!, id, data);
 
 			return res.json(paymentMethod);
 		} catch (error) {
@@ -59,11 +60,11 @@ export class PaymentMethodController {
 	}
 
 	// Eliminar método de pago (solo admin)
-	static async deletePaymentMethod(req: Request, res: Response, next: NextFunction) {
+	static async deletePaymentMethod(req: AuthRequest, res: Response, next: NextFunction) {
 
 		try {
 			const { id } = req.params;
-			await PaymentMethodService.delete(id);
+			await PaymentMethodService.delete(req.models!, id);
 
 			return res.json({
 				success: true,
@@ -75,4 +76,3 @@ export class PaymentMethodController {
 	}
 
 }
-

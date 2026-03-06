@@ -1,11 +1,11 @@
 import { AppError } from '@/errors/app.error';
 import { IBanner } from '@/interfaces/home.interface';
-import { Banner } from '@/models/Banner.model';
+import { TenantModels } from '@/config/modelRegistry';
 
 export class BannerService {
-  static async createBanner(data: IBanner): Promise<IBanner> {
+  static async createBanner(models: TenantModels, data: IBanner): Promise<IBanner> {
     try {
-      const banner = await Banner.create(data);
+      const banner = await models.Banner.create(data);
       return banner;
     } catch (error: any) {
       console.log(error);
@@ -16,25 +16,25 @@ export class BannerService {
     }
   }
 
-  static async getAllBanners(): Promise<IBanner[]> {
+  static async getAllBanners(models: TenantModels): Promise<IBanner[]> {
     try {
-      return await Banner.find().sort({ order: 1 });
+      return await models.Banner.find().sort({ order: 1 });
     } catch (error) {
       throw new AppError('Error fetching banners', 'Error al obtener banners', 500);
     }
   }
 
-  static async getActiveBanners(): Promise<IBanner[]> {
+  static async getActiveBanners(models: TenantModels): Promise<IBanner[]> {
     try {
-      return await Banner.find({ isActive: true }).sort({ order: 1 });
+      return await models.Banner.find({ isActive: true }).sort({ order: 1 });
     } catch (error) {
       throw new AppError('Error fetching active banners', 'Error al obtener banners activos', 500);
     }
   }
 
-  static async getBannerById(id: string): Promise<IBanner> {
+  static async getBannerById(models: TenantModels, id: string): Promise<IBanner> {
     try {
-      const banner = await Banner.findById(id);
+      const banner = await models.Banner.findById(id);
       if (!banner) throw new AppError('Banner not found', 'Banner no encontrado', 404);
       return banner;
     } catch (error) {
@@ -43,11 +43,11 @@ export class BannerService {
     }
   }
 
-  static async updateBanner(id: string, data: Partial<IBanner>): Promise<IBanner> {
+  static async updateBanner(models: TenantModels, id: string, data: Partial<IBanner>): Promise<IBanner> {
     try {
       if (!id || !data) throw new AppError('Banner not found', 'Banner no encontrado', 404);
       const fieldsToSelect = Object.keys(data).join(' ');
-      const banner = await Banner.findByIdAndUpdate(id, data, { new: true, runValidators: true, select: fieldsToSelect }).lean();
+      const banner = await models.Banner.findByIdAndUpdate(id, data, { new: true, runValidators: true, select: fieldsToSelect }).lean();
       if (!banner) throw new AppError('Banner not found', 'Banner no encontrado', 404);
       return banner;
     } catch (error) {
@@ -56,9 +56,9 @@ export class BannerService {
     }
   }
 
-  static async deleteBanner(id: string): Promise<IBanner> {
+  static async deleteBanner(models: TenantModels, id: string): Promise<IBanner> {
     try {
-      const banner = await Banner.findByIdAndDelete(id);
+      const banner = await models.Banner.findByIdAndDelete(id);
       if (!banner) throw new AppError('Banner not found', 'Banner no encontrado', 404);
       return banner;
     } catch (error) {

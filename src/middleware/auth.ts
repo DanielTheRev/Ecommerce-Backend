@@ -1,11 +1,10 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { User } from '../models/User.model';
 import { IUser } from '@/interfaces/user.interface';
 import { AppError } from '@/errors/app.error';
-import { UserService } from '@/services/user.service';
+import { TenantRequest } from './tenant';
 
-export interface AuthRequest extends Request {
+export interface AuthRequest extends TenantRequest {
 	user?: IUser;
 }
 
@@ -17,12 +16,9 @@ interface JwtPayload {
 
 // Middleware para proteger rutas
 /**
- * Protect routes from unauthenticated users
- * @param {AuthRequest} req - Request
- * @param {Response} res - Response
- * @param {NextFunction} next - Next function
- * @returns {Promise<Response | void>} - Response or void
-*/
+ * Protect routes from unauthenticated users.
+ * MULTI-TENANT: Usa req.models.User (de la DB del tenant) para buscar el usuario.
+ */
 export const protect = async (
 	req: AuthRequest,
 	res: Response,
@@ -34,8 +30,13 @@ export const protect = async (
 		if (!token) throw new AppError('Token not found', 'No se proporciono token', 401);
 		// Verificar token
 		const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
-		// Buscar usuario actual
-		const user = await UserService.getUserByID(decoded.userID);
+
+		// MULTI-TENANT: Buscar usuario en la DB del tenant
+		if (!req.models) {
+			throw new AppError('Tenant not resolved', 'Tenant no resuelto antes de autenticación', 500);
+		}
+
+		const user = await req.models.User.findById(decoded.userID).lean() as IUser;
 		if (!user) throw new AppError('User not found', 'Usuario no encontrado', 401);
 
 		// add user to every request
@@ -72,20 +73,12 @@ export const authorize = (...roles: string[]) => {
 
 /**
  * Middleware para verificar si el usuario es admin
- * @param {AuthRequest} req - Request
- * @param {Response} res - Response
- * @param {NextFunction} next - Next function
- * @returns {Promise<Response | void>} - Response or void
-*/
+ */
 export const adminOnly = authorize('admin');
 
 /**
  * Middleware para verificar si el usuario es propietario del recurso o admin
- * @param {AuthRequest} req - Request
- * @param {Response} res - Response
- * @param {NextFunction} next - Next function
- * @returns {Promise<Response | void>} - Response or void
-*/
+ */
 export const ownerOrAdmin = (resourceUserIDField: string = 'userID') => {
 	return (req: AuthRequest, res: Response, next: NextFunction) => {
 		if (!req.user) {
@@ -110,12 +103,9 @@ export const ownerOrAdmin = (resourceUserIDField: string = 'userID') => {
 };
 
 /**
- * Middleware opcional para obtener usuario si está autenticado
- * @param {AuthRequest} req - Request
- * @param {Response} res - Response
- * @param {NextFunction} next - Next function
- * @returns {Promise<Response | void>} - Response or void
-*/
+ * Middleware opcional para obtener usuario si está autenticado.
+ * MULTI-TENANT: Usa req.models.User.
+ */
 export const optionalAuth = async (req: AuthRequest, res: Response, next: NextFunction) => {
 	try {
 		let token: string | undefined;
@@ -125,8 +115,8 @@ export const optionalAuth = async (req: AuthRequest, res: Response, next: NextFu
 			token = req.headers.authorization.split(' ')[1];
 		}
 		// Verificar token en cookies
-		else if (req.cookies.token) {
-			token = req.cookies.token;
+		else if (req.cookies.token_b) {
+			token = req.cookies.token_b;
 		}
 
 		// Si no hay token, continuar sin usuario
@@ -134,12 +124,16 @@ export const optionalAuth = async (req: AuthRequest, res: Response, next: NextFu
 			return next();
 		}
 
+		if (!req.models) {
+			return next(); // Sin tenant resuelto, no podemos buscar el usuario
+		}
+
 		try {
 			// Verificar token
 			const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
 
-			// Buscar usuario actual
-			const user = await User.findById(decoded.userID);
+			// MULTI-TENANT: Buscar usuario en la DB del tenant
+			const user = await req.models.User.findById(decoded.userID).lean() as IUser;
 
 			if (user && user.isActive) {
 				req.user = user;

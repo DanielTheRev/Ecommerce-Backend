@@ -1,12 +1,11 @@
 import { AppError } from '@/errors/app.error';
 import { IUser, Role } from '@/interfaces/user.interface';
-
-import { User } from '@/models/User.model';
+import { TenantModels } from '@/config/modelRegistry';
 
 export class UserService {
-	static async getUserByGoogleID(id: string) {
+	static async getUserByGoogleID(models: TenantModels, id: string) {
 		try {
-			const user = (await User.findOne({ googleID: id }).lean()) as IUser;
+			const user = (await models.User.findOne({ googleID: id }).lean()) as IUser;
 			return user;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
@@ -18,11 +17,9 @@ export class UserService {
 		}
 	}
 
-	static async getUserByID(id: string) {
-		console.log('BUSCANDO USUARIO POR ID');
-		console.log(id);
+	static async getUserByID(models: TenantModels, id: string) {
 		try {
-			const user = (await User.findById(id).lean()) as IUser;
+			const user = (await models.User.findById(id).lean()) as IUser;
 			if (!user) throw new AppError('User not found', 'Usuario no encontrado', 404);
 			return user;
 		} catch (error) {
@@ -35,9 +32,9 @@ export class UserService {
 		}
 	}
 
-	static async getUserByEmail(email: string) {
+	static async getUserByEmail(models: TenantModels, email: string) {
 		try {
-			const user = await User.findOne({ email }).select('+password').exec();
+			const user = await models.User.findOne({ email }).select('+password').exec();
 			if (!user) throw new AppError('User not found', 'Usuario no encontrado', 404);
 			return user;
 		} catch (error) {
@@ -50,9 +47,9 @@ export class UserService {
 		}
 	}
 
-	static async createUser(userData: Partial<IUser>) {
+	static async createUser(models: TenantModels, userData: Partial<IUser>) {
 		try {
-			const user = await User.create({
+			const user = await models.User.create({
 				name: userData.name,
 				email: userData.email,
 				role: userData.role || Role.user,
