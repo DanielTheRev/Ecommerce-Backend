@@ -1,7 +1,7 @@
 import { AppError } from '@/errors/app.error';
 import {
 	CreateOrderDTO,
-	IOrder,
+	IOrderDocument,
 	OrderStatus,
 	PaymentStatus,
 	updatePaymentStatusDTO,
@@ -25,12 +25,12 @@ export class OrderService {
 		return `REV-${shortId}`;
 	}
 
-	static async getOrderById(models: TenantModels, id: string) {
+	static async getOrderById(models: TenantModels, id: string): Promise<IOrderDocument> {
 		try {
 			if (!id) throw new AppError('Order ID is required', 'El ID de la orden es requerido', 400);
 			const order = await models.Order.findById(id).populate([
 				{ path: 'items.product' },
-			]).lean() as IOrder;
+			]) as IOrderDocument;
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
 			return order;
 		} catch (error) {
@@ -43,12 +43,12 @@ export class OrderService {
 		}
 	}
 
-	static async getFullyOrderBy(models: TenantModels, query: FilterQuery<IOrder>) {
+	static async getFullyOrderBy(models: TenantModels, query: FilterQuery<IOrderDocument>) {
 		try {
 			const order = await models.Order.findOne(query).populate([
 				{ path: 'items.product', select: '+prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.earnings' },
 				{ path: 'user', select: 'name email profilePhoto role' }
-			]) as IOrder;
+			]) as IOrderDocument;
 
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
 			return order;
@@ -62,11 +62,11 @@ export class OrderService {
 		}
 	}
 
-	static async getOrderByIdFullyPopulated(models: TenantModels, id: string) {
+	static async getOrderByIdFullyPopulated(models: TenantModels, id: string): Promise<IOrderDocument> {
 		try {
 			const order = await models.Order.findById(id)
 				.populate('user', 'name email')
-				.populate('items.product', 'name price images');
+				.populate('items.product', 'name price images') as IOrderDocument;
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
 			return order;
 		} catch (error) {
@@ -386,7 +386,7 @@ export class OrderService {
 				.populate([
 					{ path: 'user', select: 'name email profilePhoto role' },
 					{ path: 'items.product', select: 'name price images description category' }
-				]).lean() as IOrder;
+				]) as IOrderDocument;
 
 			if (!order) {
 				throw new AppError('Order not found', 'Orden no encontrada', 404);

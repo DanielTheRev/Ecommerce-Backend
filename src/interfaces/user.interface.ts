@@ -19,7 +19,7 @@ export interface ISecureUser {
 }
 
 /* user interfaces */
-export interface IUser extends Document {
+export interface IUser {
 	_id: string;
 	name: string;
 	email: string;

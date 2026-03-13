@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import { ShippingOption, ShippingType } from '../models/ShippingOption.model';
+import { ShippingOption } from '../models/ShippingOption.model';
+import { ShippingType } from '../interfaces/shippingMethods.interface';
 
 // Cargar variables de entorno
 dotenv.config();

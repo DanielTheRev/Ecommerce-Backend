@@ -1,5 +1,5 @@
-import { HeroSeeder } from '../services/hero.seeder';
-import { connectDB } from '../config/database';
+import { HeroSeeder } from './hero.seeder';
+import { getModelsForConnection } from '../config/modelRegistry';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 
@@ -7,8 +7,10 @@ dotenv.config();
 
 const runSeed = async () => {
     try {
-        await connectDB();
-        await HeroSeeder.seed();
+        const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/vura_store_db';
+        await mongoose.connect(mongoURI);
+        const models = getModelsForConnection(mongoose.connection);
+        await HeroSeeder.seed(models);
         console.log('Done!');
         process.exit(0);
     } catch (error) {

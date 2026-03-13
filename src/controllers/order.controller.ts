@@ -163,7 +163,7 @@ export const updateShippingStatus = async (req: AuthRequest, res: Response, next
 export const cancelOrder = async (req: AuthRequest, res: Response, next: NextFunction) => {
 	try {
 		const { id } = req.params;
-		const userId = req.user!.id;
+		const userId = req.user!._id;
 		const role = req.user!.role;
 
 		const updatedOrder = await OrderService.cancelOrder(req.models!, id, userId, role);

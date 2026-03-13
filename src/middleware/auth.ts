@@ -133,7 +133,7 @@ export const optionalAuth = async (req: AuthRequest, res: Response, next: NextFu
 			const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
 
 			// MULTI-TENANT: Buscar usuario en la DB del tenant
-			const user = await req.models.User.findById(decoded.userID).lean() as IUser;
+			const user = await req.models.User.findById(decoded.userID).lean() as any as IUser;
 
 			if (user && user.isActive) {
 				req.user = user;

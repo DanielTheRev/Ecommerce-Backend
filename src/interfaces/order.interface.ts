@@ -102,7 +102,8 @@ export interface IPaymentInfo {
 }
 
 // Interface principal de la orden
-export interface IOrder extends Document {
+export interface IOrder {
+	_id: string; // Used when lean()
 	user: mongoose.Types.ObjectId;
 	items: IOrderItem[];
 	history: StatusEntry[];
@@ -118,7 +119,11 @@ export interface IOrder extends Document {
 	updatedAt: Date;
 }
 
+export interface IOrderDocument extends Document, Omit<IOrder, '_id'> {
+	_id: mongoose.Types.ObjectId;
+}
+
 // Interface para el modelo con métodos estáticos
-export interface IOrderModel extends mongoose.Model<IOrder> {
-	findByUser(userId: string): Promise<IOrder[]>;
+export interface IOrderModel extends mongoose.Model<IOrderDocument> {
+	findByUser(userId: string): Promise<IOrderDocument[]>;
 }

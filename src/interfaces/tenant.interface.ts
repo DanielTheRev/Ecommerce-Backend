@@ -6,7 +6,7 @@ export enum TenantPlan {
 	premium = 'premium'
 }
 
-export interface ITenant extends Document {
+export interface ITenant {
 	_id: string;
 	slug: string;
 	name: string;

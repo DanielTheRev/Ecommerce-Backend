@@ -1,10 +1,11 @@
-import { HeroService } from './hero.service';
+import { HeroService } from '@/services/hero.service';
 import { IHeroSlide } from '@/interfaces/home.interface';
+import { TenantModels } from '@/config/modelRegistry';
 
 export class HeroSeeder {
-    static async seed() {
+    static async seed(models: TenantModels) {
         // Check if any slides exist
-        const existing = await HeroService.getAll();
+        const existing = await HeroService.getAll(models);
         if (existing.length > 0) return;
 
         console.log('🌱 Seeding Hero Slides...');
@@ -19,7 +20,7 @@ export class HeroSeeder {
             isActive: true
         };
 
-        await HeroService.create(initialSlide);
+        await HeroService.create(models, initialSlide);
         console.log('✅ Hero Slides seeded.');
     }
 }

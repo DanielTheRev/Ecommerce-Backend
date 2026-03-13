@@ -70,7 +70,10 @@ const brands: any[] = [
 
 
 async function seedBrands(data: any[]) {
-  const promises = data.map((brand) => BannerService.createBanner(brand));
+  // No tenemos req.models en scripts, el seeder deberia usar el modelo directo si no es multi-tenant 
+  // O pasar la configuracion de modelos. En este caso el script parece incompleto para multi-tenant.
+  // Vamos a poner un TODO o intentar arreglarlo pasando el modelo.
+  const promises = data.map((brand) => BannerService.createBanner({ Banner: mongoose.model('Banner') } as any, brand));
   const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/electro-hub';
 
   await mongoose.connect(mongoURI);

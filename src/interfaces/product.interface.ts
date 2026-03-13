@@ -1,4 +1,4 @@
-import { Document, ObjectId } from 'mongoose';
+import { Document, Types } from 'mongoose';
 import { IVariant } from './variant.interface';
 
 // ============ ENUMS ============
@@ -172,5 +172,5 @@ export interface IProductUpdateDTO extends Partial<IProductCreateDTO> {
 // ============ DOCUMENT ============
 
 export interface IProductDocument extends Document, Omit<IProduct, 'model' | '_id'> {
-	_id: ObjectId;
+	_id: Types.ObjectId;
 }

@@ -5,7 +5,7 @@ import { TenantModels } from '@/config/modelRegistry';
 export class UserService {
 	static async getUserByGoogleID(models: TenantModels, id: string) {
 		try {
-			const user = (await models.User.findOne({ googleID: id }).lean()) as IUser;
+			const user = (await models.User.findOne({ googleID: id }).lean()) as any as IUser;
 			return user;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
@@ -19,7 +19,7 @@ export class UserService {
 
 	static async getUserByID(models: TenantModels, id: string) {
 		try {
-			const user = (await models.User.findById(id).lean()) as IUser;
+			const user = (await models.User.findById(id).lean()) as any as IUser;
 			if (!user) throw new AppError('User not found', 'Usuario no encontrado', 404);
 			return user;
 		} catch (error) {

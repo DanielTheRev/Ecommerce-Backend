@@ -1,11 +1,14 @@
 import mongoose from 'mongoose';
-import { PaymentMethod, PaymentType } from '../models/PaymentMethod.model';
-import { connectDB } from '../config/database';
+import { PaymentMethod } from '../models/PaymentMethod.model';
+import { PaymentType } from '../interfaces/paymentMethod.interface';
+import dotenv from 'dotenv';
+dotenv.config();
 
 const initPaymentMethods = async () => {
 	try {
 		// Conectar a la base de datos
-		await connectDB();
+		const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/vura_store_db';
+		await mongoose.connect(mongoURI);
 
 		// Verificar si ya existen métodos de pago
 		const existingPaymentMethods = await PaymentMethod.countDocuments();
