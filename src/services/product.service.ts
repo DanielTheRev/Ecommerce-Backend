@@ -1,6 +1,6 @@
 import { AppError } from '@/errors/app.error';
 import { paginate } from '@/utils/pagination.util';
-import { IProduct, IProductCreateDTO, IProductUpdateDTO } from '@/interfaces/product.interface';
+import { IProduct, IProductCreateDTO, IProductUpdateDTO, ProductType } from '@/interfaces/product.interface';
 import { TenantModels } from '@/config/modelRegistry';
 import slugify from 'slugify';
 import { getDolar } from './dolar.service';
@@ -28,8 +28,8 @@ export class ProductService {
 	 */
 	private static getModel(models: TenantModels, type?: string): any {
 		switch (type) {
-			case 'tech': return models.TechProduct;
-			case 'clothing': return models.ClothingProduct;
+			case ProductType.TECH: return models.TechProduct;
+			case ProductType.CLOTHING: return models.ClothingProduct;
 			default: return models.Product;
 		}
 	}
@@ -47,22 +47,25 @@ export class ProductService {
 		}
 	}
 
-	static async getProductsWCompletePrices(models: TenantModels, productType?: string): Promise<IProduct[]> {
+	// static async getProductsWCompletePrices(models: TenantModels, productType?: string): Promise<IProduct[]> {
+	// 	try {
+	// 		const Model = this.getModel(models, productType);
+	// 		console.log('tipo de producto');
+	// 		console.log(productType);
+	// 		const products = await Model.find()
+	// 			.select('+prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.earnings')
+	// 			.lean() as unknown as IProduct[];
+	// 		return products;
+	// 	} catch (error) {
+	// 		if (error instanceof AppError) throw error;
+	// 		throw new AppError('Failed to fetch products', 'Error al obtener los productos', 500);
+	// 	}
+	// }
+
+	static async getProductWCompletePrices(models: TenantModels, id: string, productType?: string): Promise<IProduct> {
 		try {
 			const Model = this.getModel(models, productType);
-			const products = await Model.find()
-				.select('+prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.earnings')
-				.lean() as unknown as IProduct[];
-			return products;
-		} catch (error) {
-			if (error instanceof AppError) throw error;
-			throw new AppError('Failed to fetch products', 'Error al obtener los productos', 500);
-		}
-	}
-
-	static async getProductWCompletePrices(models: TenantModels, id: string): Promise<IProduct> {
-		try {
-			const product = await models.Product.findById(id)
+			const product = await Model.findById(id)
 				.select('+prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas')
 				.lean() as unknown as IProduct;
 			return product;
@@ -107,10 +110,25 @@ export class ProductService {
 		}
 	}
 
-	static async getPaginatedProducts(models: TenantModels, page: number = 1, limit: number = 20, productType?: string) {
+	static async getAllProductSlugs(models: TenantModels): Promise<{ slug: string }[]> {
+		try {
+			// Explicitly exclude _id and the discriminator key (productType)
+			const products = await models.Product.find({}).select('slug -_id -productType').lean() as unknown as { slug: string }[];
+			return products;
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError('Failed to fetch product slugs', 'Error al obtener los slugs de los productos', 500);
+		}
+	}
+
+	static async getPaginatedProducts(models: TenantModels, page: number = 1, limit: number = 20, productType?: string, category?: string) {
 		try {
 			const Model = this.getModel(models, productType);
-			const result = await paginate(Model, {}, {
+			const query: any = {};
+			if (category) {
+				query.category = category;
+			}
+			const result = await paginate(Model, query, {
 				page,
 				limit,
 				sort: { 'prices.efectivo_transferencia': -1 }
@@ -122,10 +140,23 @@ export class ProductService {
 		}
 	}
 
-	static async getPaginatedProductsWCompletePrices(models: TenantModels, page: number = 1, limit: number = 10, productType?: string) {
+	static async getPaginatedProductsWCompletePrices(models: TenantModels, page: number = 1, limit: number = 10, productType?: string, q?: string, category?: string) {
 		try {
 			const Model = this.getModel(models, productType);
-			const result = await paginate(Model, {}, {
+
+			const query: any = {};
+			if (q) {
+				query.$or = [
+					{ brand: { $regex: q, $options: 'i' } },
+					{ model: { $regex: q, $options: 'i' } },
+					{ name: { $regex: q, $options: 'i' } }
+				];
+			}
+			if (category) {
+				query.category = category;
+			}
+
+			const result = await paginate(Model, query, {
 				page,
 				limit,
 				sort: { 'prices.efectivo_transferencia': -1 },
@@ -168,6 +199,22 @@ export class ProductService {
 		}
 	}
 
+	static async getProductMetadata(models: TenantModels, productType?: string) {
+		const Model = this.getModel(models, productType);
+		const matchQuery = productType ? { productType } : {};
+
+		try {
+			const [brands, categories, tags] = await Promise.all([
+				Model.distinct('brand', matchQuery),
+				Model.distinct('category', matchQuery),
+				Model.distinct('tags', matchQuery)
+			]);
+			return { brands, categories, tags };
+		} catch (error) {
+			throw new AppError('Failed to fetch metadata', 'Error al obtener metadata', 500);
+		}
+	}
+
 	static async searchProducts(
 		models: TenantModels,
 		filters: {
@@ -175,6 +222,10 @@ export class ProductService {
 			minPrice?: number;
 			maxPrice?: number;
 			minRating?: number;
+			category?: string;
+			brand?: string;
+			gender?: string;
+			tags?: string;
 		},
 		page: number = 1,
 		limit: number = 10,
@@ -201,12 +252,31 @@ export class ProductService {
 				query.rating = { $gte: filters.minRating };
 			}
 
+			if (filters.category) {
+				const categories = filters.category.split(',').map(c => c.trim());
+				query.category = { $in: categories };
+			}
+
+			if (filters.brand) {
+				const brands = filters.brand.split(',').map(b => b.trim());
+				query.brand = { $in: brands };
+			}
+
+			if (filters.gender) {
+				const genders = filters.gender.split(',').map(g => g.trim());
+				query.gender = { $in: genders };
+			}
+
+			if (filters.tags) {
+				const tags = filters.tags.split(',').map(t => t.trim());
+				query.tags = { $in: tags };
+			}
+
 			const result = await paginate(Model, query, {
 				page,
 				limit,
 				sort: { 'prices.efectivo_transferencia': -1 }
 			});
-
 			return result;
 
 		} catch (error) {
@@ -226,7 +296,8 @@ export class ProductService {
 				EcommercePaymentProviders.UALA,
 				data.price,
 				venta,
-				models
+				models,
+				data.customProfitMargin
 			);
 
 			if (imagesDTO.length === 0) throw new AppError('No images provided', 'No se proporcionaron imágenes', 400);
@@ -239,6 +310,8 @@ export class ProductService {
 			// Elegir modelo según el tipo de producto
 			const Model = this.getModel(models, data.productType);
 
+			console.log(Model);
+
 			// Campos comunes
 			const baseData: any = {
 				slug,
@@ -248,14 +321,16 @@ export class ProductService {
 				model: data.model,
 				category: data.category,
 				features: data.features,
+				customProfitMargin: data.customProfitMargin !== undefined ? data.customProfitMargin : undefined,
 				prices,
 				images,
 				specifications: data.specifications,
-				variants: data.variants || []
+				variants: data.variants || [],
+				tags: data.tags || []
 			};
 
 			// Campos específicos de tech
-			if (data.productType === 'TechProduct') {
+			if (data.productType === ProductType.TECH) {
 				if (data.storage) baseData.storage = data.storage;
 				if (data.ram) baseData.ram = data.ram;
 				if (data.processor) baseData.processor = data.processor;
@@ -264,7 +339,7 @@ export class ProductService {
 			}
 
 			// Campos específicos de ropa
-			if (data.productType === 'ClothingProduct') {
+			if (data.productType === ProductType.CLOTHING) {
 				if (data.gender) baseData.gender = data.gender;
 				if (data.fit) baseData.fit = data.fit;
 				if (data.material) baseData.material = data.material;
@@ -272,7 +347,10 @@ export class ProductService {
 				if (data.sizeType) baseData.sizeType = data.sizeType;
 				if (data.careInstructions) baseData.careInstructions = data.careInstructions;
 			}
-
+			console.log('los datos del panel');
+			console.log(data);
+			console.log('los datos con lo que se va a crear el objeto');
+			console.log(baseData);
 			const newProduct = await Model.create(baseData);
 			return newProduct.toObject() as unknown as IProduct;
 		} catch (error) {
@@ -288,7 +366,12 @@ export class ProductService {
 		try {
 			const imagesToDelete = JSON.parse((updateData.deletedImages || '[]') as string) as string[];
 
-			const product = await ProductService.getProductById(models, id);
+			// Traemos +prices.costPrice explícitamente (select: false en el schema).
+			// Es necesario como fallback cuando el admin solo cambia customProfitMargin
+			// sin enviar un price nuevo — evita calcular con costPrice undefined.
+			const product = await models.Product.findById(id)
+				.select('+prices.costPrice')
+				.lean() as unknown as IProduct;
 
 			if (!product) {
 				throw new AppError('No product find by given id', 'Producto no encontrado', 404);
@@ -330,13 +413,22 @@ export class ProductService {
 				updateData.slug = this.generateSlug(newBrand, newModel);
 			}
 
-			if (updateData.price) {
+			if (updateData.price || updateData.customProfitMargin !== undefined) {
 				const { venta } = await getDolar();
+				const currentCustomProfitMargin = updateData.customProfitMargin !== undefined ? updateData.customProfitMargin : product.customProfitMargin;
+
+				// Attempt to get the current base price. If updateData.price is provided, use it.
+				// Otherwise try temporary product.price. As a final fallback, safely cast the stored base price cost
+				const currentPrice = updateData.price !== undefined
+					? updateData.price
+					: product.prices.costPrice.inUSD;
+
 				const prices = await PaymentService.CalculatePrices(
 					EcommercePaymentProviders.UALA,
-					updateData.price,
+					currentPrice as number,
 					venta,
-					models
+					models,
+					currentCustomProfitMargin
 				);
 				updateData.prices = prices;
 			};
@@ -345,6 +437,7 @@ export class ProductService {
 			if (updateData.storage) updateData.storage = JSON.parse(updateData.storage as string);
 			if (updateData.features) updateData.features = JSON.parse(updateData.features as string);
 			if (updateData.variants) updateData.variants = JSON.parse(updateData.variants as string);
+			if (updateData.tags) updateData.tags = JSON.parse(updateData.tags as string);
 			if (updateData.careInstructions) updateData.careInstructions = JSON.parse(updateData.careInstructions as string);
 			if (updateData.composition) updateData.composition = JSON.parse(updateData.composition as string);
 

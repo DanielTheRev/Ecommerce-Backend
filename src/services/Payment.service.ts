@@ -66,7 +66,8 @@ export class PaymentService {
 		paymentProvider: EcommercePaymentProviders,
 		cost_price: number,
 		dolar: number,
-		models?: TenantModels
+		models?: TenantModels,
+		customProfitMargin?: number
 	) {
 		try {
 			//TODO: implementar mas tarde esto↓
@@ -75,7 +76,7 @@ export class PaymentService {
 			// 	[EcommercePaymentProviders.MERCADOPAGO]: this.calculatePricesWithMercadoPago
 			// };
 			// const prices = await paymentGateways[paymentGateway](cost_price, dolar);
-			const prices = await this.calculatePricesWithUala(cost_price, dolar, models);
+			const prices = await this.calculatePricesWithUala(cost_price, dolar, models, customProfitMargin);
 			return prices;
 		} catch (error) {
 			throw new AppError(
@@ -89,7 +90,8 @@ export class PaymentService {
 	private static async calculatePricesWithUala(
 		cost_price: number,
 		dolar: number,
-		models?: TenantModels
+		models?: TenantModels,
+		customProfitMargin?: number
 	): Promise<IProductPrices> {
 		try {
 			// * cost_price es el precio de compra del product viene en USD o deberia.
@@ -97,7 +99,8 @@ export class PaymentService {
 			const ualaConfig = config.paymentGateways.uala;
 
 			// 1. Obtenemos los valores y los normalizamos inmediatamente
-			const rawProfit = config.profit; // Puede ser 10 o 0.1
+			// Si el usuario proveyó un margen custom para este producto, lo usamos. Si no, usamos el global.
+			const rawProfit = customProfitMargin !== undefined ? customProfitMargin : config.profit; 
 			const rawBaseComm = ualaConfig.baseCommission; // Puede ser 4.9 o 0.049
 			const rawCFT3 = ualaConfig.cft3cuotas; // Puede ser 18.9 o 0.189
 			const rawCFT6 = ualaConfig.cft6Cuotas; // Puede ser 18.9 o 0.189

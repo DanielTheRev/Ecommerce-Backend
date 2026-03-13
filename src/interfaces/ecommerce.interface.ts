@@ -1,5 +1,6 @@
 export interface IEcommerceConfig {
 	key: string;
+	name?: string;
 	profit: number;
 	taxes: {
 		iva: number;
@@ -9,6 +10,17 @@ export interface IEcommerceConfig {
 		success: string;
 		fail: string;
 		notification: string;
+	};
+	contact?: {
+		email: string;
+		phone: string;
+		address: string;
+	};
+	social?: {
+		instagram: string;
+		facebook: string;
+		twitter: string;
+		tiktok: string;
 	};
 }
 

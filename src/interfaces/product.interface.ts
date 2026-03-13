@@ -8,6 +8,26 @@ export enum ProductType {
 	CLOTHING = 'ClothingProduct'
 }
 
+export enum ClothingGender {
+	Hombre = 'Hombre',
+	Mujer = 'Mujer',
+	Unisex = 'Unisex',
+	Ninos = 'Niños'
+}
+
+export enum ClothingFit {
+	Regular = 'Regular',
+	Slim = 'Slim',
+	Oversized = 'Oversized',
+	Relaxed = 'Relaxed'
+}
+
+export enum ClothingSizeType {
+	Ropa = 'Ropa',
+	Calzado = 'Calzado',
+	Numerico = 'Numérico'
+}
+
 export enum IProductCategories {
 	// Tech
 	Electrodomesticos = 'Electrodomésticos',
@@ -44,7 +64,10 @@ export interface IProduct {
 	features: string[];
 	specifications: IProductSpec[];
 	variants: IVariant[];
+	tags?: string[];
 	lowStockThreshold?: number;
+	customProfitMargin?: number;
+	//TODO: Quitar el precio 
 }
 
 // ============ TYPE-SPECIFIC PRODUCTS ============
@@ -61,11 +84,11 @@ export interface ITechProduct extends IProduct {
 
 export interface IClothingProduct extends IProduct {
 	productType: ProductType.CLOTHING;
-	gender: 'Hombre' | 'Mujer' | 'Unisex' | 'Niños';
-	fit: 'Regular' | 'Slim' | 'Oversized' | 'Relaxed';
+	gender: ClothingGender;
+	fit: ClothingFit;
 	material: string;
 	composition?: { material: string; percentage: number }[];
-	sizeType: 'Ropa' | 'Calzado' | 'Numérico';
+	sizeType: ClothingSizeType;
 	careInstructions?: string[];
 	season?: string;
 }
@@ -115,10 +138,12 @@ export interface IProductCreateDTO {
 	shortDescription: string;
 	largeDescription: string;
 	price: number;
+	customProfitMargin?: number;
 	category: IProductCategories;
 	features: string | string[];
 	specifications: string | IProductSpec[];
 	variants: string | IVariant[];
+	tags?: string | string[];
 
 	// Tech-specific (opcionales a nivel DTO, Mongoose valida por discriminator)
 	storage?: string | string[];

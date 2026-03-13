@@ -162,7 +162,7 @@ async function createTenant() {
 		// 7️⃣ Seed de config base del ecommerce (opcional)
 		const existingConfig = await models.EcommerceConfig.findOne({ key: 'global_config' });
 		if (!existingConfig) {
-			await models.EcommerceConfig.create({ key: 'global_config' });
+			await models.EcommerceConfig.create({ key: 'global_config', name: name });
 			console.log('✅ Configuración base del ecommerce creada');
 		}
 

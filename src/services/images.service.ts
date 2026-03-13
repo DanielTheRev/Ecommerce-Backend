@@ -76,6 +76,7 @@ export class ImageService {
 			}));
 			return formattedImages;
 		} catch (error) {
+			console.log(error);
 			throw new AppError(
 				'Error uploading images in imageService.uploadImages',
 				'Error al subir imágenes al servidor',

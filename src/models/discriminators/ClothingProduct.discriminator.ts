@@ -1,5 +1,6 @@
 import { Schema } from 'mongoose';
 import { Product } from '../Product.model';
+import { ClothingFit, ClothingGender, ClothingSizeType } from '@/interfaces/product.interface';
 
 const CompositionSchema = new Schema({
 	material: { type: String, required: true },
@@ -9,13 +10,13 @@ const CompositionSchema = new Schema({
 const ClothingProductSchema = new Schema({
 	gender: {
 		type: String,
-		enum: ['Hombre', 'Mujer', 'Unisex', 'Niños'],
+		enum: Object.values(ClothingGender),
 		required: true
 	},
 	fit: {
 		type: String,
-		enum: ['Regular', 'Slim', 'Oversized', 'Relaxed'],
-		default: 'Regular'
+		enum: Object.values(ClothingFit),
+		default: ClothingFit.Regular
 	},
 	material: {
 		type: String,
@@ -24,8 +25,8 @@ const ClothingProductSchema = new Schema({
 	composition: [CompositionSchema],
 	sizeType: {
 		type: String,
-		enum: ['Ropa', 'Calzado', 'Numérico'],
-		default: 'Ropa'
+		enum: Object.values(ClothingSizeType),
+		default: ClothingSizeType.Ropa
 	},
 	careInstructions: [{ type: String }],
 	season: {

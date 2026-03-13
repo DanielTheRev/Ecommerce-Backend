@@ -20,6 +20,8 @@ router.delete('/:id', protect, adminOnly, ProductController.deleteProduct); // E
 
 // Rutas públicas (sin autenticación)
 router.get('/search', ProductController.searchProducts); // Buscar productos
+router.get('/metadata', ProductController.getMetadata); // Metadatos (marcas, categorías, tags)
+router.get('/slugs', ProductController.getAllSlugs); // Obtener todos los slugs para SSR
 router.get('/', ProductController.getAllProducts); // Ver todos los productos
 router.get('/all', ProductController.getAllProductWOPagination); // Ver todos los productos sin Paginación
 router.get('/:slug', ProductController.getProductBySlug); // Ver producto específico por slug

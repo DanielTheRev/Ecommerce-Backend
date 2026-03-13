@@ -14,7 +14,9 @@ export class ProductController {
 			const page = parseInt(req.query.page as string) || 1;
 			const limit = parseInt(req.query.limit as string) || 10;
 			const productType = req.query.type as string | undefined;
-			const result = await ProductService.getPaginatedProductsWCompletePrices(req.models!, page, limit, productType);
+			const q = req.query.q as string | undefined;
+			const category = req.query.category as string | undefined;
+			const result = await ProductService.getPaginatedProductsWCompletePrices(req.models!, page, limit, productType, q, category);
 			res.status(200).json(result);
 		} catch (error) {
 			next(error);
@@ -43,14 +45,25 @@ export class ProductController {
 		}
 	}
 
+	// GET /api/products/slugs - Obtener solo los slugs de todos los productos para SSR
+	static async getAllSlugs(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const slugs = await ProductService.getAllProductSlugs(req.models!);
+			res.status(200).json(slugs);
+		} catch (error) {
+			next(error);
+		}
+	}
+
 	// GET /api/products - Obtener todos los productos con paginación
 	static async getAllProducts(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
 			const page = parseInt(req.query.page as string) || 1;
 			const limit = parseInt(req.query.limit as string) || 20;
 			const productType = req.query.type as string | undefined;
+			const category = req.query.category as string | undefined;
 
-			const result = await ProductService.getPaginatedProducts(req.models!, page, limit, productType);
+			const result = await ProductService.getPaginatedProducts(req.models!, page, limit, productType, category);
 
 			res.status(200).json(result);
 		} catch (error) {
@@ -78,6 +91,7 @@ export class ProductController {
 			data.specifications = JSON.parse(data.specifications as string) as IProductSpec[];
 			data.features = JSON.parse(data.features as string) as string[];
 			data.variants = JSON.parse(data.variants as string) as IVariant[];
+			if (data.tags) data.tags = JSON.parse(data.tags as string) as string[];
 
 			// Tech-specific: parsear storage si viene
 			if (data.storage) data.storage = JSON.parse(data.storage as string) as string[];
@@ -144,7 +158,7 @@ export class ProductController {
 	// GET /api/products/search - Buscar productos
 	static async searchProducts(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
-			const { q, minPrice, maxPrice, minRating, suggestions } = req.query;
+			const { q, minPrice, maxPrice, minRating, suggestions, category, brand, gender, tags } = req.query;
 			const productType = req.query.type as string | undefined;
 
 			// if suggestions is true, return only brand and model matches without pagination
@@ -161,7 +175,11 @@ export class ProductController {
 				q: q as string,
 				minPrice: minPrice ? parseFloat(minPrice as string) : undefined,
 				maxPrice: maxPrice ? parseFloat(maxPrice as string) : undefined,
-				minRating: minRating ? parseFloat(minRating as string) : undefined
+				minRating: minRating ? parseFloat(minRating as string) : undefined,
+				category: category as string,
+				brand: brand as string,
+				gender: gender as string,
+				tags: tags as string
 			}, page, limit, productType);
 
 			res.status(200).json({
@@ -174,15 +192,28 @@ export class ProductController {
 		}
 	}
 
+	// GET /api/products/metadata - Obtener metadata (marcas, categorías, tags)
+	static async getMetadata(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const productType = req.query.type as string | undefined;
+			const metadata = await ProductService.getProductMetadata(req.models!, productType);
+			res.status(200).json(metadata);
+		} catch (error) {
+			next(error);
+		}
+	}
+
 	// POST /api/products/calculate-prices - Calcular precios antes de guardar
 	static async calculatePrice(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
-			const { costPrice } = req.body;
+			const { costPrice, customProfitMargin } = req.body;
 			const { venta } = await getDolar();
 			const prices = await PaymentService.CalculatePrices(
 				EcommercePaymentProviders.UALA,
 				costPrice,
-				venta
+				venta,
+				req.models!,
+				customProfitMargin
 			);
 
 			res.status(200).json(prices);

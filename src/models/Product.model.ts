@@ -100,6 +100,11 @@ const BaseProductSchema = new Schema(
 			default: 0,
 			min: 0
 		},
+		customProfitMargin: {
+			type: Number,
+			required: false,
+			select: false
+		},
 		images: [
 			{
 				url: { type: String, required: true },
@@ -117,6 +122,11 @@ const BaseProductSchema = new Schema(
 		variants: {
 			type: [VariantSchema],
 			default: []
+		},
+		tags: {
+			type: [String],
+			default: [],
+			index: true
 		},
 		lowStockThreshold: {
 			type: Number,
