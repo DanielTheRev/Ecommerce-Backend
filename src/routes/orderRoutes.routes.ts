@@ -8,6 +8,7 @@ import {
 	getOrderByIdAdmin,
 	getOrderStats,
 	getUserOrders,
+	mercadopagoWebhook,
 	ualaWebhook,
 	updatePaymentStatus,
 	updateShippingStatus
@@ -17,7 +18,8 @@ import { validateSchema } from '@/middleware/validator.middleware';
 import { CreateOrderSchema, UpdatePaymentStatusSchema, UpdateShippingStatusSchema } from '@/schemas/order.schema';
 
 const router: Router = Router();
-// uala webhook
+// webhooks
+router.post('/mercadopago-notification', mercadopagoWebhook);
 router.post('/ualabis-notification', ualaWebhook);
 router.get('/ualabis-failedNotifications', getNotificationsUala);
 

@@ -9,6 +9,8 @@ import { NotificationSeverity, NotificationType } from '@/interfaces/notificatio
 import { UalaOrderStatus, UalaWebhook } from '@/interfaces/ualaWebhook.interface';
 import { AuthRequest } from '@/middleware/auth';
 import { OrderService } from '@/services/order.service';
+import { EcommerceService } from '@/services/ecommerce.service';
+import { MercadoPagoService } from '@/services/mercadopago.service';
 import { socketManager } from '@/sockets/socketManager';
 import { NextFunction, Response } from 'express';
 import UalaApiCheckout from 'ualabis-nodejs';
@@ -28,10 +30,91 @@ export const ualaWebhook = async (req: AuthRequest, res: Response) => {
 	const id = req.query.id as string;
 
 	try {
-		await OrderService.confirmCardPayment(req.models!, id, data.status);
+		const order = await OrderService.confirmCardPayment(req.models!, id, data.status);
+		if (req.tenant) {
+			socketManager.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'payment');
+		}
 	} catch (error) {
 		console.error('Error processing Uala webhook:', error);
 	}
+	return res.sendStatus(200);
+};
+
+/* MercadoPago webhook handler */
+export const mercadopagoWebhook = async (req: AuthRequest, res: Response) => {
+	console.log('MercadoPago notification received:', req.body);
+
+	const xSignature = req.headers['x-signature'] as string;
+	const xRequestId = req.headers['x-request-id'] as string;
+	const dataId = (req.query['data.id'] || req.body.data?.id) as string;
+	const type = (req.query.type || req.body.type) as string;
+
+	try {
+		const config = await EcommerceService.getConfig(req.models!);
+		const mpConfig = config.paymentGateways.mercadopago;
+
+		// 1. Validar firma si el secreto está configurado
+		if (mpConfig.webhookSecret && mpConfig.webhookSecret !== 'no asignado') {
+			const isValid = MercadoPagoService.validateSignature(
+				mpConfig.webhookSecret,
+				xSignature,
+				xRequestId,
+				dataId
+			);
+
+			if (!isValid) {
+				console.warn('❌ Firma de webhook de Mercado Pago inválida');
+				return res.sendStatus(401);
+			}
+		}
+
+		// 2. Procesar según el tipo de evento
+		// El Checkout API (v1/orders) envía el tipo 'order'
+		if (type === 'order' || req.body.action?.startsWith('order.')) {
+			const mpOrderId = dataId || req.body.data?.id;
+
+			if (mpOrderId) {
+				// Obtenemos los detalles de la orden para encontrar el external_reference (nuestro internal orderId)
+				const mpOrder = await MercadoPagoService.getOrder(mpConfig.accessToken, mpOrderId);
+				const internalOrderId = mpOrder.external_reference;
+
+				if (internalOrderId) {
+					// Buscamos si hay pagos aprobados en esta orden
+					const approvedPayment = mpOrder.transactions?.payments?.find((p: any) => p.status === 'approved');
+
+					if (approvedPayment) {
+						const order = await OrderService.confirmMercadoPagoPayment(req.models!, internalOrderId, approvedPayment.id);
+						console.log(`✅ Pago de MercadoPago procesado: ${approvedPayment.id} para la orden: ${internalOrderId}`);
+
+						if (req.tenant) {
+							socketManager.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'payment');
+						}
+					} else {
+						console.log(`ℹ️ Orden de MP ${mpOrderId} recibida, pero sin pagos aprobados aún.`);
+					}
+				}
+			}
+		}
+		// Fallback para notificaciones de tipo 'payment' directas (legacy o configuraciones manuales)
+		else if (type === 'payment') {
+			const paymentId = dataId || req.body.data?.id;
+			const internalOrderId = req.query.id as string; // external_reference pasado via query param en notification_url
+
+			if (paymentId && internalOrderId) {
+				const order = await OrderService.confirmMercadoPagoPayment(req.models!, internalOrderId, paymentId);
+				console.log(`✅ Pago de MercadoPago (legacy/direct) procesado: ${paymentId} para la orden: ${internalOrderId}`);
+
+				if (req.tenant) {
+					socketManager.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'payment');
+				}
+			}
+		}
+
+	} catch (error) {
+		console.error('Error processing MercadoPago webhook:', error);
+	}
+
+	// Siempre respondemos 200 para que MP deje de reintentar
 	return res.sendStatus(200);
 };
 
@@ -42,8 +125,12 @@ export const createOrder = async (req: AuthRequest, res: Response, next: NextFun
 	}
 	try {
 		const userId = req.user._id;
-		const { order, extras } = await OrderService.createOrder(req.models!, req.body as CreateOrderDTO, userId);
-		socketManager.notifyNewOrderToAdmins(order);
+		const newOrderDTO = req.body as CreateOrderDTO;
+		const { order, extras } = await OrderService.createOrder(req.models!, newOrderDTO, userId, req.tenant!.slug);
+
+		if (req.tenant) {
+			socketManager.notifyNewOrderToAdmins(req.tenant.slug, order);
+		}
 
 		return res.status(201).json({
 			message: 'Orden creada exitosamente',
@@ -132,6 +219,11 @@ export const updatePaymentStatus = async (req: AuthRequest, res: Response, next:
 			link: `/orders/${order._id}`,
 			data: order
 		});
+
+		if (req.tenant) {
+			socketManager.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'payment');
+		}
+
 		return res.status(200).json({ message: 'Pago actualizado con éxito', orderUpdated: order });
 	} catch (error) {
 		return next(error);
@@ -150,6 +242,11 @@ export const updateShippingStatus = async (req: AuthRequest, res: Response, next
 			link: `/orders/${order._id}`,
 			data: order
 		});
+
+		if (req.tenant) {
+			socketManager.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'shipping');
+		}
+
 		return res.json({
 			message: 'Envío actualizado con éxito',
 			orderUpdated: order

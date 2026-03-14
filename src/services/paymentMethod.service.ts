@@ -9,6 +9,7 @@ export class PaymentMethodService {
 			const paymentMethods = await models.PaymentMethod.find().lean();
 			return paymentMethods;
 		} catch (error) {
+			if (error instanceof AppError) throw error;
 			throw new AppError(
 				'Failed to retrieve payment methods',
 				'Error al recuperar los métodos de pago',
@@ -24,6 +25,7 @@ export class PaymentMethodService {
 				throw new AppError('Payment method not found', 'No se encontró el método de pago', 404);
 			return paymentMethod;
 		} catch (error) {
+			if (error instanceof AppError) throw error;
 			throw new AppError(
 				'Failed to retrieve payment method',
 				'Error al recuperar el método de pago',
@@ -39,6 +41,7 @@ export class PaymentMethodService {
 				throw new AppError('Payment method not found', 'No se encontró el método de pago', 404);
 			return paymentMethods;
 		} catch (error) {
+			if (error instanceof AppError) throw error;
 			throw new AppError(
 				'Failed to retrieve payment methods',
 				'Error al recuperar los métodos de pago',
@@ -54,6 +57,7 @@ export class PaymentMethodService {
 				throw new AppError('Payment method not found', 'No se encontró el método de pago', 404);
 			return paymentMethod;
 		} catch (error) {
+			if (error instanceof AppError) throw error;
 			throw new AppError(
 				'Failed to retrieve payment method',
 				'Error al recuperar el método de pago',

@@ -496,21 +496,21 @@ export class ProductService {
 
 	static async verifyVariantStock(
 		models: TenantModels,
-		items: { productId: string; variantSku: string; quantity: number }[]
+		items: { _id: string; sku: string; quantity: number }[]
 	): Promise<boolean> {
 		try {
 			for (const item of items) {
-				const product = await models.Product.findById(item.productId).lean() as any;
+				const product = await models.Product.findById(item._id).lean() as any;
 				if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
 
 				const variant = product.variants.find(
-					(v: any) => v.sku === item.variantSku && v.isActive
+					(v: any) => v.sku === item.sku && v.isActive
 				);
 
 				if (!variant) {
 					throw new AppError(
-						`Variant ${item.variantSku} not found`,
-						`Variante ${item.variantSku} no encontrada o inactiva`,
+						`Variant ${item.sku} not found`,
+						`Variante ${item.sku} no encontrada o inactiva`,
 						404
 					);
 				}
@@ -518,8 +518,8 @@ export class ProductService {
 				const availableStock = variant.stock - variant.reservedStock;
 				if (availableStock < item.quantity) {
 					throw new AppError(
-						`Insufficient stock for variant ${item.variantSku}`,
-						`Stock insuficiente para la variante ${item.variantSku}`,
+						`Insufficient stock for variant ${item.sku}`,
+						`Stock insuficiente para la variante ${item.sku}`,
 						400
 					);
 				}
@@ -537,14 +537,14 @@ export class ProductService {
 
 	static async reduceVariantStock(
 		models: TenantModels,
-		items: { productId: string; variantSku: string; quantity: number }[]
+		items: { _id: string; sku: string; quantity: number }[]
 	): Promise<boolean> {
 		try {
 			const operations = items.map((item) => ({
 				updateOne: {
 					filter: {
-						_id: item.productId,
-						'variants.sku': item.variantSku,
+						_id: item._id,
+						'variants.sku': item.sku,
 						'variants.stock': { $gte: item.quantity }
 					},
 					update: {
@@ -552,7 +552,7 @@ export class ProductService {
 							'variants.$[elem].stock': -item.quantity
 						}
 					},
-					arrayFilters: [{ 'elem.sku': item.variantSku }]
+					arrayFilters: [{ 'elem.sku': item.sku }]
 				}
 			}));
 

@@ -30,8 +30,14 @@ const EcommerceSchema = new Schema(
 				active: { type: Boolean, default: false },
 				accessToken: { type: String, default: 'no asignado' },
 				publicKey: { type: String, default: 'no asignado' },
-				baseCommission: { type: Number, default: 0.06 }
-			}
+				webhookSecret: { type: String, default: 'no asignado' },
+				baseCommission: { type: Number, default: 0.06 },
+				cft3cuotas: { type: Number, default: 12 },
+				cft6Cuotas: { type: Number, default: 18.9 },
+				maxInstallments: { type: Number, default: 6 },
+				excludedPaymentMethods: [{ type: String }],
+				excludedPaymentTypes: [{ type: String, default: '' }]
+			},
 		},
 		callbackURLs: {
 			success: { type: String, required: false, default: '' },

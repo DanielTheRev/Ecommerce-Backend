@@ -143,13 +143,15 @@ const BaseProductSchema = new Schema(
 
 // ========= VIRTUALS =========
 BaseProductSchema.virtual('totalStock').get(function () {
+	if (!this.variants) return 0;
 	return this.variants
-		.filter((v: any) => v.isActive)
+		.filter((v: any) => v && v.isActive)
 		.reduce((sum: number, v: any) => sum + v.stock, 0);
 });
 
 BaseProductSchema.virtual('hasStock').get(function () {
-	return this.variants.some((v: any) => v.isActive && v.stock > 0);
+	if (!this.variants) return false;
+	return this.variants.some((v: any) => v && v.isActive && v.stock > 0);
 });
 
 BaseProductSchema.set('toJSON', { virtuals: true });

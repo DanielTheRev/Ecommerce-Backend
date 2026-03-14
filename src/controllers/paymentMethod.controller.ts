@@ -3,23 +3,73 @@ import { NextFunction, Response } from 'express';
 import { AuthRequest } from '@/middleware/auth';
 
 export class PaymentMethodController {
-	// Obtener todos los métodos de pago
+	// Obtener todos los métodos de pago (Agregado para el Panel de Control)
 	static async getAllPaymentMethods(req: AuthRequest, res: Response, next: NextFunction) {
 		try {
-			const paymentMethods = await PaymentMethodService.getPaymentMethods(req.models!);
-			return res.json(paymentMethods);
+			// 1. Obtener métodos manuales de la base de datos
+			const manualMethods = await PaymentMethodService.getPaymentMethods(req.models!);
+
+			// 2. Obtener configuración de ecommerce y métodos de MP
+			const { EcommerceService } = await import('@/services/ecommerce.service');
+			const { MercadoPagoService } = await import('@/services/mercadopago.service');
+			
+			const config = await EcommerceService.getConfig(req.models!);
+			const mpConfig = config.paymentGateways.mercadopago;
+
+			let availableMPMethods: any[] = [];
+			if (mpConfig.accessToken && mpConfig.accessToken !== 'no asignado') {
+				try {
+					availableMPMethods = await MercadoPagoService.getAvailableMethods(mpConfig.accessToken);
+				} catch (error) {
+					console.error('Error fetching MP methods for aggregate view:', error);
+					// No bloqueamos la respuesta si falla MP
+				}
+			}
+
+			return res.json({
+				manualMethods,
+				automaticGateways: {
+					mercadopago: {
+						active: mpConfig.active,
+						availableMethods: availableMPMethods,
+						excludedPaymentMethods: mpConfig.excludedPaymentMethods || [],
+						excludedPaymentTypes: mpConfig.excludedPaymentTypes || []
+					}
+				}
+			});
 		} catch (error) {
-			return next(error)
+			return next(error);
 		}
 	}
 
-	// Obtener métodos de pago activos
+	// Obtener métodos de pago activos (Agregado para el Checkout)
 	static async getActivePaymentMethods(req: AuthRequest, res: Response, next: NextFunction) {
 		try {
-			const paymentMethods = await PaymentMethodService.getPaymentMethodsBy(req.models!, { isActive: true });
-			return res.json(paymentMethods);
+			// 1. Obtener métodos manuales activos de la DB
+			const manualMethods = await PaymentMethodService.getPaymentMethodsBy(req.models!, { isActive: true });
+
+			// 2. Obtener configuración de gateways
+			const { EcommerceService } = await import('@/services/ecommerce.service');
+			const config = await EcommerceService.getConfig(req.models!);
+			
+			const gateWays = {
+				mercadopago: {
+					active: config.paymentGateways.mercadopago.active,
+					publicKey: config.paymentGateways.mercadopago.active ? config.paymentGateways.mercadopago.publicKey : undefined,
+					excludedPaymentMethods: config.paymentGateways.mercadopago.excludedPaymentMethods || [],
+					excludedPaymentTypes: config.paymentGateways.mercadopago.excludedPaymentTypes || []
+				},
+				uala: {
+					active: config.paymentGateways.uala.active
+				}
+			};
+
+			return res.json({
+				manualMethods,
+				gateWays
+			});
 		} catch (error) {
-			return next(error)
+			return next(error);
 		}
 	}
 

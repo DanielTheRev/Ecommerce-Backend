@@ -2,10 +2,11 @@ import { Document } from 'mongoose';
 
 // Payment types enum
 export enum PaymentType {
-	CASH = 'Efectivo',
-	BANK_TRANSFER = 'Transferencia bancaria',
-	ALIAS_TRANSFER = 'Transferencia a alias',
-	CARD = 'Tarjeta de crédito / débito'
+	CASH = 'CASH',
+	BANK_TRANSFER = 'BANK_TRANSFER',
+	ALIAS_TRANSFER = 'ALIAS_TRANSFER',
+	CARD = 'CARD',
+	TICKET = 'TICKET'
 }
 
 export interface IPaymentMethod {

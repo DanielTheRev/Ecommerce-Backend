@@ -5,7 +5,7 @@ import { PaymentType } from './paymentMethod.interface';
 import { IPickupPoint, ShippingType } from './shippingMethods.interface';
 
 export interface CreateOrderDTO {
-	items: { _id: string; variantSku: string; quantity: number }[];
+	items: { _id: string; sku: string; quantity: number }[];
 	shippingMethod: {
 		_id: string;
 		type: ShippingType;
@@ -16,6 +16,21 @@ export interface CreateOrderDTO {
 		_id: string;
 		type: PaymentType;
 	};
+	mercadopagoData?: {
+		token?: string;
+		payment_method_id: string;
+		installments: number;
+		type: string;
+		payer?: {
+			email: string;
+			first_name: string;
+			last_name: string;
+		};
+		identification?: {
+			type: string;
+			number: string;
+		}
+	}
 }
 
 export interface StatusEntry {
@@ -36,19 +51,19 @@ export interface updateShippingStatusDTO {
 
 // Enum for order status
 export enum OrderStatus {
-	PENDING = 'Pendiente de encuentro',
-	PROCESSING_SHIPPING = 'En proceso de envío',
-	SHIPPED = 'Enviado',
-	DELIVERED = 'Entregado',
-	CANCELLED = 'Cancelado'
+	PENDING = 'PENDING',
+	PROCESSING_SHIPPING = 'PROCESSING_SHIPPING',
+	SHIPPED = 'SHIPPED',
+	DELIVERED = 'DELIVERED',
+	CANCELLED = 'CANCELLED'
 }
 
 // Enum for payment status
 export enum PaymentStatus {
-	PENDING = 'Pendiente',
-	APPROVED = 'Aprobado',
-	REJECTED = 'Rechazado',
-	CANCELLED = 'Cancelado'
+	PENDING = 'PENDING',
+	APPROVED = 'APPROVED',
+	REJECTED = 'REJECTED',
+	CANCELLED = 'CANCELLED'
 }
 
 // Interface for order items
@@ -99,6 +114,7 @@ export interface IPaymentInfo {
 	paymentDate?: Date;
 	amount: number;
 	ualaOrderStatus?: OrderData;
+	mercadopagoData?: any;
 }
 
 // Interface principal de la orden

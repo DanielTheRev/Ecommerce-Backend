@@ -16,6 +16,7 @@ import { Socket, Server as SocketIOServer } from 'socket.io';
 
 interface AuthSocket extends Socket {
 	user?: IUser;
+	tenantSlug?: string;
 }
 
 class SocketManager {
@@ -60,7 +61,6 @@ class SocketManager {
 				// WebSocket: resolve tenant from handshake headers or query
 				const tenantSlug = (socket.handshake.headers['x-tenant-id'] as string)
 					|| (socket.handshake.query['tenantId'] as string);
-				console.log(tenantSlug);
 
 				if (!tenantSlug) {
 					console.log('no tentant slug');
@@ -75,6 +75,7 @@ class SocketManager {
 
 				const user = await models.User.findById(decoded.userID).lean() as IUser;
 				socket.user = user;
+				socket.tenantSlug = tenantSlug;
 
 				next();
 			} catch (error) {
@@ -89,17 +90,18 @@ class SocketManager {
 
 		this.io.on('connection', (socket: AuthSocket) => {
 			const { role, _id, name } = socket.user || {};
+			const tenantSlug = socket.tenantSlug;
 
-			if (role === Role.admin) {
+			if (role === Role.admin && tenantSlug) {
 				this.connectedAdmins.set(socket.id, socket);
-				socket.join('admins');
-				console.log(`🟢 Admin connected: ${name} (${socket.id})`);
+				socket.join(`admins_${tenantSlug}`);
+				console.log(`🟢 Admin connected to tenant [${tenantSlug}]: ${name} (${socket.id})`);
 			}
 
-			if (role === Role.user) {
+			if (role === Role.user && tenantSlug) {
 				this.connectedClients.set(socket.id, socket);
 				socket.join(`client_${_id}`);
-				console.log(`🟢 Client connected: ${name} (${socket.id}) role: (${role})`);
+				console.log(`🟢 Client connected to tenant [${tenantSlug}]: ${name} (${socket.id})`);
 			}
 
 			socket.on('disconnect', () => {
@@ -116,6 +118,7 @@ class SocketManager {
 			socket.emit('connection-success', {
 				message: 'Conectado correctamente',
 				user: socket.user,
+				tenant: tenantSlug,
 				timestamp: new Date().toISOString()
 			});
 		});
@@ -124,21 +127,39 @@ class SocketManager {
 	// === NOTIFICACIONES ===
 
 	/**
-	 * Notifica una nueva orden a los administradores
+	 * Notifica una nueva orden a los administradores de un tenant específico
 	 */
-	notifyNewOrderToAdmins(order: any) {
-		if (!this.io) return;
+	notifyNewOrderToAdmins(tenantSlug: string, order: any) {
+		if (!this.io || !tenantSlug) return;
 
 		const notification: CreateAdminNotificationDto = {
 			type: NotificationType.NEW_ORDER,
 			title: 'Nueva Orden Recibida',
-			message: `Orden #${order._id} creada por valor de $${order.total}`,
+			message: `Orden #${order.orderNumber || order._id} creada por valor de $${order.total}`,
 			severity: NotificationSeverity.INFO,
 			data: order,
 			actionUrl: `/home/client-orders`
 		};
 
-		this.io.to('admins').emit('admin-notification', this.buildNotification(notification, NotificationAudience.ADMIN));
+	this.io.to(`admins_${tenantSlug}`).emit('admin-notification', this.buildNotification(notification, NotificationAudience.ADMIN));
+	}
+
+	/**
+	 * Notifica que una orden ha sido actualizada (pago o envío)
+	 */
+	notifyOrderUpdatedToAdmins(tenantSlug: string, order: any, updateType: 'payment' | 'shipping' = 'payment') {
+		if (!this.io || !tenantSlug) return;
+
+		const notification: CreateAdminNotificationDto = {
+			type: NotificationType.ORDER_STATUS_CHANGED,
+			title: updateType === 'payment' ? 'Pago Actualizado' : 'Envio Actualizado',
+			message: `La orden #${order.orderNumber || order._id} ha cambiado de estado.`,
+			severity: NotificationSeverity.SUCCESS,
+			data: order,
+			actionUrl: `/home/client-orders`
+		};
+
+		this.io.to(`admins_${tenantSlug}`).emit('admin-notification', this.buildNotification(notification, NotificationAudience.ADMIN));
 	}
 
 	/**

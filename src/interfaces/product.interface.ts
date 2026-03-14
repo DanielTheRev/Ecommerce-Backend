@@ -126,6 +126,7 @@ export interface IProductPrices {
 		cash_transfer: number;
 		card_3_installments: number;
 		card_6_installments: number;
+		ticket: number;
 	};
 }
 

@@ -8,6 +8,7 @@ import UalaApiCheckout from 'ualabis-nodejs';
 import { EcommerceService } from './ecommerce.service';
 import { AppError } from '@/errors/app.error';
 import { TenantModels } from '@/config/modelRegistry';
+import { MercadoPagoService } from './mercadopago.service';
 
 export class PaymentService {
 	private preferredPaymentTypes = [
@@ -38,7 +39,6 @@ export class PaymentService {
 	async withUalaBiss(orderID: string) {
 		try {
 			const ualaOrder = await UalaApiCheckout.createOrder({
-				// amount: 10,
 				amount: this.getFinalCost(),
 				callbackSuccess: process.env.callbackSuccess + `?id=${orderID}` || '',
 				callbackFail: process.env.callbackFail + `?id=${orderID}` || '',
@@ -49,6 +49,71 @@ export class PaymentService {
 		} catch (error) {
 			console.log(error);
 			return { ualaOrder: null, error };
+		}
+	}
+
+	async withMercadoPago(
+		orderID: string,
+		models: TenantModels,
+		total: number,
+		payerData: { 
+			email: string; 
+			first_name?: string; 
+			last_name?: string; 
+			identification?: { type: string; number: string } 
+		},
+		paymentData: { token?: string; payment_method_id: string; installments: number; type: string; payer?: any },
+		tenantSlug: string
+	) {
+		try {
+			const config = await EcommerceService.getConfig(models);
+			const mpConfig = config.paymentGateways.mercadopago;
+
+			if (!mpConfig.active || mpConfig.accessToken === 'no asignado') {
+				throw new AppError('MercadoPago is not configured', 'MercadoPago no está configurado para esta tienda', 400);
+			}
+
+			// Calcular vencimiento (3 días por defecto para tickets)
+			const expirationDate = new Date();
+			expirationDate.setDate(expirationDate.getDate() + 3);
+
+			// Construimos el cuerpo para el API de Orders (/v1/orders)
+			const mpOrderBody = {
+				type: 'online',
+				external_reference: orderID,
+				processing_mode: 'automatic',
+				total_amount: total.toString(),
+				// date_of_expiration: expirationDate.toISOString(),
+				payer: {
+					email: paymentData.payer?.email || payerData.email,
+					first_name: paymentData.payer?.first_name || payerData.first_name || 'Cliente',
+					last_name: paymentData.payer?.last_name || payerData.last_name || 'Ecommerce',
+					identification: paymentData.payer?.identification || payerData.identification
+				},
+				transactions: {
+					payments: [
+						{
+							amount: total.toString(),
+							payment_method: {
+								id: paymentData.payment_method_id,
+								type: paymentData.type,
+								...(paymentData.token && { token: paymentData.token }),
+								installments: Number(paymentData.installments)
+							}
+						}
+					]
+				},
+				// notification_url: process.env.MP_WEBHOOK_URL 
+				// 	? `${process.env.MP_WEBHOOK_URL}?tenantId=${tenantSlug}` 
+				// 	: ''
+			};
+
+			const result = await MercadoPagoService.createOrder(mpConfig.accessToken, mpOrderBody);
+
+			return { result, error: null };
+		} catch (error: any) {
+			console.error('Error in withMercadoPago:', error);
+			return { result: null, error: error.message || error };
 		}
 	}
 
@@ -70,15 +135,13 @@ export class PaymentService {
 		customProfitMargin?: number
 	) {
 		try {
-			//TODO: implementar mas tarde esto↓
-			// const paymentGateways = {
-			// 	[EcommercePaymentProviders.UALA]: this.calculatePricesWithUala,
-			// 	[EcommercePaymentProviders.MERCADOPAGO]: this.calculatePricesWithMercadoPago
-			// };
-			// const prices = await paymentGateways[paymentGateway](cost_price, dolar);
-			const prices = await this.calculatePricesWithUala(cost_price, dolar, models, customProfitMargin);
-			return prices;
+			if (paymentProvider === EcommercePaymentProviders.UALA) {
+				return await this.calculatePricesWithUala(cost_price, dolar, models, customProfitMargin);
+			} else {
+				return await this.calculatePricesWithMercadoPago(cost_price, dolar, models, customProfitMargin);
+			}
 		} catch (error) {
+			console.error('Error in CalculatePrices:', error);
 			throw new AppError(
 				'Failed to calculate prices on PaymentService.CalculatePrices',
 				'Error al calcular los precios',
@@ -151,7 +214,11 @@ export class PaymentService {
 					card_3_installments: Math.round(price6Installments - basePriceInArs - ualaTake3),
 
 					// En 6 cuotas: cobrás el precio de 6 y Ualá te descuenta la tasa de 6 (debería ser igual a tu profit original)
-					card_6_installments: Math.round(price6Installments - basePriceInArs - ualaTake6)
+					card_6_installments: Math.round(price6Installments - basePriceInArs - ualaTake6),
+
+					// Ticket: Cobrás el precio de tarjeta (o efectivo?), pero Ualá solo descuenta la base. 
+					// Usaremos el precio de tarjeta por seguridad.
+					ticket: Math.round(price6Installments - basePriceInArs - (price6Installments * baseCommFactor * ivaFactor))
 				}
 			};
 		} catch (error) {
@@ -162,8 +229,68 @@ export class PaymentService {
 			);
 		}
 	}
-	// TODO: Implementar cálculo de precios con MercadoPago
-	private static calculatePricesWithMercadoPago(cost_price: number) { }
+	private static async calculatePricesWithMercadoPago(
+		cost_price: number,
+		dolar: number,
+		models?: TenantModels,
+		customProfitMargin?: number
+	): Promise<IProductPrices> {
+		try {
+			const config = await EcommerceService.getConfig(models!);
+			const mpConfig = config.paymentGateways.mercadopago;
+
+			const rawProfit = customProfitMargin !== undefined ? customProfitMargin : config.profit;
+			const rawBaseComm = mpConfig.baseCommission;
+			const rawCFT3 = mpConfig.cft3cuotas;
+			const rawCFT6 = mpConfig.cft6Cuotas;
+
+			const profitFactor = this.normalizePercentage(rawProfit);
+			const baseCommFactor = this.normalizePercentage(rawBaseComm);
+			const cft3Factor = this.normalizePercentage(rawCFT3);
+			const cft6Factor = this.normalizePercentage(rawCFT6);
+			const ivaFactor = 1 + config.taxes.iva / 100;
+
+			const basePriceInArs = cost_price * dolar;
+			const targetPrice = basePriceInArs * (1 + profitFactor);
+
+			// MercadoPago suele tener comisiones distintas, pero el esquema de "restar del total" es similar
+			const totalTasa6Cuotas = (baseCommFactor + cft6Factor) * ivaFactor;
+			const totalTasa3Cuotas = (baseCommFactor + cft3Factor) * ivaFactor;
+
+			const price6Installments = Math.round(targetPrice / (1 - totalTasa6Cuotas));
+			const mpTake6 = price6Installments * totalTasa6Cuotas;
+			const mpTake3 = price6Installments * totalTasa3Cuotas;
+
+			return {
+				costPrice: {
+					inUSD: cost_price,
+					inARS: basePriceInArs
+				},
+				dolarPrice: dolar,
+				profitMargin: profitFactor,
+				baseCommission: baseCommFactor,
+				cft6Cuotas: cft6Factor,
+				efectivo_transferencia: Math.round(targetPrice),
+				tarjeta_credito_debito: price6Installments,
+				cuotas: {
+					cuotas_3_si: Math.round(price6Installments / 3),
+					cuotas_6_si: Math.round(price6Installments / 6)
+				},
+				earnings: {
+					cash_transfer: Math.round(targetPrice - basePriceInArs),
+					card_3_installments: Math.round(price6Installments - basePriceInArs - mpTake3),
+					card_6_installments: Math.round(price6Installments - basePriceInArs - mpTake6),
+					ticket: Math.round(price6Installments - basePriceInArs - (price6Installments * baseCommFactor * ivaFactor))
+				}
+			};
+		} catch (error) {
+			throw new AppError(
+				'Failed to calculate prices with MercadoPago',
+				'Error al calcular precios con MercadoPago',
+				500
+			);
+		}
+	}
 
 	
 	getFinalCost() {
@@ -200,11 +327,12 @@ export class PaymentService {
 			if (this.isPreferredPaymentType) {
 				earningPerUnit = earnings?.cash_transfer || 0;
 			} else {
-				// Mapeo de cuotas a earnings disponibles
-				if (installments <= 3) {
+				// Determinamos el tipo de ganancia basado en el tipo de pago actual si está disponible
+				if (installments === 0) { // Convención para tickets o pagos únicos
+					earningPerUnit = earnings?.ticket || 0;
+				} else if (installments <= 3) {
 					earningPerUnit = earnings?.card_3_installments || 0;
 				} else {
-					// Para 6 o más cuotas (o cualquier otro caso > 3) usamos el de 6
 					earningPerUnit = earnings?.card_6_installments || 0;
 				}
 			}

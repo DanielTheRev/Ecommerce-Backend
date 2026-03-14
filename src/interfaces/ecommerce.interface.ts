@@ -47,6 +47,12 @@ export interface IEcommerceMercadoPagoPaymentGateway {
 	accessToken: string;
 	publicKey: string;
 	baseCommission: number;
+	cft3cuotas: number;
+	cft6Cuotas: number;
+	maxInstallments: number;
+	excludedPaymentMethods: string[];
+	excludedPaymentTypes: string[];
+	webhookSecret?: string;
 }
 
 export enum EcommercePaymentProviders {

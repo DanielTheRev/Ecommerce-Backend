@@ -29,6 +29,10 @@ export const paymentInfoSchema = new Schema<IPaymentInfo>({
   ualaOrderStatus: {
     type: Object,
     default: undefined
+  },
+  mercadopagoData: {
+    type: Object,
+    default: undefined
   }
 });
 

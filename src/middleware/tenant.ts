@@ -34,13 +34,13 @@ export const resolveTenant = async (
 	next: NextFunction
 ): Promise<void> => {
 	try {
-		// Estrategia 1: Header x-tenant-id
-		const tenantSlug = req.headers['x-tenant-id'] as string;
+		// Estrategia 1: Header x-tenant-id o query param tenantId
+		const tenantSlug = (req.headers['x-tenant-id'] as string) || (req.query.tenantId as string);
 
 		let tenant: ITenant | null = null;
 
 		if (tenantSlug) {
-			console.log('Resolviendo tenant por slug');
+			console.log(`Resolviendo tenant por slug: ${tenantSlug}`);
 			tenant = await connectionManager.getTenantBySlug(tenantSlug);
 		} else {
 			// Estrategia 2: Resolver por dominio/hostname

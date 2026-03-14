@@ -5,6 +5,7 @@ import { OrderStatus, PaymentStatus } from '@/interfaces/order.interface';
 
 const CartItemSchema = z.object({
 	_id: z.string().min(1),
+	sku: z.string().optional(), // Adding this since DTO has it, but making it optional since payload lacks it
 	quantity: z.number().int().positive(),
 });
 
@@ -26,7 +27,23 @@ export const CreateOrderSchema = z.object({
 		paymentMethod: z.object({
 			_id: z.string().min(1),
 			type: z.enum(PaymentType)
-		})
+		}),
+
+		mercadopagoData: z.object({
+			token: z.string().optional(),
+			payment_method_id: z.string(),
+			installments: z.number().int().positive(),
+			type: z.string(),
+			payer: z.object({
+				email: z.string().email(),
+				first_name: z.string().optional(),
+				last_name: z.string().optional()
+			}).optional(),
+			identification: z.object({
+				type: z.string(),
+				number: z.string()
+			}).optional()
+		}).optional()
 	})
 });
 

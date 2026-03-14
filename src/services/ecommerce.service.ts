@@ -2,6 +2,7 @@ import { AppError } from '@/errors/app.error';
 import { EcommercePaymentProviders, IEcommerceConfig } from '@/interfaces/ecommerce.interface';
 import { TenantModels } from '@/config/modelRegistry';
 import { decrypt, encrypt } from '@/utils/encryption';
+import { flattenObject } from '@/utils/object.util';
 
 export class EcommerceService {
 	private constructor() { }
@@ -81,9 +82,13 @@ export class EcommerceService {
 				data.lastModifiedBy = userId;
 			}
 
+			// Aplanamos el objeto para permitir actualizaciones parciales en niveles profundos
+			// evitando que se borren campos hermanos (como uala al actualizar mercadopago)
+			const flattenedData = flattenObject(data);
+
 			const updatedConfig = await models.EcommerceConfig.findOneAndUpdate(
 				{ key: 'global_config' },
-				{ $set: data },
+				{ $set: flattenedData },
 				{ new: true, runValidators: true, upsert: true }
 			).lean();
 
@@ -171,6 +176,7 @@ export class EcommerceService {
 				const mp = configObj.paymentGateways.mercadopago;
 				if (mp.accessToken) mp.accessToken = JSON.stringify(encrypt(mp.accessToken));
 				if (mp.publicKey) mp.publicKey = JSON.stringify(encrypt(mp.publicKey));
+				if (mp.webhookSecret) mp.webhookSecret = JSON.stringify(encrypt(mp.webhookSecret));
 			}
 		}
 	}
@@ -200,6 +206,13 @@ export class EcommerceService {
 						mp.publicKey = decrypt(JSON.parse(mp.publicKey));
 					} catch (e) {
 						console.error('Error al desencriptar publicKey de MercadoPago:', e);
+					}
+				}
+				if (mp.webhookSecret && mp.webhookSecret !== 'no asignado') {
+					try {
+						mp.webhookSecret = decrypt(JSON.parse(mp.webhookSecret));
+					} catch (e) {
+						console.error('Error al desencriptar webhookSecret de MercadoPago:', e);
 					}
 				}
 			}
