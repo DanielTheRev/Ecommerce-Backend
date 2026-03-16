@@ -11,7 +11,10 @@ import {
 	mercadopagoWebhook,
 	ualaWebhook,
 	updatePaymentStatus,
-	updateShippingStatus
+	updateShippingStatus,
+	createLocalOrder,
+	getDailyStats,
+	getTicket
 } from '../controllers/order.controller';
 import { adminOnly, protect } from '../middleware/auth';
 import { validateSchema } from '@/middleware/validator.middleware';
@@ -36,5 +39,8 @@ router.get('/admin/:id', protect, adminOnly, getOrderByIdAdmin); // Obtener orde
 router.post('/updatePaymentStatus', protect, adminOnly, validateSchema(UpdatePaymentStatusSchema), updatePaymentStatus); // actualizar estado de una order desde el cliente
 router.post('/updateShippingStatus', protect, adminOnly, validateSchema(UpdateShippingStatusSchema), updateShippingStatus); // actualizar estado de una order desde el cliente
 router.get('/admin/stats', protect, adminOnly, getOrderStats); // Obtener estadísticas (admin)
+router.get('/admin/daily-stats', protect, adminOnly, getDailyStats); // Obtener estadísticas diarias (admin)
+router.post('/admin/local-sale', protect, adminOnly, createLocalOrder); // Crear venta local (admin/employee)
+router.get('/:id/ticket', protect, getTicket); // Obtener ticket PDF de venta
 
 export default router;

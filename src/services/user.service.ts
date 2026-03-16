@@ -68,4 +68,29 @@ export class UserService {
 			);
 		}
 	}
+	static async getOrCreateGenericUser(models: TenantModels) {
+		try {
+			// Find existing generic user
+			const genericUser = await models.User.findOne({ email: 'ventas@local.com' });
+			if (genericUser) return genericUser;
+
+			// If it doesn't exist, create it
+			const newUser = await models.User.create({
+				name: 'Consumidor Final',
+				email: 'ventas@local.com',
+				role: Role.user,
+				isActive: true
+			});
+
+			return newUser;
+		} catch (error) {
+			console.log(error);
+			if (error instanceof AppError) throw error;
+			throw new AppError(
+				'Error getting or creating generic user',
+				'Error al intentar obtener o crear el usuario genérico',
+				500
+			);
+		}
+	}
 }

@@ -100,6 +100,8 @@ app.get('/health', (req: Request, res: Response) => {
 	});
 });
 
+import cashRegisterRoutes from './routes/cashRegisterRoutes.routes';
+
 // ============================
 // RUTAS MULTI-TENANT
 // Todas las rutas de negocio pasan primero por resolveTenant
@@ -113,6 +115,7 @@ app.use('/api/payment-methods', resolveTenant, paymentMethodRoutes);
 app.use('/api/home', resolveTenant, homeRoutes);
 app.use('/api/hero', resolveTenant, heroRoutes);
 app.use('/api/config', resolveTenant, ecommerceConfigRoutes);
+app.use('/api/cash-register', resolveTenant, cashRegisterRoutes);
 
 // Error handler middleware
 app.use(errorMiddleware);

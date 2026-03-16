@@ -9,8 +9,9 @@ import { NotificationSeverity, NotificationType } from '@/interfaces/notificatio
 import { UalaOrderStatus, UalaWebhook } from '@/interfaces/ualaWebhook.interface';
 import { AuthRequest } from '@/middleware/auth';
 import { OrderService } from '@/services/order.service';
-import { EcommerceService } from '@/services/ecommerce.service';
 import { MercadoPagoService } from '@/services/mercadopago.service';
+import { ReceiptService } from '@/services/receipt.service';
+import { EcommerceService } from '@/services/ecommerce.service';
 import { socketManager } from '@/sockets/socketManager';
 import { NextFunction, Response } from 'express';
 import UalaApiCheckout from 'ualabis-nodejs';
@@ -137,6 +138,34 @@ export const createOrder = async (req: AuthRequest, res: Response, next: NextFun
 			message: 'Orden creada exitosamente',
 			order: order,
 			extras
+		});
+	} catch (error) {
+		console.log(error);
+		return next(error);
+	}
+};
+
+// Crear orden de venta local en local físico / mostrador (employee, admin)
+export const createLocalOrder = async (req: AuthRequest, res: Response, next: NextFunction) => {
+	try {
+		const sellerId = req.user!._id.toString();
+		const data = req.body; // Debería contener items, splitPayments, userId (opcional), notes (opcional)
+
+		const newOrder = await OrderService.createLocalOrder(req.models!, {
+			items: data.items,
+			splitPayments: data.splitPayments,
+			sellerId: sellerId,
+			userId: data.userId,
+			notes: data.notes
+		});
+
+		if (req.tenant) {
+			socketManager.notifyNewOrderToAdmins(req.tenant.slug, newOrder);
+		}
+
+		return res.status(201).json({
+			message: 'Venta local registrada con éxito',
+			order: newOrder
 		});
 	} catch (error) {
 		console.log(error);
@@ -316,6 +345,42 @@ export const getOrderStats = async (req: AuthRequest, res: Response, next: NextF
 				totalRevenue: data.totalRevenue[0]?.total || 0
 			}
 		});
+	} catch (error) {
+		return next(error);
+	}
+};
+
+// Obtener estadísticas diarias de ventas (solo admin)
+export const getDailyStats = async (req: AuthRequest, res: Response, next: NextFunction) => {
+	try {
+		const { date } = req.query; // Puede pasar "2023-11-20"
+		const stats = await OrderService.getDailyStats(req.models!, date as string);
+
+		return res.json({
+			message: 'Estadísticas diarias obtenidas exitosamente',
+			stats
+		});
+	} catch (error) {
+		return next(error);
+	}
+};
+
+// Obtener ticket de orden
+export const getTicket = async (req: AuthRequest, res: Response, next: NextFunction) => {
+	try {
+		const { id } = req.params;
+		const order = await OrderService.getFullyOrderBy(req.models!, { _id: id }) as any;
+
+		if (!order) {
+			return res.status(404).json({ message: 'Orden no encontrada' });
+		}
+
+		const pdfBuffer = await ReceiptService.generateThermalReceipt(req.models!, order);
+
+		res.setHeader('Content-Type', 'application/pdf');
+		res.setHeader('Content-Disposition', `inline; filename="ticket-${order.orderNumber}.pdf"`);
+		
+		return res.end(pdfBuffer);
 	} catch (error) {
 		return next(error);
 	}

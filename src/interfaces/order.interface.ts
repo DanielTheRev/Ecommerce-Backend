@@ -49,6 +49,12 @@ export interface updateShippingStatusDTO {
 	status: OrderStatus
 }
 
+// Enum for sale type
+export enum SaleType {
+	ONLINE = 'ONLINE',
+	LOCAL = 'LOCAL'
+}
+
 // Enum for order status
 export enum OrderStatus {
 	PENDING = 'PENDING',
@@ -117,14 +123,25 @@ export interface IPaymentInfo {
 	mercadopagoData?: any;
 }
 
+// Interface para pagos divididos (Split Payments)
+export interface ISplitPayment {
+	method: PaymentType;
+	amount: number;
+	status: PaymentStatus;
+	transactionId?: string;
+}
+
 // Interface principal de la orden
 export interface IOrder {
 	_id: string; // Used when lean()
 	user: mongoose.Types.ObjectId;
+	seller?: mongoose.Types.ObjectId; // Empleado que realizó la venta local
+	saleType: SaleType;
 	items: IOrderItem[];
 	history: StatusEntry[];
 	shippingInfo: IShippingInfo;
 	paymentInfo: IPaymentInfo;
+	splitPayments?: ISplitPayment[]; // Para ventas combinadas (Ej. Mitad efectivo, mitad débito)
 	status: OrderStatus;
 	shippingCost: number;
 	total: number;

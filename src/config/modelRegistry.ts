@@ -11,6 +11,7 @@ import { shippingOptionSchema } from '@/models/ShippingOption.model';
 import { paymentMethodSchema } from '@/models/PaymentMethod.model';
 import { HeroSlideSchema } from '@/models/HeroSlide.model';
 import { BannerSchema } from '@/models/Banner.model';
+import { cashRegisterSchema } from '@/models/CashRegister.model';
 
 // Interfaces
 import { IProductDocument } from '@/interfaces/product.interface';
@@ -21,6 +22,7 @@ import { IShippingOption } from '@/interfaces/shippingMethods.interface';
 import { IPaymentMethod } from '@/interfaces/paymentMethod.interface';
 import { IHeroSlide } from '@/models/HeroSlide.model';
 import { IBanner } from '@/interfaces/home.interface';
+import { ICashRegisterDocument, ICashRegisterModel } from '@/interfaces/cash-register.interface';
 
 /**
  * TenantModels - Todos los modelos Mongoose de un tenant.
@@ -37,6 +39,7 @@ export interface TenantModels {
 	PaymentMethod: Model<IPaymentMethod>;
 	HeroSlide: Model<IHeroSlide>;
 	Banner: Model<IBanner>;
+	CashRegister: ICashRegisterModel;
 }
 
 /**
@@ -104,6 +107,11 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		? db.model<IBanner>('Banner')
 		: db.model<IBanner>('Banner', BannerSchema);
 
+	// CashRegister
+	const CashRegisterModel = db.models.CashRegister
+		? db.model<ICashRegisterDocument, ICashRegisterModel>('CashRegister')
+		: db.model<ICashRegisterDocument, ICashRegisterModel>('CashRegister', cashRegisterSchema);
+
 	return {
 		Product: ProductModel,
 		TechProduct: TechProductModel,
@@ -114,6 +122,7 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		ShippingOption: ShippingOptionModel,
 		PaymentMethod: PaymentMethodModel,
 		HeroSlide: HeroSlideModel,
-		Banner: BannerModel
+		Banner: BannerModel,
+		CashRegister: CashRegisterModel as ICashRegisterModel
 	};
 }

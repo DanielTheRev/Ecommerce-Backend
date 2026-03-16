@@ -3,7 +3,8 @@ import { Document } from 'mongoose';
 /* User roles */
 export enum Role {
 	user = 'user',
-	admin = 'admin'
+	admin = 'admin',
+	employee = 'employee'
 }
 
 export interface ISecureUser {

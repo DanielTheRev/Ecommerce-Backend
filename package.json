@@ -29,6 +29,7 @@
 	"dependencies": {
 		"@types/dompurify": "^3.2.0",
 		"@types/jsdom": "^27.0.0",
+		"@types/pdfkit": "^0.17.5",
 		"bcryptjs": "^3.0.2",
 		"cloudinary": "^2.9.0",
 		"cookie": "^1.1.1",
@@ -46,6 +47,7 @@
 		"mongoose": "^8.0.3",
 		"morgan": "^1.10.0",
 		"multer": "^2.0.2",
+		"pdfkit": "^0.18.0",
 		"resend": "^4.7.0",
 		"slugify": "^1.6.6",
 		"socket.io": "^4.8.1",

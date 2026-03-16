@@ -10,7 +10,9 @@ import {
 	GetOrdersByUserResponse,
 	GetAllOrdersResponse,
 	GetOrderStatsResponse,
-	CreateOrderExtras
+	CreateOrderExtras,
+	SaleType,
+	ISplitPayment
 } from '@/interfaces/order.interface';
 import { EcommerceService } from './ecommerce.service';
 import { EcommercePaymentProviders } from '@/interfaces/ecommerce.interface';
@@ -850,6 +852,189 @@ export class OrderService {
 		} catch (error) {
 			if (error instanceof AppError) throw error;
 			throw new AppError('Error fetching order', 'Error al intentar recuperar las órdenes', 500);
+		}
+	}
+
+	// ==========================================
+	// Métodos para POS / Ventas Locales
+	// ==========================================
+
+	/**
+	 * Crea un pedido de venta local (mostrador). Se descuenta stock inmediatamente,
+	 * y el pedido nace en estado DELIVERED (Entregado) y APPROVED (si el pago cubre el total).
+	 */
+	static async createLocalOrder(
+		models: TenantModels,
+		data: {
+			items: { _id: string; sku?: string; quantity: number }[];
+			splitPayments: ISplitPayment[];
+			sellerId: string;
+			userId?: string;
+			notes?: string;
+		}
+	): Promise<IOrderDocument> {
+		try {
+			// 1. Obtener los productos seleccionados
+			const itemsData = (await ProductService.getProductsByIds(models, data.items.map(i => i._id)))
+				.map(product => {
+					const orderItem = data.items.find(i => i._id === product._id.toString());
+					if (!orderItem) throw new AppError('Item no encontrado', 'Uno de los productos no existe', 404);
+					return {
+						data: product,
+						variantSku: orderItem.sku || '',
+						quantity: orderItem.quantity
+					};
+				});
+
+			// 2. Verificar stock
+			const variantItems = data.items.map(item => ({
+				_id: item._id,
+				sku: item.sku || '',
+				quantity: item.quantity
+			}));
+			await ProductService.verifyVariantStock(models, variantItems);
+
+			// 3. Preparar items de la orden y calcular costo total
+			let totalCost = 0;
+			let totalEarnings = 0;
+			
+			const orderItems = itemsData.map(item => {
+				const variant = item.data.variants?.find((v: any) => v.sku === item.variantSku);
+				const variantLabel = variant?.attributes?.map((a: any) => a.value).join(' - ') || '';
+				
+				// precio base (efectivo/transferencia es lo más común para mostrador)
+				const price = item.data.prices?.efectivo_transferencia || 0;
+				// costo del producto para calcular la ganancia
+				const costPrice = Number(item.data.prices?.costPrice) || 0;
+				
+				totalCost += (price * item.quantity);
+				totalEarnings += ((price - costPrice) * item.quantity);
+
+				return {
+					product: item.data._id,
+					variantSku: item.variantSku,
+					variantLabel,
+					quantity: item.quantity,
+					price,
+					productSnapshot: {
+						brand: item.data.brand,
+						model: item.data.model,
+						image: item.data.images?.[0]?.url || ''
+					}
+				};
+			});
+
+			// 4. Validar pagos parciales
+			const totalPaid = data.splitPayments.reduce((acc, p) => acc + p.amount, 0);
+			if (totalPaid < totalCost) {
+				throw new AppError('Monto insuficiente', `El pago total sumado ($${totalPaid}) no alcanza a cubrir el costo del pedido ($${totalCost})`, 400);
+			}
+
+			// 5. Descontar stock
+			await ProductService.reduceVariantStock(models, variantItems);
+			
+			// 7. Crear el Order record
+			const newOrder = await models.Order.create({
+				user: data.userId, // Controller se encargará de proveer el genérico
+				seller: data.sellerId,
+				saleType: SaleType.LOCAL,
+				status: OrderStatus.DELIVERED, // entregado automáticamente
+				items: orderItems,
+				shippingInfo: {
+					type: ShippingType.PICKUP,
+					cost: 0
+				},
+				paymentInfo: {
+					method: data.splitPayments[0]?.method || PaymentType.CASH, // método primario
+					amount: totalCost,
+					status: PaymentStatus.APPROVED, // asumiendo que el mostrador cobra en el acto
+					paymentDate: new Date()
+				},
+				splitPayments: data.splitPayments,
+				total: totalCost,
+				orderNumber: this.generateOrderNumber(),
+				notes: data.notes,
+				history: [{
+					status: OrderStatus.DELIVERED,
+					timestamp: new Date(),
+					note: 'Venta presencial en local'
+				}],
+				earnings: totalEarnings
+			});
+
+			return await newOrder.populate([
+				{ path: 'user', select: 'name email' },
+				{ path: 'seller', select: 'name' },
+				{ path: 'items.product', select: 'brand model prices images' }
+			]);
+
+		} catch (error) {
+			console.error(error);
+			if (error instanceof AppError) throw error;
+			throw new AppError('Error al procesar venta local', 'No se pudo generar la orden de mostrador.', 500);
+		}
+	}
+
+	/**
+	 * Estadísticas del día en la tienda física/online
+	 */
+	static async getDailyStats(models: TenantModels, dateParam?: string) {
+		try {
+			const targetDate = dateParam ? new Date(dateParam) : new Date();
+			
+			// Inicio del día en string param local u hora servidor (hoy)
+			const startOfDay = new Date(targetDate);
+			startOfDay.setHours(0, 0, 0, 0);
+			
+			const endOfDay = new Date(targetDate);
+			endOfDay.setHours(23, 59, 59, 999);
+
+			// Consultar todas las órdenes del día que no estén canceladas
+			const dailyOrders = await models.Order.find({
+				createdAt: { $gte: startOfDay, $lte: endOfDay },
+				status: { $ne: OrderStatus.CANCELLED }
+			});
+
+			let totalRevenue = 0;
+			let totalEarnings = 0;
+			const incomeByMethod: Record<string, number> = {};
+			let localSalesCount = 0;
+			let onlineSalesCount = 0;
+
+			dailyOrders.forEach(order => {
+				totalRevenue += order.total;
+				// cast earnings manually to avoid sum TS error
+				totalEarnings += Number(order.earnings) || 0;
+
+				if (order.saleType === SaleType.LOCAL) localSalesCount++;
+				else onlineSalesCount++;
+
+				// Contabilizar splitPayments si los hay, sino fallback a paymentInfo primario
+				if (order.splitPayments && order.splitPayments.length > 0) {
+					order.splitPayments.forEach(sp => {
+						incomeByMethod[sp.method] = (incomeByMethod[sp.method] || 0) + sp.amount;
+					});
+				} else {
+					const method = order.paymentInfo?.method || 'unknown';
+					incomeByMethod[method] = (incomeByMethod[method] || 0) + order.total;
+				}
+			});
+
+			return {
+				date: targetDate,
+				totalRevenue,
+				totalEarnings,
+				salesCount: {
+					total: dailyOrders.length,
+					local: localSalesCount,
+					online: onlineSalesCount
+				},
+				revenueByMethod: incomeByMethod
+			};
+
+		} catch (error) {
+			console.log(error);
+			throw new AppError('Failed to get daily stats', 'Error al obtener las estadísticas del día', 500);
 		}
 	}
 }
