@@ -63,7 +63,8 @@ export class PaymentService {
 			identification?: { type: string; number: string } 
 		},
 		paymentData: { token?: string; payment_method_id: string; installments: number; type: string; payer?: any },
-		tenantSlug: string
+		tenantSlug: string,
+		baseUrl: string
 	) {
 		try {
 			const config = await EcommerceService.getConfig(models);
@@ -77,38 +78,26 @@ export class PaymentService {
 			const expirationDate = new Date();
 			expirationDate.setDate(expirationDate.getDate() + 3);
 
-			// Construimos el cuerpo para el API de Orders (/v1/orders)
-			const mpOrderBody = {
-				type: 'online',
+			// Construimos el cuerpo para el API de Payments (/v1/payments)
+			const mpPaymentBody = {
+				transaction_amount: Number(total),
 				external_reference: orderID,
-				processing_mode: 'automatic',
-				total_amount: total.toString(),
-				// date_of_expiration: expirationDate.toISOString(),
+				description: this.getDescriptionQuantity(),
+				installments: Number(paymentData.installments),
+				payment_method_id: paymentData.payment_method_id,
+				token: paymentData.token,
 				payer: {
 					email: paymentData.payer?.email || payerData.email,
 					first_name: paymentData.payer?.first_name || payerData.first_name || 'Cliente',
 					last_name: paymentData.payer?.last_name || payerData.last_name || 'Ecommerce',
 					identification: paymentData.payer?.identification || payerData.identification
 				},
-				transactions: {
-					payments: [
-						{
-							amount: total.toString(),
-							payment_method: {
-								id: paymentData.payment_method_id,
-								type: paymentData.type,
-								...(paymentData.token && { token: paymentData.token }),
-								installments: Number(paymentData.installments)
-							}
-						}
-					]
-				},
-				// notification_url: process.env.MP_WEBHOOK_URL 
-				// 	? `${process.env.MP_WEBHOOK_URL}?tenantId=${tenantSlug}` 
-				// 	: ''
+				notification_url: baseUrl 
+					? `${baseUrl}/api/orders/mercadopago-notification/${tenantSlug}?source_news=webhooks` 
+					: ''
 			};
 
-			const result = await MercadoPagoService.createOrder(mpConfig.accessToken, mpOrderBody);
+			const result = await MercadoPagoService.createPayment(mpConfig.accessToken, mpPaymentBody);
 
 			return { result, error: null };
 		} catch (error: any) {

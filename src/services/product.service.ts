@@ -293,7 +293,7 @@ export class ProductService {
 			const { venta } = await getDolar();
 
 			const prices = await PaymentService.CalculatePrices(
-				EcommercePaymentProviders.UALA,
+				EcommercePaymentProviders.MERCADOPAGO,
 				data.price,
 				venta,
 				models,
@@ -424,7 +424,7 @@ export class ProductService {
 					: product.prices.costPrice.inUSD;
 
 				const prices = await PaymentService.CalculatePrices(
-					EcommercePaymentProviders.UALA,
+					EcommercePaymentProviders.MERCADOPAGO,
 					currentPrice as number,
 					venta,
 					models,

@@ -5,7 +5,12 @@ import {
 	OrderStatus,
 	PaymentStatus,
 	updatePaymentStatusDTO,
-	updateShippingStatusDTO
+	updateShippingStatusDTO,
+	CreateOrderResponse,
+	GetOrdersByUserResponse,
+	GetAllOrdersResponse,
+	GetOrderStatsResponse,
+	CreateOrderExtras
 } from '@/interfaces/order.interface';
 import { EcommerceService } from './ecommerce.service';
 import { EcommercePaymentProviders } from '@/interfaces/ecommerce.interface';
@@ -100,7 +105,7 @@ export class OrderService {
 		}
 	}
 
-	static async createOrder(models: TenantModels, data: CreateOrderDTO, userId: string, tenantSlug: string) {
+	static async createOrder(models: TenantModels, data: CreateOrderDTO, userId: string, tenantSlug: string, baseUrl: string): Promise<CreateOrderResponse> {
 		try {
 			if (!userId)
 				throw new AppError(
@@ -235,7 +240,7 @@ export class OrderService {
 				{ path: 'items.product', select: 'brand model prices images' }
 			])
 
-			let extras;
+			let extras: CreateOrderExtras | undefined;
 			if (paymentMethod.type === PaymentType.CARD || paymentMethod.type === PaymentType.TICKET) {
 				const config = await EcommerceService.getConfig(models);
 
@@ -254,14 +259,15 @@ export class OrderService {
 							identification: data.mercadopagoData.identification
 						},
 						data.mercadopagoData,
-						tenantSlug
+						tenantSlug,
+						baseUrl
 					);
 
 					if (error || !result) {
 						throw new AppError('Failed to process MercadoPago payment', error || 'Error al procesar el pago de MercadoPago', 500);
 					}
 
-					newOrder.paymentInfo.transactionId = result.id;
+					newOrder.paymentInfo.transactionId = String(result.id);
 					newOrder.paymentInfo.mercadopagoData = result;
 
 					// Si el pago es exitoso
@@ -289,9 +295,8 @@ export class OrderService {
 						status: result.status,
 						status_detail: result.status_detail,
 						provider: EcommercePaymentProviders.MERCADOPAGO,
-						ticket_url: result.transactions?.payments?.[0]?.payment_method?.ticket_url ||
-							result.payments?.[0]?.transaction_details?.external_resource_url ||
-							result.transactions?.payments?.[0]?.transaction_details?.external_resource_url
+						ticket_url: result.transaction_details?.external_resource_url || 
+							result.point_of_interaction?.transaction_data?.ticket_url
 					};
 				} else {
 					// Fallback a Ualá
@@ -335,7 +340,7 @@ export class OrderService {
 		dateRange: string;
 		page: number;
 		limit: number;
-	}) {
+	}): Promise<GetOrdersByUserResponse> {
 		if (!userId)
 			throw new AppError(
 				'User ID is required to fetch orders',
@@ -638,7 +643,7 @@ export class OrderService {
 			page: string | number;
 			limit: string | number;
 		}
-	) {
+	): Promise<GetAllOrdersResponse> {
 		if (query.userId === 'undefined')
 			throw new AppError('Invalid userId filter', 'El filtro de userId no es válido', 400);
 
@@ -809,7 +814,7 @@ export class OrderService {
 		}
 	}
 
-	static async getOrderStats(models: TenantModels, role: Role) {
+	static async getOrderStats(models: TenantModels, role: Role): Promise<GetOrderStatsResponse> {
 		if (!role || role !== Role.admin)
 			throw new AppError('Unauthorized access', 'Acceso no autorizado', 403);
 		try {

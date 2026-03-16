@@ -209,7 +209,7 @@ export class ProductController {
 			const { costPrice, customProfitMargin } = req.body;
 			const { venta } = await getDolar();
 			const prices = await PaymentService.CalculatePrices(
-				EcommercePaymentProviders.UALA,
+				EcommercePaymentProviders.MERCADOPAGO,
 				costPrice,
 				venta,
 				req.models!,

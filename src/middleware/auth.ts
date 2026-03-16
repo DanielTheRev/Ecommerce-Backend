@@ -8,6 +8,13 @@ export interface AuthRequest extends TenantRequest {
 	user?: IUser;
 }
 
+export interface Auth0MercadoPago extends TenantRequest {
+	query: {
+		state: string;
+		code: string;
+	}
+}
+
 interface JwtPayload {
 	userID: string;
 	iat: number;

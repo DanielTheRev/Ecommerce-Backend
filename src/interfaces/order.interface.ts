@@ -143,3 +143,71 @@ export interface IOrderDocument extends Document, Omit<IOrder, '_id'> {
 export interface IOrderModel extends mongoose.Model<IOrderDocument> {
 	findByUser(userId: string): Promise<IOrderDocument[]>;
 }
+
+import { EcommercePaymentProviders } from './ecommerce.interface';
+
+// Respuestas de los servicios de ordenes para mayor tipado y uso en el front
+export interface OrderPagination {
+	currentPage: number;
+	totalPages: number;
+	totalItems: number;
+	itemsPerPage: number;
+}
+
+export interface GetOrdersByUserResponse {
+	data: IOrderDocument[];
+	pagination: OrderPagination;
+}
+
+export interface OrderStatusStats {
+	count: number;
+	totalAmount: number;
+}
+
+export interface GetAllOrdersResponse {
+	data: IOrderDocument[];
+	pagination: OrderPagination;
+	stats: Record<string, OrderStatusStats>;
+	filters: {
+		status: string;
+		userId: string | null;
+		dateRange: string;
+	};
+}
+
+export interface GetOrderStatsResponse {
+	totalOrders: number;
+	pendingOrders: number;
+	processingOrders: number;
+	shippedOrders: number;
+	deliveredOrders: number;
+	cancelledOrders: number;
+	totalRevenue: { _id: any; total: number }[];
+}
+
+export interface MercadoPagoExtras {
+	id?: string | number;
+	status?: string;
+	status_detail?: string;
+	provider: EcommercePaymentProviders.MERCADOPAGO;
+	ticket_url?: string;
+}
+
+export interface UalaExtras extends Omit<Partial<OrderData>, 'amount'> {
+	provider: EcommercePaymentProviders.UALA;
+	amount?: string | number;
+}
+
+export interface ManualPaymentExtras {
+	provider: 'manual';
+	name: string;
+	instructions: string;
+	status: 'waiting_confirmation';
+}
+
+export type CreateOrderExtras = MercadoPagoExtras | UalaExtras | ManualPaymentExtras;
+
+export interface CreateOrderResponse {
+	order: IOrderDocument;
+	extras?: CreateOrderExtras;
+}

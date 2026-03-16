@@ -4,6 +4,10 @@ import { protect, adminOnly } from '@/middleware/auth';
 
 const router: Router = Router();
 
+router.get(
+  '/mercadopago/callback', EcommerceConfigController.handleMercadoPagoCallback
+);
+
 // Todas las rutas de configuración requieren autenticación de administrador
 router.use(protect, adminOnly);
 

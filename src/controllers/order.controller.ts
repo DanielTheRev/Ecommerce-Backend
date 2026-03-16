@@ -126,7 +126,8 @@ export const createOrder = async (req: AuthRequest, res: Response, next: NextFun
 	try {
 		const userId = req.user._id;
 		const newOrderDTO = req.body as CreateOrderDTO;
-		const { order, extras } = await OrderService.createOrder(req.models!, newOrderDTO, userId, req.tenant!.slug);
+		const baseUrl = `${req.protocol}://${req.get('host')}`;
+		const { order, extras } = await OrderService.createOrder(req.models!, newOrderDTO, userId, req.tenant!.slug, baseUrl);
 
 		if (req.tenant) {
 			socketManager.notifyNewOrderToAdmins(req.tenant.slug, order);

@@ -35,7 +35,22 @@ export const resolveTenant = async (
 ): Promise<void> => {
 	try {
 		// Estrategia 1: Header x-tenant-id o query param tenantId
-		const tenantSlug = (req.headers['x-tenant-id'] as string) || (req.query.tenantId as string);
+		let tenantSlug = (req.headers['x-tenant-id'] as string) || (req.query.tenantId as string) || (req.query.state as string);
+
+		// Fallback: Intentar extraer de los params (si la ruta los tiene definidos)
+		// o directamente de la URL si es un webhook de Mercado Pago
+		if (!tenantSlug) {
+			if (req.params.tenantSlug) {
+				tenantSlug = req.params.tenantSlug;
+			} else if (req.originalUrl.includes('/mercadopago-notification/')) {
+				const parts = req.originalUrl.split('/');
+				// Buscamos el slug después de /mercadopago-notification/
+				const index = parts.findIndex(p => p === 'mercadopago-notification');
+				if (index !== -1 && parts[index + 1]) {
+					tenantSlug = parts[index + 1].split('?')[0];
+				}
+			}
+		}
 
 		let tenant: ITenant | null = null;
 

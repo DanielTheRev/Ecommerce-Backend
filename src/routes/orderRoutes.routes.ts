@@ -20,6 +20,7 @@ import { CreateOrderSchema, UpdatePaymentStatusSchema, UpdateShippingStatusSchem
 const router: Router = Router();
 // webhooks
 router.post('/mercadopago-notification', mercadopagoWebhook);
+router.post('/mercadopago-notification/:tenantSlug', mercadopagoWebhook); // Nueva ruta para webhooks personalizados
 router.post('/ualabis-notification', ualaWebhook);
 router.get('/ualabis-failedNotifications', getNotificationsUala);
 

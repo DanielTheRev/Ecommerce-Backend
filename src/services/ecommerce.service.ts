@@ -3,6 +3,7 @@ import { EcommercePaymentProviders, IEcommerceConfig } from '@/interfaces/ecomme
 import { TenantModels } from '@/config/modelRegistry';
 import { decrypt, encrypt } from '@/utils/encryption';
 import { flattenObject } from '@/utils/object.util';
+import { MercadoPagoService } from './mercadopago.service';
 
 export class EcommerceService {
 	private constructor() { }
@@ -24,6 +25,7 @@ export class EcommerceService {
 	static getConfig = async (models: TenantModels): Promise<IEcommerceConfig> => {
 		try {
 			const config = await models.EcommerceConfig.findOne({ key: 'global_config' }).lean() as unknown as IEcommerceConfig;
+
 			if (!config)
 				throw new AppError(
 					'Ecommerce config not found',
@@ -35,6 +37,7 @@ export class EcommerceService {
 			return decryptConfig;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
+			console.log(error);
 			throw new AppError(
 				'Failed to fetch ecommerce config',
 				'Error al obtener la configuración de ecommerce',
@@ -61,7 +64,7 @@ export class EcommerceService {
 			}
 
 			const newConfig = await models.EcommerceConfig.create(data);
-			
+
 			return this.decryptEcommerceConfig(newConfig.toObject() as IEcommerceConfig);
 		} catch (error) {
 			if (error instanceof AppError) throw error;
@@ -96,6 +99,7 @@ export class EcommerceService {
 
 			return this.decryptEcommerceConfig(updatedConfig as unknown as IEcommerceConfig);
 		} catch (error) {
+			console.log(error);
 			if (error instanceof AppError) throw error;
 			throw new AppError(
 				'Failed to update ecommerce config',
@@ -220,5 +224,45 @@ export class EcommerceService {
 		return configObj;
 
 	}
+
+	static handleMercadoPagoOAuth = async (models: TenantModels, code: string): Promise<void> => {
+		try {
+			const redirectUri = process.env.MP_REDIRECT_URI;
+
+			if (!redirectUri) {
+				throw new AppError('Configuración incompleta', 'Falta la variable MP_REDIRECT_URI', 500);
+			}
+
+			// 1. Delegamos el trabajo sucio al servicio de Mercado Pago (SDK)
+			// Él se encarga de hablar con la API y nos devuelve los tokens limpios
+			const mpTokens = await MercadoPagoService.exchangeAuthorizationCode(code, redirectUri);
+
+			// 2. Armamos el objeto para actualizar la configuración
+			const configToUpdate = {
+				paymentGateways: {
+					mercadopago: {
+						active: true,
+						accessToken: mpTokens.accessToken,
+						publicKey: mpTokens.publicKey,
+						refreshToken: mpTokens.refreshToken
+					}
+				}
+			} as unknown as IEcommerceConfig;
+
+			// 3. Guardamos usando tu método existente (encriptación y base de datos)
+			await this.updateConfig(models, configToUpdate);
+
+		} catch (error: any) {
+			console.error('Error en el flujo OAuth:', error);
+
+			if (error instanceof AppError) throw error;
+
+			throw new AppError(
+				'Failed to authenticate with Mercado Pago',
+				'Error al vincular la cuenta con Mercado Pago',
+				500
+			);
+		}
+	};
 
 }
