@@ -67,6 +67,8 @@ export interface IProduct {
 	tags?: string[];
 	lowStockThreshold?: number;
 	customProfitMargin?: number;
+	isActive: boolean;
+	isFeatured: boolean;
 	//TODO: Quitar el precio 
 }
 

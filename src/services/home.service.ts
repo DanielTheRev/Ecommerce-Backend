@@ -5,6 +5,7 @@ import { BannerService } from './banner.service';
 import { HeroService } from './hero.service';
 import { AppError } from '@/errors/app.error';
 import { TenantModels } from '@/config/modelRegistry';
+import { BentoService } from './bento.service';
 
 export class HomeService {
 	private static readonly offers: IHomeOffer[] = [
@@ -94,11 +95,13 @@ export class HomeService {
 		const productByBrand = await this.getProductsGroupByBrand(models);
 		// Fetch Hero Slides
 		const heroSlides = await HeroService.getActiveSlides(models);
+		const bentoConfig = await BentoService.getBentoConfig(models);
 
 		return {
 			heroSlides,
 			offers: this.offers,
-			productByBrand
+			productByBrand,
+			bentoConfig
 		};
 	}
 }

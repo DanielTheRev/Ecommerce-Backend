@@ -12,6 +12,7 @@ import { ITenant } from './interfaces/tenant.interface';
 import authRoutes from './routes/auth.routes';
 import ecommerceConfigRoutes from './routes/EcommerceConfig.routes';
 import heroRoutes from './routes/hero.routes';
+import bentoRoutes from './routes/bento.routes';
 import homeRoutes from './routes/home.routes';
 import orderRoutes from './routes/orderRoutes.routes';
 import paymentMethodRoutes from './routes/paymentMethodRoutes.routes';
@@ -114,6 +115,7 @@ app.use('/api/shipping', resolveTenant, shippingRoutes);
 app.use('/api/home', resolveTenant, homeRoutes);
 app.use('/api/payment-methods', resolveTenant, paymentMethodRoutes);
 app.use('/api/hero', resolveTenant, heroRoutes);
+app.use('/api/bento', resolveTenant, bentoRoutes);
 app.use('/api/config', resolveTenant, ecommerceConfigRoutes);
 app.use('/api/cash-register', resolveTenant, cashRegisterRoutes);
 

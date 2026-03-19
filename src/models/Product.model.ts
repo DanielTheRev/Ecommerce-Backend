@@ -118,7 +118,6 @@ const BaseProductSchema = new Schema(
 				value: { type: String, required: true }
 			}
 		],
-		// ============ NUEVO: Variantes con SKU + stock ============
 		variants: {
 			type: [VariantSchema],
 			default: []
@@ -132,6 +131,16 @@ const BaseProductSchema = new Schema(
 			type: Number,
 			default: 3,
 			min: 0
+		},
+		isActive: {
+			type: Boolean,
+			default: true,
+			index: true // Índice para que las consultas del frontend vuelen
+		},
+		isFeatured: {
+			type: Boolean,
+			default: false,
+			index: true // Súper importante el índice porque vamos a buscar mucho por este campo
 		}
 	},
 	{

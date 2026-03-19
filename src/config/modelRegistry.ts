@@ -12,6 +12,7 @@ import { paymentMethodSchema } from '@/models/PaymentMethod.model';
 import { BaseProductSchema } from '@/models/Product.model';
 import { shippingOptionSchema } from '@/models/ShippingOption.model';
 import { userSchema } from '@/models/User.model';
+import { BentoConfigSchema } from '@/models/BentoConfig.model';
 
 // Interfaces
 import { ICashRegisterDocument, ICashRegisterModel } from '@/interfaces/cash-register.interface';
@@ -22,6 +23,7 @@ import { IProductDocument } from '@/interfaces/product.interface';
 import { IShippingOption } from '@/interfaces/shippingMethods.interface';
 import { IUser } from '@/interfaces/user.interface';
 import { IHeroSlide } from '@/interfaces/hero.interface';
+import { IBentoConfigDocument } from '@/interfaces/bento.interface';
 
 /**
  * TenantModels - Todos los modelos Mongoose de un tenant.
@@ -39,6 +41,7 @@ export interface TenantModels {
 	HeroSlide: Model<IHeroSlide>;
 	Banner: Model<IBanner>;
 	CashRegister: ICashRegisterModel;
+	BentoConfig: Model<IBentoConfigDocument>;
 }
 
 /**
@@ -111,6 +114,11 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		? db.model<ICashRegisterDocument, ICashRegisterModel>('CashRegister')
 		: db.model<ICashRegisterDocument, ICashRegisterModel>('CashRegister', cashRegisterSchema);
 
+	// BentoConfig
+	const BentoConfigModel = db.models.BentoConfig
+		? db.model<IBentoConfigDocument>('BentoConfig')
+		: db.model<IBentoConfigDocument>('BentoConfig', BentoConfigSchema);
+
 	return {
 		Product: ProductModel,
 		TechProduct: TechProductModel,
@@ -122,6 +130,7 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		PaymentMethod: PaymentMethodModel,
 		HeroSlide: HeroSlideModel,
 		Banner: BannerModel,
-		CashRegister: CashRegisterModel as ICashRegisterModel
+		CashRegister: CashRegisterModel as ICashRegisterModel,
+		BentoConfig: BentoConfigModel
 	};
 }

@@ -1,11 +1,13 @@
 import { ObjectId } from 'mongoose';
 import { IHeroSlide } from './hero.interface';
 import { IProduct } from './product.interface';
+import { IBentoConfig } from './bento.interface';
 
 export interface IHomeConfig {
 	offers: IHomeOffer[];
 	productByBrand: IBrandSection[];
 	heroSlides: IHeroSlide[]
+	bentoConfig: IBentoConfig | null;
 }
 
 
