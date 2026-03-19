@@ -1,4 +1,13 @@
+import { ObjectId } from 'mongoose';
+import { IHeroSlide } from './hero.interface';
 import { IProduct } from './product.interface';
+
+export interface IHomeConfig {
+	offers: IHomeOffer[];
+	productByBrand: IBrandSection[];
+	heroSlides: IHeroSlide[]
+}
+
 
 export interface IBrandSection {
 	brandName: string;
@@ -24,13 +33,9 @@ export interface IHomeOffer {
 	iconColor: string;
 }
 
-export interface IHomeConfig {
-	offers: IHomeOffer[];
-	productByBrand: IBrandSection[];
-}
-
 
 export interface IBanner {
+	_id: ObjectId;
 	brandName: string;
 	description: string;
 	image: string; // Background image URL
@@ -46,6 +51,7 @@ export interface IBanner {
 	isActive: boolean;
 	order: number;
 }
+
 export interface IBannerDoc extends Document {
 	brandName: string;
 	description: string;
@@ -63,13 +69,3 @@ export interface IBannerDoc extends Document {
 	order: number;
 }
 
-
-export interface IHeroSlide extends Document {
-	title: string;
-	imageDesktop: string;
-	imageMobile: string;
-	link: string;
-	altText: string;
-	order: number;
-	isActive: boolean;
-}

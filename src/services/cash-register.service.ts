@@ -36,26 +36,31 @@ export class CashRegisterService {
 		}
 	}
 
-	static async getCurrentRegister(models: TenantModels): Promise<ICashRegisterDocument> {
+	static async getCurrentRegister(models: TenantModels, userId: string): Promise<ICashRegisterDocument> {
 		try {
-			const register = await models.CashRegister.findOne({
+			let register = await models.CashRegister.findOne({
 				status: CashRegisterStatus.OPEN
 			}).populate('openedBy', 'name email');
 
 			if (!register) {
-				throw new AppError('No open cash register found', 'No se encontró una caja abierta', 404);
+				// throw new AppError('No open cash register found', 'No se encontró una caja abierta', 500);
+				return null as any
 			}
 
 			// Pre-calcular balance esperado con las ventas diarias desde que se abrió
 			const stats = await OrderService.getDailyStats(models, new Date().toISOString());
 
-			// Tomar solo el efectivo para el cálculo del cierre de caja
-			const cashEarned = stats.revenueByMethod?.CASH || 0;
-			// Nota: Si hubo ventas en efectivo antes de abrir la caja, este cálculo simple puede mezclarlos.
-			// Para más precisión, getDailyStats debería poder recibir `{ fromDate: register.openedAt }`.
-			// Por ahora nos mantenemos con el cálculo diario (suponiendo 1 cierre por día).
+			if (stats) {
+				// Tomar solo el efectivo para el cálculo del cierre de caja
+				const cashEarned = stats.revenueByMethod?.CASH || 0;
+				// Nota: Si hubo ventas en efectivo antes de abrir la caja, este cálculo simple puede mezclarlos.
+				// Para más precisión, getDailyStats debería poder recibir `{ fromDate: register.openedAt }`.
+				// Por ahora nos mantenemos con el cálculo diario (suponiendo 1 cierre por día).
 
-			register.calculatedCloseBalance = register.initialBalance + cashEarned;
+				register.calculatedCloseBalance = register.initialBalance + cashEarned;
+			} else {
+				register.calculatedCloseBalance = register.initialBalance;
+			}
 
 			return register;
 		} catch (error) {
@@ -75,7 +80,7 @@ export class CashRegisterService {
 		notes?: string
 	): Promise<ICashRegisterDocument> {
 		try {
-			const register = await this.getCurrentRegister(models);
+			const register = await this.getCurrentRegister(models, userId);
 
 			// Actualizar los campos
 			register.closedAt = new Date();

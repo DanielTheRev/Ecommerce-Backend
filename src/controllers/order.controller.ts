@@ -121,6 +121,7 @@ export const mercadopagoWebhook = async (req: AuthRequest, res: Response) => {
 
 // Crear nueva orden
 export const createOrder = async (req: AuthRequest, res: Response, next: NextFunction) => {
+	console.log('Create order');
 	if (!req.user) {
 		return res.status(401).json({ message: 'Usuario no autenticado' });
 	}
@@ -147,6 +148,7 @@ export const createOrder = async (req: AuthRequest, res: Response, next: NextFun
 
 // Crear orden de venta local en local físico / mostrador (employee, admin)
 export const createLocalOrder = async (req: AuthRequest, res: Response, next: NextFunction) => {
+	console.log('Create local order');
 	try {
 		const sellerId = req.user!._id.toString();
 		const data = req.body; // Debería contener items, splitPayments, userId (opcional), notes (opcional)
@@ -175,6 +177,7 @@ export const createLocalOrder = async (req: AuthRequest, res: Response, next: Ne
 
 // Obtener todas las órdenes del usuario autenticado
 export const getUserOrders = async (req: AuthRequest, res: Response, next: NextFunction) => {
+	console.log('Get user orders');
 	try {
 		const user = req.user;
 		const page = parseInt(req.query.page as string) || 1;
@@ -217,6 +220,7 @@ export const getOrderById = async (req: AuthRequest, res: Response, next: NextFu
 };
 
 export const getOrderByIdAdmin = async (req: AuthRequest, res: Response, next: NextFunction) => {
+	console.log('Get order by id admin');
 	try {
 		const { id } = req.params;
 		const userId = req.user?._id;
@@ -236,6 +240,7 @@ export const getOrderByIdAdmin = async (req: AuthRequest, res: Response, next: N
 
 // update order status (only admin)
 export const updatePaymentStatus = async (req: AuthRequest, res: Response, next: NextFunction) => {
+	console.log('Update payment status');
 	const { orderID, status } = req.body as updatePaymentStatusDTO;
 	try {
 		const order = await OrderService.updatePaymentStatus(req.models!, { orderID, status });
@@ -261,6 +266,7 @@ export const updatePaymentStatus = async (req: AuthRequest, res: Response, next:
 };
 
 export const updateShippingStatus = async (req: AuthRequest, res: Response, next: NextFunction) => {
+	console.log('Update shipping status');
 	const { orderID, status } = req.body as updateShippingStatusDTO;
 	try {
 		const order = await OrderService.updateOrderShippingStatus(req.models!, { orderID, status });
@@ -288,6 +294,7 @@ export const updateShippingStatus = async (req: AuthRequest, res: Response, next
 
 // Cancelar una orden (solo si está en estado pending)
 export const cancelOrder = async (req: AuthRequest, res: Response, next: NextFunction) => {
+	console.log('Cancel order');
 	try {
 		const { id } = req.params;
 		const userId = req.user!._id;
@@ -306,6 +313,7 @@ export const cancelOrder = async (req: AuthRequest, res: Response, next: NextFun
 
 // Obtener todas las órdenes (only admin)
 export const getAllOrders = async (req: AuthRequest, res: Response, next: NextFunction) => {
+	console.log('Get all orders');
 	try {
 		const { status, userId, dateRange } = req.query;
 		const page = parseInt(req.query.page as string) || 1;
@@ -327,6 +335,7 @@ export const getAllOrders = async (req: AuthRequest, res: Response, next: NextFu
 
 // Obtener estadísticas de órdenes (solo admin)
 export const getOrderStats = async (req: AuthRequest, res: Response, next: NextFunction) => {
+	console.log('Get order stats');
 	try {
 		const role = req.user!.role;
 		const data = await OrderService.getOrderStats(req.models!, role);
@@ -352,21 +361,21 @@ export const getOrderStats = async (req: AuthRequest, res: Response, next: NextF
 
 // Obtener estadísticas diarias de ventas (solo admin)
 export const getDailyStats = async (req: AuthRequest, res: Response, next: NextFunction) => {
+	console.log('Get daily stats');
 	try {
 		const { date } = req.query; // Puede pasar "2023-11-20"
 		const stats = await OrderService.getDailyStats(req.models!, date as string);
-
-		return res.json({
-			message: 'Estadísticas diarias obtenidas exitosamente',
-			stats
-		});
+		console.log(stats);
+		return res.json(stats);
 	} catch (error) {
+		console.log(error);
 		return next(error);
 	}
 };
 
 // Obtener ticket de orden
 export const getTicket = async (req: AuthRequest, res: Response, next: NextFunction) => {
+	console.log('Get ticket');
 	try {
 		const { id } = req.params;
 		const order = await OrderService.getFullyOrderBy(req.models!, { _id: id }) as any;
@@ -379,7 +388,7 @@ export const getTicket = async (req: AuthRequest, res: Response, next: NextFunct
 
 		res.setHeader('Content-Type', 'application/pdf');
 		res.setHeader('Content-Disposition', `inline; filename="ticket-${order.orderNumber}.pdf"`);
-		
+
 		return res.end(pdfBuffer);
 	} catch (error) {
 		return next(error);

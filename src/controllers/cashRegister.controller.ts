@@ -10,10 +10,7 @@ export const openRegister = async (req: AuthRequest, res: Response, next: NextFu
 
 		const register = await CashRegisterService.openRegister(req.models!, userId, initialBalance);
 
-		return res.status(201).json({
-			message: 'Caja abierta con éxito',
-			register
-		});
+		return res.status(201).json(register);
 	} catch (error) {
 		return next(error);
 	}
@@ -22,12 +19,9 @@ export const openRegister = async (req: AuthRequest, res: Response, next: NextFu
 // Obtener estado de caja actual (sin cerrar)
 export const getCurrentRegister = async (req: AuthRequest, res: Response, next: NextFunction) => {
 	try {
-		const register = await CashRegisterService.getCurrentRegister(req.models!);
+		const register = await CashRegisterService.getCurrentRegister(req.models!, req.user!._id.toString());
 
-		return res.status(200).json({
-			message: 'Estado de caja actual',
-			register
-		});
+		return res.status(200).json(register);
 	} catch (error) {
 		return next(error);
 	}
@@ -41,10 +35,7 @@ export const closeRegister = async (req: AuthRequest, res: Response, next: NextF
 
 		const register = await CashRegisterService.closeRegister(req.models!, userId, actualCloseBalance, notes);
 
-		return res.status(200).json({
-			message: 'Caja cerrada con éxito',
-			register // Acá se devuelve el `difference` calculado
-		});
+		return res.status(200).json(register);
 	} catch (error) {
 		return next(error);
 	}

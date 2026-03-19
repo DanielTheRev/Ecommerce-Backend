@@ -2,11 +2,13 @@ import { NextFunction, Response } from 'express';
 import { HeroService } from '../services/hero.service';
 import { AuthRequest } from '@/middleware/auth';
 
+
 export class HeroController {
   static async create(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const data = req.body;
-      const slide = await HeroService.create(req.models!, data);
+      let data = req.body;
+      const imageFiles = req.files as { [fieldname: string]: Express.Multer.File[] };
+      const slide = await HeroService.create(req.models!, { ...data, imageFiles }, req.tenant?.slug);
       return res.status(201).json(slide);
     } catch (error) {
       return next(error);
@@ -35,8 +37,9 @@ export class HeroController {
   static async update(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const data = req.body;
-      const slide = await HeroService.update(req.models!, id, data);
+      let data = req.body;
+      const imageFiles = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+      const slide = await HeroService.update(req.models!, id, { ...data, imageFiles }, req.tenant?.slug);
       return res.json(slide);
     } catch (error) {
       return next(error);

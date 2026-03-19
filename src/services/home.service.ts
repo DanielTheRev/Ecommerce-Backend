@@ -1,4 +1,4 @@
-import { IBrandSection, IHomeOffer } from '@/interfaces/home.interface';
+import { IBrandSection, IHomeConfig, IHomeOffer } from '@/interfaces/home.interface';
 import { IProduct } from '@/interfaces/product.interface';
 import { ProductService } from './product.service';
 import { BannerService } from './banner.service';
@@ -61,7 +61,7 @@ export class HomeService {
 			// 4. Iterate over active banners and build sections
 			for (const banner of activeBanners) {
 				const productsForBrand = brandProductsMap.get(banner.brandName) || [];
-				
+
 				// Sort products by model as requested
 				const sortedProducts = productsForBrand.sort((a, b) =>
 					b.model!.localeCompare(a.model!)
@@ -90,7 +90,7 @@ export class HomeService {
 		}
 	}
 
-	static async getHomeConfig(models: TenantModels) {
+	static async getHomeConfig(models: TenantModels): Promise<IHomeConfig> {
 		const productByBrand = await this.getProductsGroupByBrand(models);
 		// Fetch Hero Slides
 		const heroSlides = await HeroService.getActiveSlides(models);

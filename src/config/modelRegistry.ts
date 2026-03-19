@@ -1,28 +1,27 @@
 import { Connection, Model } from 'mongoose';
 
 // Schemas
-import { BaseProductSchema } from '@/models/Product.model';
-import { TechProductSchema } from '@/models/discriminators/TechProduct.discriminator';
-import { ClothingProductSchema } from '@/models/discriminators/ClothingProduct.discriminator';
-import { userSchema } from '@/models/User.model';
-import { orderSchema } from '@/models/Order.model';
-import { EcommerceSchema } from '@/models/Ecommerce.model';
-import { shippingOptionSchema } from '@/models/ShippingOption.model';
-import { paymentMethodSchema } from '@/models/PaymentMethod.model';
-import { HeroSlideSchema } from '@/models/HeroSlide.model';
 import { BannerSchema } from '@/models/Banner.model';
 import { cashRegisterSchema } from '@/models/CashRegister.model';
+import { ClothingProductSchema } from '@/models/discriminators/ClothingProduct.discriminator';
+import { TechProductSchema } from '@/models/discriminators/TechProduct.discriminator';
+import { EcommerceSchema } from '@/models/Ecommerce.model';
+import { HeroSlideSchema } from '@/models/HeroSlide.model';
+import { orderSchema } from '@/models/Order.model';
+import { paymentMethodSchema } from '@/models/PaymentMethod.model';
+import { BaseProductSchema } from '@/models/Product.model';
+import { shippingOptionSchema } from '@/models/ShippingOption.model';
+import { userSchema } from '@/models/User.model';
 
 // Interfaces
-import { IProductDocument } from '@/interfaces/product.interface';
-import { IUser } from '@/interfaces/user.interface';
-import { IOrder, IOrderModel } from '@/interfaces/order.interface';
-import { IEcommerceConfig } from '@/interfaces/ecommerce.interface';
-import { IShippingOption } from '@/interfaces/shippingMethods.interface';
-import { IPaymentMethod } from '@/interfaces/paymentMethod.interface';
-import { IHeroSlide } from '@/models/HeroSlide.model';
-import { IBanner } from '@/interfaces/home.interface';
 import { ICashRegisterDocument, ICashRegisterModel } from '@/interfaces/cash-register.interface';
+import { IBanner } from '@/interfaces/home.interface';
+import { IOrder, IOrderModel } from '@/interfaces/order.interface';
+import { IPaymentMethod } from '@/interfaces/paymentMethod.interface';
+import { IProductDocument } from '@/interfaces/product.interface';
+import { IShippingOption } from '@/interfaces/shippingMethods.interface';
+import { IUser } from '@/interfaces/user.interface';
+import { IHeroSlide } from '@/interfaces/hero.interface';
 
 /**
  * TenantModels - Todos los modelos Mongoose de un tenant.

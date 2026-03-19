@@ -310,7 +310,6 @@ export class ProductService {
 			// Elegir modelo según el tipo de producto
 			const Model = this.getModel(models, data.productType);
 
-			console.log(Model);
 
 			// Campos comunes
 			const baseData: any = {

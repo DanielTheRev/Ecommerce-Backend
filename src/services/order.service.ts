@@ -297,7 +297,7 @@ export class OrderService {
 						status: result.status,
 						status_detail: result.status_detail,
 						provider: EcommercePaymentProviders.MERCADOPAGO,
-						ticket_url: result.transaction_details?.external_resource_url || 
+						ticket_url: result.transaction_details?.external_resource_url ||
 							result.point_of_interaction?.transaction_data?.ticket_url
 					};
 				} else {
@@ -897,16 +897,16 @@ export class OrderService {
 			// 3. Preparar items de la orden y calcular costo total
 			let totalCost = 0;
 			let totalEarnings = 0;
-			
+
 			const orderItems = itemsData.map(item => {
 				const variant = item.data.variants?.find((v: any) => v.sku === item.variantSku);
 				const variantLabel = variant?.attributes?.map((a: any) => a.value).join(' - ') || '';
-				
+
 				// precio base (efectivo/transferencia es lo más común para mostrador)
 				const price = item.data.prices?.efectivo_transferencia || 0;
 				// costo del producto para calcular la ganancia
 				const costPrice = Number(item.data.prices?.costPrice) || 0;
-				
+
 				totalCost += (price * item.quantity);
 				totalEarnings += ((price - costPrice) * item.quantity);
 
@@ -932,7 +932,7 @@ export class OrderService {
 
 			// 5. Descontar stock
 			await ProductService.reduceVariantStock(models, variantItems);
-			
+
 			// 7. Crear el Order record
 			const newOrder = await models.Order.create({
 				user: data.userId, // Controller se encargará de proveer el genérico
@@ -979,13 +979,14 @@ export class OrderService {
 	 * Estadísticas del día en la tienda física/online
 	 */
 	static async getDailyStats(models: TenantModels, dateParam?: string) {
+		console.log('get daily stats');
 		try {
 			const targetDate = dateParam ? new Date(dateParam) : new Date();
-			
+
 			// Inicio del día en string param local u hora servidor (hoy)
 			const startOfDay = new Date(targetDate);
 			startOfDay.setHours(0, 0, 0, 0);
-			
+
 			const endOfDay = new Date(targetDate);
 			endOfDay.setHours(23, 59, 59, 999);
 
@@ -994,6 +995,10 @@ export class OrderService {
 				createdAt: { $gte: startOfDay, $lte: endOfDay },
 				status: { $ne: OrderStatus.CANCELLED }
 			});
+
+			if (dailyOrders.length <= 0) {
+				return null
+			}
 
 			let totalRevenue = 0;
 			let totalEarnings = 0;
@@ -1019,6 +1024,8 @@ export class OrderService {
 					incomeByMethod[method] = (incomeByMethod[method] || 0) + order.total;
 				}
 			});
+
+
 
 			return {
 				date: targetDate,
