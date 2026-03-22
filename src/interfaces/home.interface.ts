@@ -2,13 +2,17 @@ import { ObjectId } from 'mongoose';
 import { IHeroSlide } from './hero.interface';
 import { IProduct } from './product.interface';
 import { IBentoConfig } from './bento.interface';
+import { IShopTheLook } from './shopTheLook.interface';
 
 export interface IHomeConfig {
 	offers: IHomeOffer[];
 	productByBrand: IBrandSection[];
 	heroSlides: IHeroSlide[]
 	bentoConfig: IBentoConfig | null;
+	shopTheLook: IShopTheLook[];
+	featuredProducts: IProduct[];
 }
+
 
 
 export interface IBrandSection {

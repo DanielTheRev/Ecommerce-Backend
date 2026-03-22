@@ -13,6 +13,7 @@ import { BaseProductSchema } from '@/models/Product.model';
 import { shippingOptionSchema } from '@/models/ShippingOption.model';
 import { userSchema } from '@/models/User.model';
 import { BentoConfigSchema } from '@/models/BentoConfig.model';
+import { ShopTheLookSchema } from '@/models/shopTheLook.model';
 
 // Interfaces
 import { ICashRegisterDocument, ICashRegisterModel } from '@/interfaces/cash-register.interface';
@@ -24,6 +25,7 @@ import { IShippingOption } from '@/interfaces/shippingMethods.interface';
 import { IUser } from '@/interfaces/user.interface';
 import { IHeroSlide } from '@/interfaces/hero.interface';
 import { IBentoConfigDocument } from '@/interfaces/bento.interface';
+import { IShopTheLookDocument } from '@/interfaces/shopTheLook.interface';
 
 /**
  * TenantModels - Todos los modelos Mongoose de un tenant.
@@ -42,6 +44,7 @@ export interface TenantModels {
 	Banner: Model<IBanner>;
 	CashRegister: ICashRegisterModel;
 	BentoConfig: Model<IBentoConfigDocument>;
+	ShopTheLook: Model<IShopTheLookDocument>;
 }
 
 /**
@@ -119,6 +122,11 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		? db.model<IBentoConfigDocument>('BentoConfig')
 		: db.model<IBentoConfigDocument>('BentoConfig', BentoConfigSchema);
 
+	// ShopTheLook
+	const ShopTheLookModel = db.models.ShopTheLook
+		? db.model<IShopTheLookDocument>('ShopTheLook')
+		: db.model<IShopTheLookDocument>('ShopTheLook', ShopTheLookSchema);
+
 	return {
 		Product: ProductModel,
 		TechProduct: TechProductModel,
@@ -131,6 +139,7 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		HeroSlide: HeroSlideModel,
 		Banner: BannerModel,
 		CashRegister: CashRegisterModel as ICashRegisterModel,
-		BentoConfig: BentoConfigModel
+		BentoConfig: BentoConfigModel,
+		ShopTheLook: ShopTheLookModel
 	};
 }

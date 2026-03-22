@@ -84,6 +84,12 @@ export const CreateProductSchema = z.object({
 			percentage: z.number().min(0).max(100)
 		}))).optional(),
 		careInstructions: jsonString.pipe(z.array(z.string())).optional(),
+
+		// SEO (og_image llega como archivo separado, no se valida aquí)
+		seo: jsonString.pipe(z.object({
+			metaDescription: z.string().optional(),
+			metaTitle: z.string().optional(),
+		})).optional(),
 	})
 });
 
@@ -123,6 +129,17 @@ export const UpdateProductSchema = z.object({
 			percentage: z.number().min(0).max(100)
 		}))).optional(),
 		careInstructions: jsonString.pipe(z.array(z.string())).optional(),
+
+		// SEO (og_image llega como archivo separado, no se valida aquí)
+		seo: jsonString.pipe(z.object({
+			metaTitle: z.string().optional(),
+			metaDescription: z.string().optional(),
+		})).optional(),
+
+		// Para borrar la og_image existente
+		deletedSeoOgImage: z.string().optional(),
+		isActive: z.string().or(z.boolean()).transform(v => v === 'true' || v === true).optional(),
+		isFeatured: z.string().or(z.boolean()).transform(v => v === 'true' || v === true).optional(),
 	})
 });
 

@@ -69,8 +69,9 @@ export interface IProduct {
 	customProfitMargin?: number;
 	isActive: boolean;
 	isFeatured: boolean;
-	//TODO: Quitar el precio 
+	seo: IProductSeo;
 }
+
 
 // ============ TYPE-SPECIFIC PRODUCTS ============
 
@@ -132,6 +133,16 @@ export interface IProductPrices {
 	};
 }
 
+export interface IProductSeo {
+	metaTitle: string;
+	metaDescription: string;
+	metaImage: {
+		url: string,
+		public_id: string
+	}
+}
+
+
 // ============ DTOs ============
 
 export interface IProductCreateDTO {
@@ -162,11 +173,13 @@ export interface IProductCreateDTO {
 	composition?: string | { material: string; percentage: number }[];
 	sizeType?: string;
 	careInstructions?: string | string[];
+	seo?: Partial<IProductSeo>;
 }
 
 export interface IProductUpdateDTO extends Partial<IProductCreateDTO> {
 	_id: string;
 	deletedImages?: string[];
+	deletedSeoOgImage?: string;
 	images?: IProductImage[];
 	slug?: string;
 	prices?: number | IProductPrices;

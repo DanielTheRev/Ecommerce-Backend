@@ -85,8 +85,11 @@ export class ProductController {
 
 	// POST /api/products - Crear nuevo producto
 	static async createProduct(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
-		let data = req.body as IProductCreateDTO;
-		const files = req.files as Express.Multer.File[];
+		const data = req.body as IProductCreateDTO;
+		// Con multer.fields(), req.files es un objeto { images: File[], seo_og_image: File[] }
+		const uploadedFiles = req.files as { [fieldname: string]: Express.Multer.File[] };
+		const imageFiles = uploadedFiles?.images ?? [];
+		const ogImageFile = uploadedFiles?.seoImage?.[0] ?? null;
 		try {
 			data.specifications = JSON.parse(data.specifications as string) as IProductSpec[];
 			data.features = JSON.parse(data.features as string) as string[];
@@ -100,7 +103,10 @@ export class ProductController {
 			if (data.composition) data.composition = JSON.parse(data.composition as string);
 			if (data.careInstructions) data.careInstructions = JSON.parse(data.careInstructions as string);
 
-			const newProduct = await ProductService.createProduct(req.models!, data, files, req.tenant?.slug);
+			// SEO: parsear el JSON string (og_image llega como archivo separado)
+			if (data.seo) data.seo = JSON.parse(data.seo as unknown as string);
+			
+			const newProduct = await ProductService.createProduct(req.models!, data, imageFiles, ogImageFile, req.tenant?.slug);
 			res.status(201).json(newProduct);
 		} catch (error) {
 			next(error);
@@ -130,9 +136,12 @@ export class ProductController {
 		try {
 			const id = req.params.id;
 			const data = req.body;
-			const files = req.files as Express.Multer.File[];
-			const updatedProduct = await ProductService.updateProductById(req.models!, id, data, files, req.tenant?.slug);
+			// Con multer.fields(), req.files es un objeto { images: File[], seo_og_image: File[] }
+			const uploadedFiles = req.files as { [fieldname: string]: Express.Multer.File[] };
+			const imageFiles = uploadedFiles?.images ?? [];
+			const ogImageFile = uploadedFiles?.seoImage?.[0] ?? null;
 
+			const updatedProduct = await ProductService.updateProductById(req.models!, id, data, imageFiles, ogImageFile, req.tenant?.slug);
 			res.status(200).json(updatedProduct);
 		} catch (error) {
 			next(error);
@@ -158,7 +167,7 @@ export class ProductController {
 	// GET /api/products/search - Buscar productos
 	static async searchProducts(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
-			const { q, minPrice, maxPrice, minRating, suggestions, category, brand, gender, tags } = req.query;
+			const { q, minPrice, maxPrice, minRating, suggestions, category, brand, gender, tags, featured } = req.query;
 			const productType = req.query.type as string | undefined;
 
 			// if suggestions is true, return only brand and model matches without pagination
@@ -179,7 +188,8 @@ export class ProductController {
 				category: category as string,
 				brand: brand as string,
 				gender: gender as string,
-				tags: tags as string
+				tags: tags as string,
+				featured: featured as unknown as boolean
 			}, page, limit, productType);
 
 			res.status(200).json({

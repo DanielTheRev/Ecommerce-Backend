@@ -141,6 +141,14 @@ const BaseProductSchema = new Schema(
 			type: Boolean,
 			default: false,
 			index: true // Súper importante el índice porque vamos a buscar mucho por este campo
+		},
+		seo: {
+			metaTitle: { type: String },
+			metaDescription: { type: String },
+			metaImage: {
+				url: { type: String },
+				public_id: { type: String }
+			}
 		}
 	},
 	{

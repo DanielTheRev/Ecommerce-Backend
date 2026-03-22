@@ -18,6 +18,7 @@ import orderRoutes from './routes/orderRoutes.routes';
 import paymentMethodRoutes from './routes/paymentMethodRoutes.routes';
 import productRoutes from './routes/productRoutes.routes';
 import shippingRoutes from './routes/shippingRoutes.routes';
+import shopTheLookRoutes from './routes/shopTheLook.routes';
 import { socketManager } from './sockets/socketManager';
 
 // Cargar variables de entorno
@@ -118,6 +119,7 @@ app.use('/api/hero', resolveTenant, heroRoutes);
 app.use('/api/bento', resolveTenant, bentoRoutes);
 app.use('/api/config', resolveTenant, ecommerceConfigRoutes);
 app.use('/api/cash-register', resolveTenant, cashRegisterRoutes);
+app.use('/api/shop-the-look', resolveTenant, shopTheLookRoutes);
 
 // Error handler middleware
 app.use(errorMiddleware);

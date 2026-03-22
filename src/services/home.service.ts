@@ -6,6 +6,7 @@ import { HeroService } from './hero.service';
 import { AppError } from '@/errors/app.error';
 import { TenantModels } from '@/config/modelRegistry';
 import { BentoService } from './bento.service';
+import { ShopTheLookService } from './shopTheLook.service';
 
 export class HomeService {
 	private static readonly offers: IHomeOffer[] = [
@@ -96,12 +97,15 @@ export class HomeService {
 		// Fetch Hero Slides
 		const heroSlides = await HeroService.getActiveSlides(models);
 		const bentoConfig = await BentoService.getBentoConfig(models);
-
+		const ShopTheLooks = await ShopTheLookService.getActiveLooks(models)
+		const featuredProducts = (await ProductService.searchProducts(models, { featured: true })).data as unknown as IProduct[];
 		return {
 			heroSlides,
 			offers: this.offers,
 			productByBrand,
-			bentoConfig
+			bentoConfig,
+			shopTheLook: ShopTheLooks,
+			featuredProducts
 		};
 	}
 }

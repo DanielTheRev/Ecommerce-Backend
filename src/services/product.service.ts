@@ -47,20 +47,6 @@ export class ProductService {
 		}
 	}
 
-	// static async getProductsWCompletePrices(models: TenantModels, productType?: string): Promise<IProduct[]> {
-	// 	try {
-	// 		const Model = this.getModel(models, productType);
-	// 		console.log('tipo de producto');
-	// 		console.log(productType);
-	// 		const products = await Model.find()
-	// 			.select('+prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.earnings')
-	// 			.lean() as unknown as IProduct[];
-	// 		return products;
-	// 	} catch (error) {
-	// 		if (error instanceof AppError) throw error;
-	// 		throw new AppError('Failed to fetch products', 'Error al obtener los productos', 500);
-	// 	}
-	// }
 
 	static async getProductWCompletePrices(models: TenantModels, id: string, productType?: string): Promise<IProduct> {
 		try {
@@ -226,6 +212,7 @@ export class ProductService {
 			brand?: string;
 			gender?: string;
 			tags?: string;
+			featured?: boolean;
 		},
 		page: number = 1,
 		limit: number = 10,
@@ -234,6 +221,10 @@ export class ProductService {
 		try {
 			const Model = this.getModel(models, productType);
 			const query: any = {};
+
+			if (filters.featured) {
+				query.isFeatured = filters.featured;
+			}
 
 			if (filters.q) {
 				query.$or = [
@@ -285,9 +276,8 @@ export class ProductService {
 		}
 	}
 
-	// ============ CREATE ============
 
-	static async createProduct(models: TenantModels, data: IProductCreateDTO, imagesDTO: Express.Multer.File[], tenantSlug: string = 'general'): Promise<IProduct> {
+	static async createProduct(models: TenantModels, data: IProductCreateDTO, imagesDTO: Express.Multer.File[], ogImageFile: Express.Multer.File | null, tenantSlug: string = 'general'): Promise<IProduct> {
 		try {
 			const slug = this.generateSlug(data.brand, data.model);
 			const { venta } = await getDolar();
@@ -307,6 +297,23 @@ export class ProductService {
 			}));
 			const images = await ImageService.UploadImages(rawImages, `${tenantSlug}/product-images`);
 
+			// Subir og_image a Cloudinary si se proporcionó
+			let seoData: any = data.seo || {};
+			if (ogImageFile) {
+				const uploaded = await ImageService.UploadImage(
+					ogImageFile,
+					`${data.brand}-${data.model}-og`,
+					`${tenantSlug}/seo-images`
+				);
+				seoData = {
+					...seoData,
+					og_image: {
+						url: uploaded.secure_url,
+						public_id: uploaded.public_id
+					}
+				};
+			}
+
 			// Elegir modelo según el tipo de producto
 			const Model = this.getModel(models, data.productType);
 
@@ -325,7 +332,8 @@ export class ProductService {
 				images,
 				specifications: data.specifications,
 				variants: data.variants || [],
-				tags: data.tags || []
+				tags: data.tags || [],
+				seo: seoData
 			};
 
 			// Campos específicos de tech
@@ -346,14 +354,10 @@ export class ProductService {
 				if (data.sizeType) baseData.sizeType = data.sizeType;
 				if (data.careInstructions) baseData.careInstructions = data.careInstructions;
 			}
-			console.log('los datos del panel');
-			console.log(data);
-			console.log('los datos con lo que se va a crear el objeto');
-			console.log(baseData);
+
 			const newProduct = await Model.create(baseData);
 			return newProduct.toObject() as unknown as IProduct;
 		} catch (error) {
-			console.log(error);
 			if (error instanceof AppError) throw error;
 			throw new AppError('Failed to create product', 'Error al crear el producto', 500);
 		}
@@ -361,7 +365,10 @@ export class ProductService {
 
 	// ============ UPDATE ============
 
-	static async updateProductById(models: TenantModels, id: string, updateData: Partial<IProductUpdateDTO>, files: Express.Multer.File[], tenantSlug: string = 'general'): Promise<IProduct> {
+	static async updateProductById(models: TenantModels, id: string, updateData: Partial<IProductUpdateDTO>, files: Express.Multer.File[], ogImageFile: Express.Multer.File | null, tenantSlug: string = 'general'): Promise<IProduct> {
+		console.log('updateProductById');
+		console.log('Data:');
+		console.log(updateData);
 		try {
 			const imagesToDelete = JSON.parse((updateData.deletedImages || '[]') as string) as string[];
 
@@ -391,6 +398,8 @@ export class ProductService {
 				currentImages = currentImages.filter((img) => !imagesToDelete.includes(img.public_id));
 			}
 
+			const imagesOrderStr = (updateData as any).imagesOrder;
+
 			if (files && files.length > 0) {
 				const brand = updateData.brand || product.brand;
 				const model = updateData.model || product.model;
@@ -402,8 +411,30 @@ export class ProductService {
 
 				const newImages = await ImageService.UploadImages(rawImages, `${tenantSlug}/product-images`);
 				updateData.images = [...currentImages, ...newImages];
-			} else if (imagesToDelete.length > 0) {
+			} else if (imagesToDelete.length > 0 || imagesOrderStr) {
 				updateData.images = currentImages;
+			}
+
+			if (imagesOrderStr && updateData.images) {
+				try {
+					const orderArray = JSON.parse(imagesOrderStr as string) as string[];
+					if (orderArray.length > 0) {
+						updateData.images.sort((a: any, b: any) => {
+							const urlA = a.url || a.secure_url;
+							const urlB = b.url || b.secure_url;
+							const idxA = orderArray.indexOf(urlA);
+							const idxB = orderArray.indexOf(urlB);
+							
+							if (idxA === -1 && idxB === -1) return 0;
+							if (idxA === -1) return 1;
+							if (idxB === -1) return -1;
+							
+							return idxA - idxB;
+						});
+					}
+				} catch (error) {
+					console.error('Error parsing imagesOrder', error);
+				}
 			}
 
 			if (updateData.brand || updateData.model) {
@@ -440,8 +471,38 @@ export class ProductService {
 			if (updateData.careInstructions) updateData.careInstructions = JSON.parse(updateData.careInstructions as string);
 			if (updateData.composition) updateData.composition = JSON.parse(updateData.composition as string);
 
+			// Parsear SEO si viene como JSON string
+			if (updateData.seo) updateData.seo = JSON.parse(updateData.seo as unknown as string);
+
+			// Manejar og_image del SEO
+			const deletedOgImageId = (updateData as any).deletedSeoOgImage as string | undefined;
+			if (deletedOgImageId) {
+				await ImageService.DeleteImage(deletedOgImageId);
+				updateData.seo = { ...(updateData.seo || {}), og_image: { url: '', public_id: '' } } as any;
+			}
+			if (ogImageFile) {
+				const brand = updateData.brand || product.brand;
+				const model = updateData.model || product.model;
+				const uploaded = await ImageService.UploadImage(
+					ogImageFile,
+					`${brand}-${model}-og`,
+					`${tenantSlug}/seo-images`
+				);
+				updateData.seo = {
+					...(updateData.seo || {}),
+					metaImage: {
+						url: uploaded.secure_url,
+						public_id: uploaded.public_id
+					}
+				} as any;
+			}
+
 			const fieldsToSelect = Object.keys(updateData).join(' ') + (updateData.slug ? ' slug' : '');
 
+			console.log('Fields To Select');
+			console.log(fieldsToSelect);
+			console.log('Parsed data');
+			console.log(updateData);
 			const updatedProduct = await models.Product.findByIdAndUpdate(
 				id,
 				{ $set: updateData },
