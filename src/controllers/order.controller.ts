@@ -81,15 +81,20 @@ export const mercadopagoWebhook = async (req: AuthRequest, res: Response) => {
 
 				if (internalOrderId) {
 					// Buscamos si hay pagos aprobados en esta orden
-					const approvedPayment = mpOrder.transactions?.payments?.find((p: any) => p.status === 'approved');
+					console.log('mpOrder');
+					console.log(JSON.stringify(mpOrder));
+					// const approvedPayment = mpOrder.transactions?.payments?.find((p: any) => p.status === 'approved');
+					const approvedPayment = mpOrder.status_detail === 'accredited' && mpOrder.status === 'processed';
 
 					if (approvedPayment) {
-						const order = await OrderService.confirmMercadoPagoPayment(req.models!, internalOrderId, approvedPayment.id);
-						console.log(`✅ Pago de MercadoPago procesado: ${approvedPayment.id} para la orden: ${internalOrderId}`);
+						const order = await OrderService.confirmMercadoPagoPayment(req.models!, internalOrderId, mpOrder.transactions.payments[0]);
+						console.log(`✅ Pago de MercadoPago procesado: ${mpOrder.id} para la orden: ${internalOrderId}`);
 
 						if (req.tenant) {
 							socketManager.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'payment');
 						}
+
+
 					} else {
 						console.log(`ℹ️ Orden de MP ${mpOrderId} recibida, pero sin pagos aprobados aún.`);
 					}
@@ -129,6 +134,7 @@ export const createOrder = async (req: AuthRequest, res: Response, next: NextFun
 		const userId = req.user._id;
 		const newOrderDTO = req.body as CreateOrderDTO;
 		const baseUrl = `${req.protocol}://${req.get('host')}`;
+		console.log(baseUrl);
 		const { order, extras } = await OrderService.createOrder(req.models!, newOrderDTO, userId, req.tenant!.slug, baseUrl);
 
 		if (req.tenant) {

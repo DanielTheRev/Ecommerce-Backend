@@ -50,6 +50,8 @@ export class MercadoPagoService {
 				}
 			});
 
+			console.log('result exchangeAuthorizationCode', result);
+
 			// 4. Retornamos los tokens para que el Controller los guarde en la BD
 			return {
 				accessToken: result.access_token,
@@ -80,6 +82,7 @@ export class MercadoPagoService {
 	 * Crea un pago en MercadoPago usando el SDK oficial (v1/payments)
 	 */
 	static async createPayment(accessToken: string, paymentBody: any) {
+		console.log('accessToken', accessToken);
 		try {
 			const client = new MercadoPagoConfig({ accessToken });
 			const payment = new Payment(client);
@@ -106,6 +109,7 @@ export class MercadoPagoService {
 	 * @deprecated Usar createPayment para soporte de notification_url dinámico
 	 */
 	static async createOrder(accessToken: string, mpOrderData: any) {
+		console.log('accessToken', accessToken);
 		try {
 			const response = await fetch('https://api.mercadopago.com/v1/orders', {
 				method: 'POST',
@@ -118,6 +122,7 @@ export class MercadoPagoService {
 			});
 
 			const result = await response.json();
+			console.log(result);
 
 			if (!response.ok && result.errors !== null) {
 				console.error('MP Orders API Error:', JSON.stringify(result));

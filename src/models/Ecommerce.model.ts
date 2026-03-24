@@ -18,9 +18,9 @@ const EcommerceSchema = new Schema(
 			uala: {
 				active: { type: Boolean, default: false },
 				credentials: {
-					userName: { type: String },
-					clientId: { type: String },
-					clientSecret: { type: String }
+					userName: { type: String, select: false },
+					clientId: { type: String, select: false },
+					clientSecret: { type: String, select: false }
 				},
 				baseCommission: { type: Number, required: false, default: 0.049 },
 				cft3cuotas: { type: Number, required: false, default: 12 },
@@ -28,9 +28,9 @@ const EcommerceSchema = new Schema(
 			},
 			mercadopago: {
 				active: { type: Boolean, default: false },
-				accessToken: { type: String, default: 'no asignado' },
+				accessToken: { type: String, default: 'no asignado', select: false },
 				publicKey: { type: String, default: 'no asignado' },
-				webhookSecret: { type: String, default: 'no asignado' },
+				webhookSecret: { type: String, default: 'no asignado', select: false },
 				baseCommission: { type: Number, default: 0.06 },
 				cft3cuotas: { type: Number, default: 12 },
 				cft6Cuotas: { type: Number, default: 18.9 },

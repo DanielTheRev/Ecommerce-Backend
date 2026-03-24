@@ -1,11 +1,13 @@
 import { AppError } from '@/errors/app.error';
-import { EcommercePaymentProviders, IEcommerceConfig } from '@/interfaces/ecommerce.interface';
+import { EcommercePaymentProviders, IEcommerceConfig, IEcommerceConfigPublic } from '@/interfaces/ecommerce.interface';
 import { TenantModels } from '@/config/modelRegistry';
 import { decrypt, encrypt } from '@/utils/encryption';
 import { flattenObject } from '@/utils/object.util';
 import { MercadoPagoService } from './mercadopago.service';
 
 export class EcommerceService {
+	private static readonly SENSITIVE_FIELDS_SELECT = '+paymentGateways.uala.credentials.userName +paymentGateways.uala.credentials.clientId +paymentGateways.uala.credentials.clientSecret +paymentGateways.mercadopago.accessToken +paymentGateways.mercadopago.webhookSecret';
+
 	private constructor() { }
 
 	static seedDefaultConfig = async (models: TenantModels) => {
@@ -24,7 +26,9 @@ export class EcommerceService {
 
 	static getConfig = async (models: TenantModels): Promise<IEcommerceConfig> => {
 		try {
-			const config = await models.EcommerceConfig.findOne({ key: 'global_config' }).lean() as unknown as IEcommerceConfig;
+			const config = await models.EcommerceConfig.findOne({ key: 'global_config' })
+				.select(this.SENSITIVE_FIELDS_SELECT)
+				.lean() as unknown as IEcommerceConfig;
 
 			if (!config)
 				throw new AppError(
@@ -41,6 +45,51 @@ export class EcommerceService {
 			throw new AppError(
 				'Failed to fetch ecommerce config',
 				'Error al obtener la configuración de ecommerce',
+				500
+			);
+		}
+	};
+
+	static getPublicConfig = async (models: TenantModels): Promise<Partial<IEcommerceConfigPublic>> => {
+		try {
+			// Los campos sensibles tienen select: false en el esquema, por lo que findOne no los trae por defecto.
+			const publicConfig = await models.EcommerceConfig.findOne({ key: 'global_config' }).lean() as unknown as IEcommerceConfig;
+			
+			if (!publicConfig)
+				throw new AppError(
+					'Ecommerce config not found',
+					'Configuración de ecommerce no encontrada',
+					404
+				);
+
+			// Desencriptar publicKey (ya que es guardada encriptada y sí es necesaria públicamente para inicializar MP)
+			if (publicConfig.paymentGateways?.mercadopago?.publicKey && publicConfig.paymentGateways.mercadopago.publicKey !== 'no asignado') {
+				try {
+					publicConfig.paymentGateways.mercadopago.publicKey = decrypt(JSON.parse(publicConfig.paymentGateways.mercadopago.publicKey));
+				} catch (e) {
+					console.error('Error al desencriptar publicKey de MercadoPago en configuración pública:', e);
+				}
+			}
+
+			const data: IEcommerceConfigPublic = {
+				contact: publicConfig.contact!,
+				social: publicConfig.social!,
+				paymentGateways: {
+					mercadopago: {
+						publicKey: publicConfig.paymentGateways?.mercadopago?.publicKey || '',
+						maxInstallments: publicConfig.paymentGateways?.mercadopago?.maxInstallments || 1,
+						excludedPaymentMethods: publicConfig.paymentGateways?.mercadopago?.excludedPaymentMethods || [],
+						excludedPaymentTypes: publicConfig.paymentGateways?.mercadopago?.excludedPaymentTypes || [],
+					}
+				}
+			}
+
+			return data;
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError(
+				'Failed to fetch public ecommerce config',
+				'Error al obtener la configuración pública de ecommerce',
 				500
 			);
 		}
@@ -93,7 +142,9 @@ export class EcommerceService {
 				{ key: 'global_config' },
 				{ $set: flattenedData },
 				{ new: true, runValidators: true, upsert: true }
-			).lean();
+			)
+				.select(this.SENSITIVE_FIELDS_SELECT)
+				.lean();
 
 			if (!updatedConfig) throw new AppError('Failed to update config', 'Error al actualizar configuración', 500);
 

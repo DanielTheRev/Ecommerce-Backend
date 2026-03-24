@@ -8,6 +8,9 @@ router.get(
   '/mercadopago/callback', EcommerceConfigController.handleMercadoPagoCallback
 );
 
+// Ruta pública para obtener la configuración (sin claves sensibles)
+router.get('/public', EcommerceConfigController.getPublicConfig);
+
 // Todas las rutas de configuración requieren autenticación de administrador
 router.use(protect, adminOnly);
 

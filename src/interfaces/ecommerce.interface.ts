@@ -59,3 +59,25 @@ export enum EcommercePaymentProviders {
 	UALA = 'uala',
 	MERCADOPAGO = 'mercadopago'
 }
+
+export interface IEcommerceConfigPublic {
+  contact: {
+    email: string;
+    phone: string;
+    address: string;
+  };
+  social: {
+    instagram: string;
+    facebook: string;
+    twitter: string;
+    tiktok: string;
+  };
+  paymentGateways: {
+    mercadopago: {
+      publicKey: string;
+      maxInstallments: number;
+      excludedPaymentMethods: string[];
+      excludedPaymentTypes: string[];
+    };
+  };
+}

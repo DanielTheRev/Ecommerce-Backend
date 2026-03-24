@@ -28,6 +28,7 @@ import { UalaOrderStatus } from '@/interfaces/ualaWebhook.interface';
 import { Role } from '@/interfaces/user.interface';
 import { FilterQuery } from 'mongoose';
 import { TenantModels } from '@/config/modelRegistry';
+import { PaymentElement } from '@/interfaces/mp_payment.interface';
 
 export class OrderService {
 	private static generateOrderNumber(): string {
@@ -145,6 +146,7 @@ export class OrderService {
 			const shippingMethod = await ShippingMethodService.getShippingMethodBy(models, {
 				_id: data.shippingMethod._id
 			});
+
 			/* get payment method */
 			let paymentMethod;
 			if (data.paymentMethod._id === 'mercadopago_gateway') {
@@ -164,6 +166,7 @@ export class OrderService {
 					});
 				}
 			}
+
 			/* creating payment service instance */
 			const paymentService = new PaymentService(
 				items,
@@ -250,20 +253,27 @@ export class OrderService {
 
 				// Prioridad a MercadoPago si está activo y tenemos los datos necesarios
 				if (config.paymentGateways.mercadopago.active && data.mercadopagoData) {
-					const { result, error } = await paymentService.withMercadoPago(
-						newOrder.id,
+					const { result, error } = await paymentService.withMercadoPago({
+						orderID: newOrder.id,
 						models,
-						finalCost,
-						{
+						total: finalCost,
+						payerData: {
 							email: user?.email || '',
 							first_name: user?.name.split(' ')[0],
 							last_name: user?.name.split(' ').slice(1).join(' '),
 							identification: data.mercadopagoData.identification
 						},
-						data.mercadopagoData,
+						paymentData: data.mercadopagoData,
 						tenantSlug,
-						baseUrl
-					);
+						baseUrl,
+						items: items.map((item) => ({
+							title: `${item.data.brand} ${item.data.model}`,
+							quantity: item.quantity,
+							unit_price: (paymentMethod.type === PaymentType.CARD || paymentMethod.type === PaymentType.TICKET)
+								? item.data.prices.tarjeta_credito_debito.toString()
+								: item.data.prices.efectivo_transferencia.toString()
+						}))
+					});
 
 					if (error || !result) {
 						throw new AppError('Failed to process MercadoPago payment', error || 'Error al procesar el pago de MercadoPago', 500);
@@ -586,12 +596,12 @@ export class OrderService {
 		}
 	}
 
-	static async confirmMercadoPagoPayment(models: TenantModels, orderId: string, paymentId: string) {
+	static async confirmMercadoPagoPayment(models: TenantModels, orderId: string, payment: PaymentElement) {
 		try {
 			const config = await EcommerceService.getConfig(models);
 			const mpConfig = config.paymentGateways.mercadopago;
 
-			const mpPayment = await MercadoPagoService.getPaymentStatus(mpConfig.accessToken, paymentId);
+			// const mpPayment = await MercadoPagoService.getPaymentStatus(mpConfig.accessToken, paymentId);
 			const order = await models.Order.findById(orderId).populate([
 				{ path: 'user', select: 'name email' },
 				{ path: 'items.product', select: '+prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.cft3cuotas' }
@@ -600,18 +610,18 @@ export class OrderService {
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
 
 			// Actualizar estado del pago
-			order.paymentInfo.status = mpPayment.status === 'approved'
+			order.paymentInfo.status = payment.status_detail === 'accredited'
 				? PaymentStatus.APPROVED
 				: PaymentStatus.REJECTED;
 
 			if (order.paymentInfo.status === PaymentStatus.APPROVED) {
 				order.paymentInfo.paymentDate = new Date();
-				order.paymentInfo.transactionId = paymentId; // Guardamos el ID del pago real
-				order.paymentInfo.mercadopagoData = mpPayment; // Guardamos la info del pago
+				order.paymentInfo.transactionId = payment.id; // Guardamos el ID del pago real
+				order.paymentInfo.mercadopagoData = payment; // Guardamos la info del pago
 
 				// Calcular ganancias dinámicas basadas en cuotas si MP nos da el dato
 				// Para tickets, installments suele ser 0 o 1, PaymentService.getEarnings(0) usará la ganancia de ticket
-				const installments = mpPayment.payment_type_id === 'ticket' ? 0 : (mpPayment.installments || 1);
+				const installments = payment.payment_method.installments;
 
 				const itemsForPaymentService = order.items.map(item => ({
 					data: item.product as any,

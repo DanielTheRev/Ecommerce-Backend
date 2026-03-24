@@ -61,24 +61,15 @@ export class EcommerceConfigController {
 		}
 	};
 
-	// PUT /api/Ecommerce/config/payment-gateway - Actualizar gateway
-	// static async updatePaymentGateway(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
-	// 	try {
-	// 		const data = req.body;
-	// 		const userId = req.user ? (req.user._id as string).toString() : undefined;
-
-	// 		const updatedConfig = await EcommerceService.updateConfig(req.models!, data, userId);
-
-	// 		res.status(200).json({
-	// 			success: true,
-	// 			message: 'Configuración actualizada exitosamente',
-	// 			data: updatedConfig
-	// 		});
-	// 	} catch (error) {
-	// 		next(error);
-	// 	}
-	// }
-
+	// GET /api/Ecommerce/config/public - Obtener la configuración pública
+	static async getPublicConfig(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const configObj = await EcommerceService.getPublicConfig(req.models!);
+			res.status(200).json(configObj);
+		} catch (error) {
+			next(error);
+		}
+	}
 
 	// GET /api/Ecommerce/config - Obtener la configuración global
 	static async getConfig(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
