@@ -5,17 +5,14 @@ import {
 	IOrderItem,
 	IOrderModel,
 	OrderStatus,
-	PaymentStatus,
 	SaleType
 } from '@/interfaces/order.interface';
-import { PaymentType } from '@/interfaces/paymentMethod.interface';
-import { ShippingType } from '@/interfaces/shippingMethods.interface';
 
 import { orderItemSchema } from './schemas/orderItem.schema';
 import { paymentInfoSchema } from './schemas/paymentInfo.schema';
 import { shippingInfoSchema } from './schemas/shippingInfo.schema';
-import { statusEntrySchema } from './schemas/statusEntry.schema';
 import { splitPaymentSchema } from './schemas/splitPayment.schema';
+import { statusEntrySchema } from './schemas/statusEntry.schema';
 
 
 // Schema principal de la orden
@@ -29,6 +26,13 @@ const orderSchema = new Schema<IOrder, IOrderModel>(
 		seller: {
 			type: Schema.Types.ObjectId,
 			ref: 'User'
+		},
+		buyerData: {
+			firstName: { type: String, required: true },
+			lastName: { type: String, required: true },
+			email: { type: String, required: true },
+			identificationType: { type: String, required: true },
+			identificationNumber: { type: String, required: true }
 		},
 		saleType: {
 			type: String,
@@ -61,7 +65,7 @@ const orderSchema = new Schema<IOrder, IOrderModel>(
 		status: {
 			type: String,
 			enum: Object.values(OrderStatus),
-			default: OrderStatus.PENDING
+			default: OrderStatus.PENDING_PAYMENT
 		},
 		shippingCost: {
 			type: Number,

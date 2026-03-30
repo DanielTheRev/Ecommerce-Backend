@@ -49,10 +49,10 @@ class SocketManager {
 			try {
 				const cookies = socket.handshake.headers.cookie;
 
-				if (!cookies) return next(new Error('No cookies'));
+				if (!cookies) return next(new Error('[WS] No cookies'));
 				const parsed = parse(cookies);
 				const token = parsed['token_b'];
-				if (!token) return next(new Error('No token provided'));
+				if (!token) return next(new Error('[WS] No token provided'));
 
 				const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {
 					userID: string;
@@ -63,7 +63,7 @@ class SocketManager {
 					|| (socket.handshake.query['tenantId'] as string);
 
 				if (!tenantSlug) {
-					console.log('no tentant slug');
+					console.log('[WS] No tenant slug');
 					return next(new Error('No tenant specified'));
 				}
 

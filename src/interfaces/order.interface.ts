@@ -1,6 +1,5 @@
 import mongoose, { Document } from 'mongoose';
 import { OrderData } from 'ualabis-nodejs/dist/types/order';
-import { ICartItemDTO } from './cart-item.interface';
 import { PaymentType } from './paymentMethod.interface';
 import { IPickupPoint, ShippingType } from './shippingMethods.interface';
 
@@ -16,6 +15,7 @@ export interface CreateOrderDTO {
 		_id: string;
 		type: PaymentType;
 	};
+	formPayerData: IFormPayerData,
 	mercadopagoData?: {
 		token?: string;
 		payment_method_id: string;
@@ -31,6 +31,14 @@ export interface CreateOrderDTO {
 			number: string;
 		}
 	}
+}
+
+export interface IFormPayerData {
+	firstName: string;
+	lastName: string;
+	email: string;
+	identificationType: string;
+	identificationNumber: string;
 }
 
 export interface StatusEntry {
@@ -57,7 +65,7 @@ export enum SaleType {
 
 // Enum for order status
 export enum OrderStatus {
-	PENDING = 'PENDING',
+	PENDING_PAYMENT = 'PENDING_PAYMENT',
 	PROCESSING_SHIPPING = 'PROCESSING_SHIPPING',
 	SHIPPED = 'SHIPPED',
 	DELIVERED = 'DELIVERED',
@@ -120,7 +128,14 @@ export interface IPaymentInfo {
 	paymentDate?: Date;
 	amount: number;
 	ualaOrderStatus?: OrderData;
-	mercadopagoData?: any;
+	mercadopagoData?: {
+		items: Item[],
+		status: string,
+		status_detail: string,
+		total_amount: string,
+		total_paid_amount: string,
+		transactions: TransactionsResponse
+	};
 }
 
 // Interface para pagos divididos (Split Payments)
@@ -134,9 +149,10 @@ export interface ISplitPayment {
 // Interface principal de la orden
 export interface IOrder {
 	_id: string; // Used when lean()
-	user: mongoose.Types.ObjectId;
+	user?: mongoose.Types.ObjectId;
 	seller?: mongoose.Types.ObjectId; // Empleado que realizó la venta local
 	saleType: SaleType;
+	buyerData: IFormPayerData;
 	items: IOrderItem[];
 	history: StatusEntry[];
 	shippingInfo: IShippingInfo;
@@ -161,6 +177,7 @@ export interface IOrderModel extends mongoose.Model<IOrderDocument> {
 	findByUser(userId: string): Promise<IOrderDocument[]>;
 }
 
+import { Item, TransactionsResponse } from 'mercadopago/dist/clients/order/commonTypes';
 import { EcommercePaymentProviders } from './ecommerce.interface';
 
 // Respuestas de los servicios de ordenes para mayor tipado y uso en el front
@@ -208,6 +225,7 @@ export interface MercadoPagoExtras {
 	status_detail?: string;
 	provider: EcommercePaymentProviders.MERCADOPAGO;
 	ticket_url?: string;
+	qr?: string;
 }
 
 export interface UalaExtras extends Omit<Partial<OrderData>, 'amount'> {

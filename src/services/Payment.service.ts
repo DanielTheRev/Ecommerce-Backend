@@ -1,15 +1,14 @@
+import { TenantModels } from '@/config/modelRegistry';
+import { AppError } from '@/errors/app.error';
 import {
-	EcommercePaymentProviders,
-	IEcommercePaymentGateway
+	EcommercePaymentProviders
 } from '@/interfaces/ecommerce.interface';
 import { PaymentType } from '@/interfaces/paymentMethod.interface';
 import { IProduct, IProductPrices } from '@/interfaces/product.interface';
+import { CreateOrderRequest } from 'mercadopago/dist/clients/order/create/types';
 import UalaApiCheckout from 'ualabis-nodejs';
 import { EcommerceService } from './ecommerce.service';
-import { AppError } from '@/errors/app.error';
-import { TenantModels } from '@/config/modelRegistry';
 import { MercadoPagoService } from './mercadopago.service';
-import { PaymentCreateRequest } from 'mercadopago/dist/clients/payment/create/types';
 
 export class PaymentService {
 	private preferredPaymentTypes = [
@@ -65,7 +64,7 @@ export class PaymentService {
 				identification?: { type: string; number: string }
 			},
 			items: { title: string; quantity: number; unit_price: string }[],
-			paymentData: { token?: string; payment_method_id: string; installments: number; type: string; payer?: any },
+			paymentData: { token?: string; payment_method_id: string; installments?: number; type: string; payer?: any },
 			tenantSlug: string,
 			baseUrl: string
 		}
@@ -101,16 +100,17 @@ export class PaymentService {
 			// 		? `https://www.vura.com.ar/api/orders/mercadopago-notification/${data.tenantSlug}?source_news=webhooks`
 			// 		: ''
 			// }
-			const mpOrdersBody = {
+			const mpOrdersBody: CreateOrderRequest = {
 				type: 'online',
+				capture_mode: 'automatic_async',
 				external_reference: data.orderID,
 				processing_mode: 'automatic',
 				total_amount: data.total.toString(),
 				// date_of_expiration: expirationDate.toISOString(),
 				payer: {
 					email: data.paymentData.payer?.email || data.payerData.email,
-					first_name: data.paymentData.payer?.first_name || data.payerData.first_name || 'Cliente',
-					last_name: data.paymentData.payer?.last_name || data.payerData.last_name || 'Ecommerce',
+					first_name: data.payerData.first_name || data.paymentData.payer?.first_name || 'Cliente',
+					last_name: data.payerData.last_name || data.paymentData.payer?.last_name || 'Ecommerce',
 					identification: data.paymentData.payer?.identification || data.payerData.identification
 				},
 				items: data.items.map(i => ({
@@ -126,7 +126,7 @@ export class PaymentService {
 								id: data.paymentData.payment_method_id,
 								type: data.paymentData.type,
 								...(data.paymentData.token && { token: data.paymentData.token }),
-								installments: Number(data.paymentData.installments)
+								...(data.paymentData.type !== 'ticket' && data.paymentData.installments && { installments: Number(data.paymentData.installments) }),
 							}
 						}
 					]
@@ -135,8 +135,7 @@ export class PaymentService {
 			console.log(JSON.stringify(mpOrdersBody));
 
 			const result = await MercadoPagoService.createOrder(mpConfig.accessToken, mpOrdersBody);
-			// const result = await MercadoPagoService.createPayment(mpConfig.accessToken, mpPaymentBody);
-
+			console.log(result);
 			return { result, error: null };
 		} catch (error: any) {
 			console.error('Error in withMercadoPago:', error);
@@ -256,6 +255,8 @@ export class PaymentService {
 			);
 		}
 	}
+
+
 	private static async calculatePricesWithMercadoPago(
 		cost_price: number,
 		dolar: number,

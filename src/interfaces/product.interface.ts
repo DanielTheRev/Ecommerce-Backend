@@ -25,7 +25,8 @@ export enum ClothingFit {
 export enum ClothingSizeType {
 	Ropa = 'Ropa',
 	Calzado = 'Calzado',
-	Numerico = 'Numérico'
+	Numerico = 'Numérico',
+	Unico = 'Talle Único'
 }
 
 export enum IProductCategories {

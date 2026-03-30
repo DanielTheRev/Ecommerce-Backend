@@ -27,6 +27,7 @@ export interface IEcommerceConfig {
 export interface IEcommercePaymentGateway {
 	uala: IEcommerceUalaPaymentGateway;
 	mercadopago: IEcommerceMercadoPagoPaymentGateway;
+	transfer?: IEcommerceTransferPaymentGateway;
 }
 
 export interface IEcommerceUalaPaymentGateway {
@@ -55,29 +56,41 @@ export interface IEcommerceMercadoPagoPaymentGateway {
 	webhookSecret?: string;
 }
 
+export interface IEcommerceTransferPaymentGateway {
+	active: boolean;
+	alias: string;
+	cbuCvu: string;
+}
+
 export enum EcommercePaymentProviders {
 	UALA = 'uala',
-	MERCADOPAGO = 'mercadopago'
+	MERCADOPAGO = 'mercadopago',
+	TRANSFER = 'transfer'
 }
 
 export interface IEcommerceConfigPublic {
-  contact: {
-    email: string;
-    phone: string;
-    address: string;
-  };
-  social: {
-    instagram: string;
-    facebook: string;
-    twitter: string;
-    tiktok: string;
-  };
-  paymentGateways: {
-    mercadopago: {
-      publicKey: string;
-      maxInstallments: number;
-      excludedPaymentMethods: string[];
-      excludedPaymentTypes: string[];
-    };
-  };
+	contact: {
+		email: string;
+		phone: string;
+		address: string;
+	};
+	social: {
+		instagram: string;
+		facebook: string;
+		twitter: string;
+		tiktok: string;
+	};
+	paymentGateways: {
+		mercadopago: {
+			publicKey: string;
+			maxInstallments: number;
+			excludedPaymentMethods: string[];
+			excludedPaymentTypes: string[];
+		};
+		transfer: {
+			active: boolean;
+			alias: string;
+			cbuCvu: string;
+		};
+	};
 }

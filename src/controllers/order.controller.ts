@@ -134,7 +134,6 @@ export const createOrder = async (req: AuthRequest, res: Response, next: NextFun
 		const userId = req.user._id;
 		const newOrderDTO = req.body as CreateOrderDTO;
 		const baseUrl = `${req.protocol}://${req.get('host')}`;
-		console.log(baseUrl);
 		const { order, extras } = await OrderService.createOrder(req.models!, newOrderDTO, userId, req.tenant!.slug, baseUrl);
 
 		if (req.tenant) {
@@ -215,7 +214,7 @@ export const getOrderById = async (req: AuthRequest, res: Response, next: NextFu
 
 		const order = await OrderService.getOrderById(req.models!, id);
 		// verify order ownership
-		if (order.user._id.toString() !== userId.toString()) {
+		if (order.user?._id.toString() !== userId.toString()) {
 			return res.status(403).json({ message: 'No tienes permiso para ver esta orden' });
 		}
 
@@ -252,14 +251,16 @@ export const updatePaymentStatus = async (req: AuthRequest, res: Response, next:
 		const order = await OrderService.updatePaymentStatus(req.models!, { orderID, status });
 
 		// Notificar al cliente
-		socketManager.notifyClient(order.user._id.toString(), {
-			type: NotificationType.PAYMENT_SUCCESS,
-			title: 'Pago Aprobado',
-			message: `Tu pago de $${order.total} fue procesado correctamente.`,
-			severity: NotificationSeverity.SUCCESS,
-			link: `/orders/${order._id}`,
-			data: order
-		});
+		if (order.user) {
+			socketManager.notifyClient(order.user._id.toString(), {
+				type: NotificationType.PAYMENT_SUCCESS,
+				title: 'Pago Aprobado',
+				message: `Tu pago de $${order.total} fue procesado correctamente.`,
+				severity: NotificationSeverity.SUCCESS,
+				link: `/orders/${order._id}`,
+				data: order
+			});
+		}
 
 		if (req.tenant) {
 			socketManager.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'payment');
@@ -276,14 +277,16 @@ export const updateShippingStatus = async (req: AuthRequest, res: Response, next
 	const { orderID, status } = req.body as updateShippingStatusDTO;
 	try {
 		const order = await OrderService.updateOrderShippingStatus(req.models!, { orderID, status });
-		socketManager.notifyClient(order.user._id.toString(), {
-			type: NotificationType.ORDER_STATUS_CHANGED,
-			title: 'Estado de Envío Actualizado',
-			message: `Tu pedido ahora está: ${status}`,
-			severity: NotificationSeverity.INFO,
-			link: `/orders/${order._id}`,
-			data: order
-		});
+		if (order.user) {
+			socketManager.notifyClient(order.user._id.toString(), {
+				type: NotificationType.ORDER_STATUS_CHANGED,
+				title: 'Estado de Envío Actualizado',
+				message: `Tu pedido ahora está: ${status}`,
+				severity: NotificationSeverity.INFO,
+				link: `/orders/${order._id}`,
+				data: order
+			});
+		}
 
 		if (req.tenant) {
 			socketManager.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'shipping');

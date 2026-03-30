@@ -38,6 +38,11 @@ const EcommerceSchema = new Schema(
 				excludedPaymentMethods: [{ type: String }],
 				excludedPaymentTypes: [{ type: String, default: '' }]
 			},
+			transfer: {
+				active: { type: Boolean, default: false },
+				alias: { type: String, default: '' },
+				cbuCvu: { type: String, default: '' },
+			}
 		},
 		callbackURLs: {
 			success: { type: String, required: false, default: '' },

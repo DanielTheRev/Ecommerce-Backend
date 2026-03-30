@@ -80,6 +80,11 @@ export class EcommerceService {
 						maxInstallments: publicConfig.paymentGateways?.mercadopago?.maxInstallments || 1,
 						excludedPaymentMethods: publicConfig.paymentGateways?.mercadopago?.excludedPaymentMethods || [],
 						excludedPaymentTypes: publicConfig.paymentGateways?.mercadopago?.excludedPaymentTypes || [],
+					},
+					transfer: {
+						active: publicConfig.paymentGateways?.transfer?.active || false,
+						alias: publicConfig.paymentGateways?.transfer?.alias || '',
+						cbuCvu: publicConfig.paymentGateways?.transfer?.cbuCvu || ''
 					}
 				}
 			}
@@ -136,7 +141,9 @@ export class EcommerceService {
 
 			// Aplanamos el objeto para permitir actualizaciones parciales en niveles profundos
 			// evitando que se borren campos hermanos (como uala al actualizar mercadopago)
+			console.log('EcomerceConfig.updateConfig', data);
 			const flattenedData = flattenObject(data);
+			console.log('EcomerceConfig.updateConfig flattenedData', flattenedData);
 
 			const updatedConfig = await models.EcommerceConfig.findOneAndUpdate(
 				{ key: 'global_config' },
@@ -181,6 +188,8 @@ export class EcommerceService {
 					return config.paymentGateways.uala.credentials;
 				case EcommercePaymentProviders.MERCADOPAGO:
 					return config.paymentGateways.mercadopago;
+				case EcommercePaymentProviders.TRANSFER:
+					return config.paymentGateways.transfer;
 				default:
 					throw new AppError('Invalid payment provider', 'Proveedor de pago inválido', 400);
 			}
@@ -199,7 +208,8 @@ export class EcommerceService {
 			const config = await this.getConfig(models);
 			const paymentGateways = {
 				[EcommercePaymentProviders.UALA]: config.paymentGateways.uala,
-				[EcommercePaymentProviders.MERCADOPAGO]: config.paymentGateways.mercadopago
+				[EcommercePaymentProviders.MERCADOPAGO]: config.paymentGateways.mercadopago,
+				[EcommercePaymentProviders.TRANSFER]: config.paymentGateways.transfer
 			};
 			const selectedProvider = paymentGateways[provider];
 			if (!selectedProvider)

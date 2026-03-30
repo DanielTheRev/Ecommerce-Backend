@@ -29,13 +29,21 @@ export const CreateOrderSchema = z.object({
 			type: z.enum(PaymentType)
 		}),
 
+		formPayerData: z.object({
+			firstName: z.string().min(1),
+			lastName: z.string().min(1),
+			email: z.email(),
+			identificationType: z.string().min(1),
+			identificationNumber: z.string().min(1)
+		}),
+
 		mercadopagoData: z.object({
 			token: z.string().optional(),
 			payment_method_id: z.string(),
-			installments: z.number().int().positive(),
+			installments: z.number().int().positive().optional(),
 			type: z.string(),
 			payer: z.object({
-				email: z.string().email(),
+				email: z.email(),
 				first_name: z.string().optional(),
 				last_name: z.string().optional()
 			}).optional(),

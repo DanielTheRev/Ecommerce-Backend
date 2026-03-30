@@ -188,10 +188,7 @@ export class OrderService {
 
 			const finalCost = paymentService.getFinalCost();
 
-			const status =
-				shippingMethod.type === ShippingType.HOME_DELIVERY
-					? OrderStatus.PROCESSING_SHIPPING
-					: OrderStatus.PENDING;
+			const status = OrderStatus.PENDING_PAYMENT;
 
 			/* reducing variant stock */
 			await ProductService.reduceVariantStock(models, variantItems);
@@ -229,11 +226,13 @@ export class OrderService {
 						method: paymentMethod.type,
 						amount: finalCost
 					},
+					buyerData: data.formPayerData,
 					total: finalCost,
 					orderNumber: this.generateOrderNumber(),
 					history: [{
 						status: status,
-						timestamp: new Date()
+						timestamp: new Date(),
+						note: 'Orden creada con éxito'
 					}],
 					earnings: PaymentService.theOrderIsPreferredPayment(paymentMethod.type)
 						? paymentService.getEarnings()
@@ -246,6 +245,7 @@ export class OrderService {
 			])
 
 			let extras: CreateOrderExtras | undefined;
+			/* Try pay order */
 			if (paymentMethod.type === PaymentType.CARD || paymentMethod.type === PaymentType.TICKET) {
 				const config = await EcommerceService.getConfig(models);
 
@@ -280,24 +280,33 @@ export class OrderService {
 					}
 
 					newOrder.paymentInfo.transactionId = String(result.id);
-					newOrder.paymentInfo.mercadopagoData = result;
+					newOrder.paymentInfo.mercadopagoData = {
+						items: result.items!,
+						status: result.status!,
+						status_detail: result.status_detail!,
+						total_amount: result.total_amount!,
+						total_paid_amount: result.total_paid_amount!,
+						transactions: result.transactions!
+					};
 
 					// Si el pago es exitoso
 					if (result.status === 'processed' || result.status === 'approved') {
 						newOrder.paymentInfo.status = PaymentStatus.APPROVED;
+						newOrder.status = OrderStatus.PROCESSING_SHIPPING;
 						newOrder.paymentInfo.paymentDate = new Date();
 						newOrder.history.push({
-							status: OrderStatus.PENDING,
+							status: OrderStatus.PROCESSING_SHIPPING,
 							timestamp: new Date(),
-							note: 'Pago acreditado automáticamente vía Checkout API'
+							note: 'Pago acreditado automáticamente'
 						});
 
 						// Cálculo de ganancias preliminar
 						const mpConfig = config.paymentGateways.mercadopago;
-						const installments = data.mercadopagoData.installments;
+						const installments = data.mercadopagoData.installments || 1;
 						const totalWithTaxes = finalCost / 1.21;
 						const commission = mpConfig.baseCommission;
-						const cft = installments <= 3 ? mpConfig.cft3cuotas : mpConfig.cft6Cuotas;
+						// Para tickets (installments suele ser 1 o undefined), usamos la tasa base.
+						const cft = (paymentMethod.type === PaymentType.TICKET) ? 0 : (installments <= 3 ? mpConfig.cft3cuotas : mpConfig.cft6Cuotas);
 						const totalCost = totalWithTaxes * (1 - (commission + cft / 100));
 						newOrder.earnings = finalCost - totalCost;
 					}
@@ -307,23 +316,10 @@ export class OrderService {
 						status: result.status,
 						status_detail: result.status_detail,
 						provider: EcommercePaymentProviders.MERCADOPAGO,
-						ticket_url: result.transaction_details?.external_resource_url ||
-							result.point_of_interaction?.transaction_data?.ticket_url
-					};
-				} else {
-					// Fallback a Ualá
-					const { ualaOrder, error } = await paymentService.withUalaBiss(newOrder.id);
-					if (error || !ualaOrder) {
-						throw new AppError('Failed to create Ualá order', 'Error al generar la orden de Ualá', 500);
-					}
-					newOrder.paymentInfo.transactionId = ualaOrder.uuid || '';
-					newOrder.paymentInfo.ualaOrderStatus = ualaOrder as any;
-					extras = {
-						...ualaOrder,
-						provider: EcommercePaymentProviders.UALA
+						ticket_url: result.status === 'action_required' ? result.transactions?.payments?.[0]?.payment_method?.ticket_url : undefined,
+						qr: result.status === 'action_required' ? result.transactions?.payments?.[0]?.payment_method?.qr_code : undefined
 					};
 				}
-
 				// Guardar el transactionId en la orden
 				await newOrder.save();
 			} else {
@@ -436,6 +432,8 @@ export class OrderService {
 	}
 
 	static async updatePaymentStatus(models: TenantModels, data: updatePaymentStatusDTO) {
+
+		throw new Error('Not implemented');
 		if (!data.orderID)
 			throw new AppError(
 				'Order ID is required to update payment status',
@@ -455,21 +453,22 @@ export class OrderService {
 						400
 					);
 
-				const ualaOrder = await PaymentService.getOrderStatus(order.paymentInfo.transactionId);
+				// const ualaOrder = await PaymentService.getOrderStatus(order.paymentInfo.transactionId);
 
-				if (!ualaOrder.orderStatus || ualaOrder.error)
-					throw new AppError(
-						'Order not found',
-						'transaccion no encontrada',
-						404
-					);
+				// if (!ualaOrder.orderStatus || ualaOrder.error)
+				// 	throw new AppError(
+				// 		'Order not found',
+				// 		'transaction no encontrada',
+				// 		404
+				// 	);
 
-				newStatus =
-					ualaOrder.orderStatus?.status === UalaOrderStatus.Aprobado
-						? PaymentStatus.APPROVED
-						: PaymentStatus.REJECTED;
+				// newStatus =
+				// 	ualaOrder.orderStatus?.status === UalaOrderStatus.Aprobado
+				// 		? PaymentStatus.APPROVED
+				// 		: PaymentStatus.REJECTED;
 			}
 			order.paymentInfo.status = data.status;
+			// order.status = data.status === PaymentStatus.APPROVED ? OrderStatus.PROCESSING_SHIPPING : OrderStatus.PENDING;
 			const orderUpdated = await order.save();
 			return orderUpdated;
 		} catch (error) {
@@ -617,7 +616,7 @@ export class OrderService {
 			if (order.paymentInfo.status === PaymentStatus.APPROVED) {
 				order.paymentInfo.paymentDate = new Date();
 				order.paymentInfo.transactionId = payment.id; // Guardamos el ID del pago real
-				order.paymentInfo.mercadopagoData = payment; // Guardamos la info del pago
+				order.paymentInfo.mercadopagoData?.transactions?.payments?.push(payment); // Guardamos la info del pago
 
 				// Calcular ganancias dinámicas basadas en cuotas si MP nos da el dato
 				// Para tickets, installments suele ser 0 o 1, PaymentService.getEarnings(0) usará la ganancia de ticket
@@ -785,7 +784,7 @@ export class OrderService {
 		try {
 			const order = await this.getOrderById(models, id);
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
-			if (order.user.toString() !== userID && role !== 'admin') {
+			if (order.user?.toString() !== userID && role !== 'admin') {
 				throw new AppError(
 					'You can only cancel your own orders',
 					'Solo puedes cancelar tus propias órdenes',
@@ -793,7 +792,7 @@ export class OrderService {
 				);
 			}
 
-			if (order.status !== OrderStatus.PENDING) {
+			if (order.status !== OrderStatus.PENDING_PAYMENT) {
 				throw new AppError(
 					'Only pending orders can be cancelled',
 					'Solo se pueden cancelar órdenes pendientes',
@@ -840,7 +839,7 @@ export class OrderService {
 				totalRevenue
 			] = await Promise.all([
 				models.Order.countDocuments(),
-				models.Order.countDocuments({ status: OrderStatus.PENDING }),
+				models.Order.countDocuments({ status: OrderStatus.PENDING_PAYMENT }),
 				models.Order.countDocuments({ status: OrderStatus.PROCESSING_SHIPPING }),
 				models.Order.countDocuments({ status: OrderStatus.SHIPPED }),
 				models.Order.countDocuments({ status: OrderStatus.DELIVERED }),

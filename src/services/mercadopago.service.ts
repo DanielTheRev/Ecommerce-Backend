@@ -1,5 +1,6 @@
-import { MercadoPagoConfig, Preference, Payment, PaymentMethod, OAuth } from 'mercadopago';
+import { MercadoPagoConfig, Preference, Payment, PaymentMethod, OAuth, Order } from 'mercadopago';
 import { AppError } from '@/errors/app.error';
+import { CreateOrderRequest } from 'mercadopago/dist/clients/order/create/types';
 
 export interface IMPItem {
 	id: string;
@@ -82,7 +83,6 @@ export class MercadoPagoService {
 	 * Crea un pago en MercadoPago usando el SDK oficial (v1/payments)
 	 */
 	static async createPayment(accessToken: string, paymentBody: any) {
-		console.log('accessToken', accessToken);
 		try {
 			const client = new MercadoPagoConfig({ accessToken });
 			const payment = new Payment(client);
@@ -106,33 +106,25 @@ export class MercadoPagoService {
 
 	/**
 	 * Crea una "Order" en MercadoPago (Checkout API vía Orders)
-	 * @deprecated Usar createPayment para soporte de notification_url dinámico
 	 */
-	static async createOrder(accessToken: string, mpOrderData: any) {
-		console.log('accessToken', accessToken);
+	static async createOrder(accessToken: string, mpOrderData: CreateOrderRequest) {
 		try {
-			const response = await fetch('https://api.mercadopago.com/v1/orders', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					'Authorization': `Bearer ${accessToken}`,
-					'X-Idempotency-Key': crypto.randomUUID()
-				},
-				body: JSON.stringify(mpOrderData)
+			const client = new MercadoPagoConfig({
+				accessToken: accessToken,
+				options: { timeout: 5000 },
 			});
 
-			const result = await response.json();
-			console.log(result);
 
-			if (!response.ok && result.errors !== null) {
-				console.error('MP Orders API Error:', JSON.stringify(result));
-				throw new AppError('MercadoPago API Error', result.message || 'Error al procesar el pago', response.status);
-			}
-
-			return result;
+			const order = new Order(client);
+			const requestOptions = {
+				idempotencyKey: crypto.randomUUID(),
+			};
+			const result = await order.create({ body: mpOrderData, requestOptions })
+			return result
 		} catch (error: any) {
-			console.error('Error in createOrder (Checkout API):', error);
-			throw error;
+			console.log('MercadoPago error');
+			console.log({ error: error.errors[0].message, details: JSON.stringify(error.errors[0].details) });
+			throw new AppError('MercadoPago API Error', 'Error al procesar el pago', 400);
 		}
 	}
 
