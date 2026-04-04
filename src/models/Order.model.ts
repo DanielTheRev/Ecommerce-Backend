@@ -21,7 +21,7 @@ const orderSchema = new Schema<IOrder, IOrderModel>(
 		user: {
 			type: Schema.Types.ObjectId,
 			ref: 'User',
-			required: true
+			required: false
 		},
 		seller: {
 			type: Schema.Types.ObjectId,
@@ -31,8 +31,16 @@ const orderSchema = new Schema<IOrder, IOrderModel>(
 			firstName: { type: String, required: true },
 			lastName: { type: String, required: true },
 			email: { type: String, required: true },
-			identificationType: { type: String, required: true },
-			identificationNumber: { type: String, required: true }
+			identificationType: {
+				type: String, required: function () {
+					return this.user ? false : true;
+				}
+			},
+			identificationNumber: {
+				type: String, required: function () {
+					return this.user ? false : true;
+				}
+			}
 		},
 		saleType: {
 			type: String,

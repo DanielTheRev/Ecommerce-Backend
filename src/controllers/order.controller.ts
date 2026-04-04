@@ -126,23 +126,18 @@ export const mercadopagoWebhook = async (req: AuthRequest, res: Response) => {
 
 // Crear nueva orden
 export const createOrder = async (req: AuthRequest, res: Response, next: NextFunction) => {
-	console.log('Create order');
-	if (!req.user) {
-		return res.status(401).json({ message: 'Usuario no autenticado' });
-	}
 	try {
-		const userId = req.user._id;
+		const userId = req.user ? req.user._id : undefined;
 		const newOrderDTO = req.body as CreateOrderDTO;
 		const baseUrl = `${req.protocol}://${req.get('host')}`;
-		const { order, extras } = await OrderService.createOrder(req.models!, newOrderDTO, userId, req.tenant!.slug, baseUrl);
+		const { order, safeOrder, extras } = await OrderService.createOrder(req.models!, newOrderDTO, userId, req.tenant!.slug, baseUrl);
 
 		if (req.tenant) {
 			socketManager.notifyNewOrderToAdmins(req.tenant.slug, order);
 		}
-
 		return res.status(201).json({
 			message: 'Orden creada exitosamente',
-			order: order,
+			order: safeOrder,
 			extras
 		});
 	} catch (error) {
@@ -205,9 +200,13 @@ export const getUserOrders = async (req: AuthRequest, res: Response, next: NextF
 // Obtener una orden específica por ID
 export const getOrderById = async (req: AuthRequest, res: Response, next: NextFunction) => {
 	try {
-		const { id } = req.params;
+		const { id, track } = req.params;
 		const userId = req.user?._id;
 
+		if (track) {
+			const order = await OrderService.getOrderById(req.models!, id);
+			return res.json(order);
+		}
 		if (!userId) {
 			return res.status(401).json({ message: 'Usuario no autenticado' });
 		}
@@ -378,6 +377,21 @@ export const getDailyStats = async (req: AuthRequest, res: Response, next: NextF
 		return res.json(stats);
 	} catch (error) {
 		console.log(error);
+		return next(error);
+	}
+};
+
+// Rastreo de orden para clientes
+export const trackOrder = async (req: AuthRequest, res: Response, next: NextFunction) => {
+	console.log('Track order');
+	try {
+		const orderNumber = req.query.orderNumber as string;
+		const email = req.query.email as string;
+
+		const orderData = await OrderService.trackOrder(req.models!, orderNumber, email);
+
+		return res.status(200).json(orderData);
+	} catch (error) {
 		return next(error);
 	}
 };

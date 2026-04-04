@@ -12,7 +12,8 @@ import {
 	GetOrderStatsResponse,
 	CreateOrderExtras,
 	SaleType,
-	ISplitPayment
+	ISplitPayment,
+	IOrder
 } from '@/interfaces/order.interface';
 import { EcommerceService } from './ecommerce.service';
 import { EcommercePaymentProviders } from '@/interfaces/ecommerce.interface';
@@ -29,6 +30,23 @@ import { Role } from '@/interfaces/user.interface';
 import { FilterQuery } from 'mongoose';
 import { TenantModels } from '@/config/modelRegistry';
 import { PaymentElement } from '@/interfaces/mp_payment.interface';
+import { ResendService } from './resend.service';
+
+
+// Campos sensibles de precios en el snapshot de la orden — solo visibles para admins
+// Espejo de select:false declarado en orderItem.schema.ts
+export const ADMIN_PRICE_SELECT = [
+	'+items.productSnapshot.prices.costPrice.inUSD',
+	'+items.productSnapshot.prices.costPrice.inARS',
+	'+items.productSnapshot.prices.dolarPrice',
+	'+items.productSnapshot.prices.profitMargin',
+	'+items.productSnapshot.prices.baseCommission',
+	'+items.productSnapshot.prices.cft6Cuotas',
+	'+items.productSnapshot.prices.earnings.cash_transfer',
+	'+items.productSnapshot.prices.earnings.card_3_installments',
+	'+items.productSnapshot.prices.earnings.card_6_installments',
+	'+items.productSnapshot.prices.earnings.ticket'
+].join(' ');
 
 export class OrderService {
 	private static generateOrderNumber(): string {
@@ -39,9 +57,7 @@ export class OrderService {
 	static async getOrderById(models: TenantModels, id: string): Promise<IOrderDocument> {
 		try {
 			if (!id) throw new AppError('Order ID is required', 'El ID de la orden es requerido', 400);
-			const order = await models.Order.findById(id).populate([
-				{ path: 'items.product' },
-			]) as IOrderDocument;
+			const order = await models.Order.findById(id) as IOrderDocument;
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
 			return order;
 		} catch (error) {
@@ -56,10 +72,11 @@ export class OrderService {
 
 	static async getFullyOrderBy(models: TenantModels, query: FilterQuery<IOrderDocument>) {
 		try {
-			const order = await models.Order.findOne(query).populate([
-				{ path: 'items.product', select: '+prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.earnings' },
-				{ path: 'user', select: 'name email profilePhoto role' }
-			]) as IOrderDocument;
+			const order = await models.Order.findOne(query)
+				.select(ADMIN_PRICE_SELECT)
+				.populate([
+					{ path: 'user', select: 'name email profilePhoto role' }
+				]) as IOrderDocument;
 
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
 			return order;
@@ -76,8 +93,8 @@ export class OrderService {
 	static async getOrderByIdFullyPopulated(models: TenantModels, id: string): Promise<IOrderDocument> {
 		try {
 			const order = await models.Order.findById(id)
-				.populate('user', 'name email')
-				.populate('items.product', 'name price images') as IOrderDocument;
+				.select(ADMIN_PRICE_SELECT)
+				.populate('user', 'name email') as IOrderDocument;
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
 			return order;
 		} catch (error) {
@@ -94,7 +111,6 @@ export class OrderService {
 		try {
 			const order = await models.Order.findByIdAndUpdate(id, { orderStatus }, { new: true, runValidators: true }).populate([
 				{ path: 'user', select: 'name email' },
-				{ path: 'items.product', select: 'name price image' }
 			]);
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
 			return order;
@@ -108,14 +124,8 @@ export class OrderService {
 		}
 	}
 
-	static async createOrder(models: TenantModels, data: CreateOrderDTO, userId: string, tenantSlug: string, baseUrl: string): Promise<CreateOrderResponse> {
+	static async createOrder(models: TenantModels, data: CreateOrderDTO, userId: string | undefined, tenantSlug: string, baseUrl: string): Promise<CreateOrderResponse> {
 		try {
-			if (!userId)
-				throw new AppError(
-					'User ID is required to create an order',
-					'El ID del usuario es requerido para crear una orden',
-					401
-				);
 			if (!data || data.items.length === 0)
 				throw new AppError(
 					'Order items are required',
@@ -123,14 +133,20 @@ export class OrderService {
 					401
 				);
 
+			const user = await models.User.findById(userId)
+
 			const items = (await ProductService.getProductsByIds(models, data.items.map((item) => item._id)))
 				.map((product) => {
 					const itemInTheCart = data.items.find((e) => e._id === product._id.toString());
 					if (!itemInTheCart) throw new AppError('Item not found', 'Item no encontrado', 404);
+					const variant = product.variants.find(v => v.sku === itemInTheCart.sku);
+					if (!variant) throw new AppError('Variant not found', 'Variante no encontrada', 404);
+					const imageReference = variant.imageReference;
 					return {
 						data: product,
 						variantSku: itemInTheCart.sku || '',
-						quantity: itemInTheCart.quantity
+						quantity: itemInTheCart.quantity,
+						imageReference
 					};
 				});
 
@@ -199,22 +215,29 @@ export class OrderService {
 					user: userId,
 					status,
 					items: items.map((item) => {
-						const variant = item.data.variants?.find((v: any) => v.sku === item.variantSku);
-						const variantLabel = variant?.attributes?.map((a: any) => a.value).join(' - ') || '';
-
+						const variant = item.data.variants?.find((v: any) => v.sku === item.variantSku) as any;
+						if (!variant) throw new AppError('Variant not found', 'Variante no encontrada', 404);
 						return {
-							product: item.data._id,
-							variantSku: item.variantSku,
-							variantLabel,
+							productSnapshot: {
+								_id: item.data._id,
+								brand: item.data.brand,
+								model: item.data.model,
+								image: item.data.images?.[0]?.url || '',
+								slug: item.data.slug || '',
+								// Snapshot de precios — necesario para cálculo de ganancias post-pago
+								prices: item.data.prices
+							},
+							variantSnapshot: {
+								sku: variant.sku,
+								size: variant.size,
+								attributes: variant.attributes,
+								color: variant.color,
+								imageReference: variant.imageReference
+							},
 							quantity: item.quantity,
 							price: (paymentMethod.type === PaymentType.CARD || paymentMethod.type === PaymentType.TICKET)
 								? item.data.prices.tarjeta_credito_debito
 								: item.data.prices.efectivo_transferencia,
-							productSnapshot: {
-								brand: item.data.brand,
-								model: item.data.model,
-								image: item.data.images?.[0]?.url || ''
-							}
 						};
 					}),
 					shippingInfo: {
@@ -226,7 +249,13 @@ export class OrderService {
 						method: paymentMethod.type,
 						amount: finalCost
 					},
-					buyerData: data.formPayerData,
+					buyerData: user ? {
+						firstName: user.name.split(' ')[0],
+						lastName: user.name.split(' ')[1],
+						email: user.email,
+						identificationType: '',
+						identificationNumber: ''
+					} : data.formPayerData,
 					total: finalCost,
 					orderNumber: this.generateOrderNumber(),
 					history: [{
@@ -241,7 +270,6 @@ export class OrderService {
 
 			)).populate([
 				{ path: 'user', select: 'name email' },
-				{ path: 'items.product', select: 'brand model prices images' }
 			])
 
 			let extras: CreateOrderExtras | undefined;
@@ -249,7 +277,6 @@ export class OrderService {
 			if (paymentMethod.type === PaymentType.CARD || paymentMethod.type === PaymentType.TICKET) {
 				const config = await EcommerceService.getConfig(models);
 
-				const user = await models.User.findById(userId);
 
 				// Prioridad a MercadoPago si está activo y tenemos los datos necesarios
 				if (config.paymentGateways.mercadopago.active && data.mercadopagoData) {
@@ -258,12 +285,12 @@ export class OrderService {
 						models,
 						total: finalCost,
 						payerData: {
-							email: user?.email || '',
-							first_name: user?.name.split(' ')[0],
-							last_name: user?.name.split(' ').slice(1).join(' '),
+							email: user ? user.email : data.formPayerData.email,
+							first_name: user ? user.name.split(' ')[0] : data.formPayerData.firstName,
+							last_name: user ? user.name.split(' ').slice(1).join(' ') : data.formPayerData.lastName,
 							identification: data.mercadopagoData.identification
 						},
-						paymentData: data.mercadopagoData,
+						mercadoPagoData: data.mercadopagoData,
 						tenantSlug,
 						baseUrl,
 						items: items.map((item) => ({
@@ -335,7 +362,30 @@ export class OrderService {
 				await newOrder.save();
 			}
 
-			return { order: newOrder, extras };
+			/* Sending email confirmation */
+
+			await ResendService.sendOrderConfirmationEmail(newOrder.toObject() as unknown as IOrder);
+
+			const safeOrder = {
+				...newOrder.toObject(),
+				items: newOrder.items.map((item) =>
+				({
+					...item,
+					productSnapshot: {
+						...item.productSnapshot,
+						prices: {
+							efectivo_transferencia: item.productSnapshot.prices.efectivo_transferencia,
+							tarjeta_credito_debito: item.productSnapshot.prices.tarjeta_credito_debito,
+							cuotas: {
+								cuotas_3_si: item.productSnapshot.prices.cuotas.cuotas_3_si,
+								cuotas_6_si: item.productSnapshot.prices.cuotas.cuotas_6_si
+							}
+						}
+					}
+				}))
+			} as unknown as IOrder;
+
+			return { order: newOrder, safeOrder: safeOrder!, extras };
 		} catch (error) {
 			console.log(error);
 			if (error instanceof AppError) throw error;
@@ -403,10 +453,6 @@ export class OrderService {
 			}
 
 			const userOrders = await models.Order.find(filters)
-				.populate({
-					path: 'items.product',
-					select: 'brand model price images'
-				})
 				.sort({ createdAt: -1 })
 				.skip(skip)
 				.limit(query.limit);
@@ -433,7 +479,6 @@ export class OrderService {
 
 	static async updatePaymentStatus(models: TenantModels, data: updatePaymentStatusDTO) {
 
-		throw new Error('Not implemented');
 		if (!data.orderID)
 			throw new AppError(
 				'Order ID is required to update payment status',
@@ -443,32 +488,8 @@ export class OrderService {
 		try {
 			let order = await this.getOrderByIdFullyPopulated(models, data.orderID);
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
-			let newStatus: string;
-			const isCard = order.paymentInfo.method === PaymentType.CARD;
-			if (isCard) {
-				if (!order.paymentInfo.transactionId)
-					throw new AppError(
-						'No transaction ID found for this order',
-						'No se encontró ID de transacción para esta orden',
-						400
-					);
-
-				// const ualaOrder = await PaymentService.getOrderStatus(order.paymentInfo.transactionId);
-
-				// if (!ualaOrder.orderStatus || ualaOrder.error)
-				// 	throw new AppError(
-				// 		'Order not found',
-				// 		'transaction no encontrada',
-				// 		404
-				// 	);
-
-				// newStatus =
-				// 	ualaOrder.orderStatus?.status === UalaOrderStatus.Aprobado
-				// 		? PaymentStatus.APPROVED
-				// 		: PaymentStatus.REJECTED;
-			}
 			order.paymentInfo.status = data.status;
-			// order.status = data.status === PaymentStatus.APPROVED ? OrderStatus.PROCESSING_SHIPPING : OrderStatus.PENDING;
+			order.status = data.status === PaymentStatus.APPROVED ? OrderStatus.PROCESSING_SHIPPING : OrderStatus.PENDING_PAYMENT;
 			const orderUpdated = await order.save();
 			return orderUpdated;
 		} catch (error) {
@@ -492,7 +513,6 @@ export class OrderService {
 			const order = await models.Order.findById(data.orderID)
 				.populate([
 					{ path: 'user', select: 'name email profilePhoto role' },
-					{ path: 'items.product', select: 'name price images description category' }
 				]) as IOrderDocument;
 
 			if (!order) {
@@ -545,9 +565,9 @@ export class OrderService {
 	static async confirmCardPayment(models: TenantModels, orderID: string, status: UalaOrderStatus) {
 		try {
 			const order = await models.Order.findById(orderID)
+				.select(ADMIN_PRICE_SELECT)
 				.populate([
 					{ path: 'user', select: 'name email' },
-					{ path: 'items.product', select: '+prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas' }
 				]);
 
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
@@ -565,7 +585,7 @@ export class OrderService {
 						const installments = (orderStatus as any).customer?.card?.installments?.number || 1;
 
 						const itemsForPaymentService = order.items.map(item => ({
-							data: item.product as any,
+							data: item.productSnapshot as any,
 							quantity: item.quantity
 						}));
 
@@ -601,10 +621,11 @@ export class OrderService {
 			const mpConfig = config.paymentGateways.mercadopago;
 
 			// const mpPayment = await MercadoPagoService.getPaymentStatus(mpConfig.accessToken, paymentId);
-			const order = await models.Order.findById(orderId).populate([
-				{ path: 'user', select: 'name email' },
-				{ path: 'items.product', select: '+prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.cft3cuotas' }
-			]) as IOrderDocument;
+			const order = await models.Order.findById(orderId)
+				.select(ADMIN_PRICE_SELECT)
+				.populate([
+					{ path: 'user', select: 'name email' },
+				]) as IOrderDocument;
 
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
 
@@ -623,7 +644,7 @@ export class OrderService {
 				const installments = payment.payment_method.installments;
 
 				const itemsForPaymentService = order.items.map(item => ({
-					data: item.product as any,
+					data: item.productSnapshot as any,
 					quantity: item.quantity
 				}));
 
@@ -712,11 +733,8 @@ export class OrderService {
 		}
 		try {
 			const orders = await models.Order.find(filters)
+				.select(ADMIN_PRICE_SELECT)
 				.populate('user', 'name email profilePhoto role')
-				.populate({
-					path: 'items.product',
-					select: 'name price images description category'
-				})
 				.sort({ createdAt: -1 })
 				.skip(skip)
 				.limit(limit);
@@ -812,8 +830,8 @@ export class OrderService {
 			// restore variant stock
 			await ProductService.restoreVariantStock(models,
 				order.items.map((item: any) => ({
-					product: item.product,
-					variantSku: item.variantSku,
+					product: item.productSnapshot._id,
+					variantSku: item.variantSnapshot.sku,
 					quantity: item.quantity
 				}))
 			);
@@ -908,8 +926,7 @@ export class OrderService {
 			let totalEarnings = 0;
 
 			const orderItems = itemsData.map(item => {
-				const variant = item.data.variants?.find((v: any) => v.sku === item.variantSku);
-				const variantLabel = variant?.attributes?.map((a: any) => a.value).join(' - ') || '';
+				const variant = item.data.variants?.find((v: any) => v.sku === item.variantSku) as any;
 
 				// precio base (efectivo/transferencia es lo más común para mostrador)
 				const price = item.data.prices?.efectivo_transferencia || 0;
@@ -920,16 +937,27 @@ export class OrderService {
 				totalEarnings += ((price - costPrice) * item.quantity);
 
 				return {
-					product: item.data._id,
-					variantSku: item.variantSku,
-					variantLabel,
-					quantity: item.quantity,
-					price,
 					productSnapshot: {
+						_id: item.data._id,
 						brand: item.data.brand,
 						model: item.data.model,
-						image: item.data.images?.[0]?.url || ''
-					}
+						image: item.data.images?.[0]?.url || '',
+						slug: item.data.slug || '',
+						// Snapshot de precios — necesario para cálculo de ganancias post-pago
+						prices: {
+							efectivo_transferencia: item.data.prices?.efectivo_transferencia,
+							tarjeta_credito_debito: item.data.prices?.tarjeta_credito_debito,
+							earnings: item.data.prices?.earnings
+						}
+					},
+					variantSnapshot: {
+						sku: variant?.sku || item.variantSku,
+						size: variant?.size,
+						attributes: variant?.attributes,
+						color: variant?.color
+					},
+					quantity: item.quantity,
+					price,
 				};
 			});
 
@@ -971,11 +999,13 @@ export class OrderService {
 				earnings: totalEarnings
 			});
 
-			return await newOrder.populate([
+			// Reload the order from the database to enforce the select: false schema rules
+			const safeOrder = await models.Order.findById(newOrder._id).populate([
 				{ path: 'user', select: 'name email' },
 				{ path: 'seller', select: 'name' },
-				{ path: 'items.product', select: 'brand model prices images' }
 			]);
+
+			return safeOrder || newOrder;
 
 		} catch (error) {
 			console.error(error);
@@ -1051,6 +1081,37 @@ export class OrderService {
 		} catch (error) {
 			console.log(error);
 			throw new AppError('Failed to get daily stats', 'Error al obtener las estadísticas del día', 500);
+		}
+	}
+
+	static async trackOrder(models: TenantModels, orderNumber: string, email: string) {
+		try {
+			const order = await models.Order.findOne({ orderNumber })
+				.populate([
+					{ path: 'user', select: 'email' },
+				])
+				.lean();
+
+			if (!order) {
+				throw new AppError('Order not found or incorrect data', 'Orden no encontrada o datos incorrectos', 404);
+			}
+
+			const queryEmail = email.toLowerCase().trim();
+			const buyerEmail = order.buyerData?.email?.toLowerCase().trim();
+			const userEmail = (order.user as any)?.email?.toLowerCase().trim();
+
+			if (buyerEmail !== queryEmail && userEmail !== queryEmail) {
+				throw new AppError('Order not found or incorrect data', 'Orden no encontrada o datos incorrectos', 404);
+			}
+
+			return order;
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError(
+				'Failed to track order',
+				'Error al rastrear la orden',
+				500
+			);
 		}
 	}
 }

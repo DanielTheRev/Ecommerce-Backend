@@ -54,7 +54,7 @@ export class EcommerceService {
 		try {
 			// Los campos sensibles tienen select: false en el esquema, por lo que findOne no los trae por defecto.
 			const publicConfig = await models.EcommerceConfig.findOne({ key: 'global_config' }).lean() as unknown as IEcommerceConfig;
-			
+
 			if (!publicConfig)
 				throw new AppError(
 					'Ecommerce config not found',
@@ -74,6 +74,8 @@ export class EcommerceService {
 			const data: IEcommerceConfigPublic = {
 				contact: publicConfig.contact!,
 				social: publicConfig.social!,
+				brands: publicConfig.brands,
+				categories: publicConfig.categories,
 				paymentGateways: {
 					mercadopago: {
 						publicKey: publicConfig.paymentGateways?.mercadopago?.publicKey || '',

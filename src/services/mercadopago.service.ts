@@ -124,9 +124,38 @@ export class MercadoPagoService {
 		} catch (error: any) {
 			console.log('MercadoPago error');
 			console.log({ error: error.errors[0].message, details: JSON.stringify(error.errors[0].details) });
+			console.log(JSON.stringify(error));
 			throw new AppError('MercadoPago API Error', 'Error al procesar el pago', 400);
 		}
 	}
+
+	// static async createOrder(accessToken: string, mpOrderData: any) {
+	// 	try {
+	// 		const response = await fetch('https://api.mercadopago.com/v1/orders', {
+	// 			method: 'POST',
+	// 			headers: {
+	// 				'Content-Type': 'application/json',
+	// 				'Authorization': `Bearer ${accessToken}`,
+	// 				'X-Idempotency-Key': crypto.randomUUID()
+	// 			},
+	// 			body: JSON.stringify(mpOrderData)
+	// 		});
+
+	// 		const result = await response.json();
+	// 		console.log('CreateOrder Result');
+	// 		console.log(JSON.stringify(result));
+
+	// 		if (!response.ok && result.errors !== null) {
+	// 			console.error('MP Orders API Error:', JSON.stringify(result));
+	// 			throw new AppError('MercadoPago API Error', result.message || 'Error al procesar el pago', response.status);
+	// 		}
+
+	// 		return result;
+	// 	} catch (error: any) {
+	// 		console.error('Error in createOrder (Checkout API):', error);
+	// 		throw error;
+	// 	}
+	// }
 
 	/**
 	 * Obtiene el estado de un pago mediante su ID

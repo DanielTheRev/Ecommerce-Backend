@@ -22,6 +22,8 @@ export interface IEcommerceConfig {
 		twitter: string;
 		tiktok: string;
 	};
+	brands: string[],
+	categories: string[]
 }
 
 export interface IEcommercePaymentGateway {
@@ -80,6 +82,8 @@ export interface IEcommerceConfigPublic {
 		twitter: string;
 		tiktok: string;
 	};
+	brands: string[];
+	categories: string[];
 	paymentGateways: {
 		mercadopago: {
 			publicKey: string;

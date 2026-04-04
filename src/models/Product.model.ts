@@ -1,8 +1,7 @@
 import mongoose, { Schema } from 'mongoose';
-import { IProductCategories, IProductDocument } from '../interfaces/product.interface';
-import { EarningsSchema } from './schemas/earning.schema';
+import { IProductDocument } from '../interfaces/product.interface';
 import { CostPriceSchema } from './schemas/costPrice.schema';
-import { VariantSchema } from './schemas/variant.schema';
+import { EarningsSchema } from './schemas/earning.schema';
 
 const BaseProductSchema = new Schema(
 	{
@@ -21,10 +20,6 @@ const BaseProductSchema = new Schema(
 		category: {
 			type: String,
 			required: [true, 'La categoría es obligatoria'],
-			enum: {
-				values: Object.values(IProductCategories),
-				message: '{VALUE} no es una categoría válida'
-			}
 		},
 		shortDescription: {
 			type: String,
@@ -118,10 +113,6 @@ const BaseProductSchema = new Schema(
 				value: { type: String, required: true }
 			}
 		],
-		variants: {
-			type: [VariantSchema],
-			default: []
-		},
 		tags: {
 			type: [String],
 			default: [],
@@ -158,19 +149,6 @@ const BaseProductSchema = new Schema(
 	}
 );
 
-// ========= VIRTUALS =========
-BaseProductSchema.virtual('totalStock').get(function () {
-	if (!this.variants) return 0;
-	return this.variants
-		.filter((v: any) => v && v.isActive)
-		.reduce((sum: number, v: any) => sum + v.stock, 0);
-});
-
-BaseProductSchema.virtual('hasStock').get(function () {
-	if (!this.variants) return false;
-	return this.variants.some((v: any) => v && v.isActive && v.stock > 0);
-});
-
 BaseProductSchema.set('toJSON', { virtuals: true });
 BaseProductSchema.set('toObject', { virtuals: true });
 
@@ -178,7 +156,6 @@ BaseProductSchema.set('toObject', { virtuals: true });
 BaseProductSchema.index({ slug: -1 });
 BaseProductSchema.index({ brand: 1, model: 1 });
 BaseProductSchema.index({ productType: 1 });
-BaseProductSchema.index({ 'variants.sku': 1 }, { unique: true, sparse: true });
 
 // Schema exportado para multi-tenancy (model registry)
 export { BaseProductSchema };

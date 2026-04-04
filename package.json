@@ -31,7 +31,6 @@
 		"@types/dompurify": "^3.2.0",
 		"@types/jsdom": "^27.0.0",
 		"@types/pdfkit": "^0.17.5",
-		"axios": "^1.13.6",
 		"bcryptjs": "^3.0.2",
 		"cloudinary": "^2.9.0",
 		"cookie": "^1.1.1",

@@ -33,8 +33,8 @@ export const CreateOrderSchema = z.object({
 			firstName: z.string().min(1),
 			lastName: z.string().min(1),
 			email: z.email(),
-			identificationType: z.string().min(1),
-			identificationNumber: z.string().min(1)
+			identificationType: z.string().min(1).optional(),
+			identificationNumber: z.string().min(1).optional()
 		}),
 
 		mercadopagoData: z.object({
@@ -66,5 +66,12 @@ export const UpdateShippingStatusSchema = z.object({
 	body: z.object({
 		orderID: z.string().min(1),
 		status: z.enum(OrderStatus)
+	})
+});
+
+export const TrackOrderSchema = z.object({
+	query: z.object({
+		orderNumber: z.string().min(1, 'Se requiere el número de orden'),
+		email: z.string().email('Debe ser un email válido')
 	})
 });

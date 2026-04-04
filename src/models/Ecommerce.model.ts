@@ -62,6 +62,16 @@ const EcommerceSchema = new Schema(
 			twitter: { type: String, default: '' },
 			tiktok: { type: String, default: '' }
 		},
+		brands: [{
+			type: String,
+			required: false,
+			default: []
+		}],
+		categories: [{
+			type: String,
+			required: false,
+			default: []
+		}],
 		// Metadata para el CMS
 		lastModifiedBy: { type: Schema.Types.ObjectId, ref: 'User', required: false }
 	},

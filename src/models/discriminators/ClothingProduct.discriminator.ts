@@ -1,6 +1,7 @@
 import { Schema } from 'mongoose';
 import { Product } from '../Product.model';
 import { ClothingFit, ClothingGender, ClothingSizeType } from '@/interfaces/product.interface';
+import { ClothingVariantSchema } from '../schemas/clothingVariant.schema';
 
 const CompositionSchema = new Schema({
 	material: { type: String, required: true },
@@ -32,8 +33,15 @@ const ClothingProductSchema = new Schema({
 	season: {
 		type: String,
 		trim: true
+	},
+	variants: {
+		type: [ClothingVariantSchema],
+		default: []
 	}
 });
+
+// SKU único por variante (scoped a la colección completa para evitar duplicados)
+ClothingProductSchema.index({ 'variants.sku': 1 }, { unique: true, sparse: true });
 
 // Schema exportado para multi-tenancy (model registry)
 export { ClothingProductSchema };

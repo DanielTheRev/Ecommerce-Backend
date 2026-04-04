@@ -56,6 +56,8 @@ export class ShopTheLookService {
 					await ImageService.DeleteImage(publicId).catch(e => console.error('Failed to delete old image', e));
 				}
 			}
+			console.log('UpdateLook data');
+			console.log(data);
 
 			const updatedLook = await models.ShopTheLook.findByIdAndUpdate(
 				lookId,
@@ -65,6 +67,7 @@ export class ShopTheLookService {
 
 			return updatedLook as IShopTheLookDocument;
 		} catch (error) {
+			console.log(error);
 			if (error instanceof AppError) throw error;
 			throw new AppError('Error updating Shop The Look item', 'Error al actualizar la campaña', 400);
 		}

@@ -9,6 +9,8 @@ import { EcommercePaymentProviders } from '@/interfaces/ecommerce.interface';
 import { ImageService } from './images.service';
 import { JSDOM } from 'jsdom';
 import createDOMPurify from 'dompurify';
+import { ITechVariant, IClothingVariant } from '@/interfaces/variant.interface';
+import { Types } from 'mongoose';
 
 
 export class ProductService {
@@ -76,14 +78,18 @@ export class ProductService {
 		try {
 			const products = (await models.Product.find({
 				_id: { $in: ids }
-			}).select('+prices.costPrice').lean()) as unknown as IProduct[];
+			}).select('+prices.costPrice +prices.dolarPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.earnings')
+				.lean()) as unknown as IProduct[];
 			if (products.length === 0)
 				throw new AppError(
 					'No products found for the given IDs',
 					'No se encontraron productos para los IDs dados',
 					404
 				);
-			if (products.length !== ids.length)
+
+			const foundIds = new Set(products.map(p => p._id.toString()));
+			const missingIds = ids.filter(id => !foundIds.has(id));
+			if (missingIds.length > 0)
 				throw new AppError(
 					'Some products not found for the given IDs',
 					'Algunos productos no se encontraron para los IDs dados',
@@ -297,6 +303,19 @@ export class ProductService {
 			}));
 			const images = await ImageService.UploadImages(rawImages, `${tenantSlug}/product-images`);
 
+			if (data.variants && data.variants.length > 0 && Array.isArray(data.variants)) {
+				data.variants = data.variants.map((v: any) => {
+					if (v.imageIndex !== undefined && v.imageIndex !== null && images[v.imageIndex]) {
+						v.imageReference = {
+							url: images[v.imageIndex].url,
+							public_id: images[v.imageIndex].public_id
+						};
+					}
+					delete v.imageIndex; // Lo borramos para que Mongoose no chille
+					return v;
+				});
+			}
+
 			// Subir og_image a Cloudinary si se proporcionó
 			let seoData: any = data.seo || {};
 			if (ogImageFile) {
@@ -424,11 +443,11 @@ export class ProductService {
 							const urlB = b.url || b.secure_url;
 							const idxA = orderArray.indexOf(urlA);
 							const idxB = orderArray.indexOf(urlB);
-							
+
 							if (idxA === -1 && idxB === -1) return 0;
 							if (idxA === -1) return 1;
 							if (idxB === -1) return -1;
-							
+
 							return idxA - idxB;
 						});
 					}
@@ -466,7 +485,30 @@ export class ProductService {
 			if (updateData.specifications) updateData.specifications = JSON.parse(updateData.specifications as string);
 			if (updateData.storage) updateData.storage = JSON.parse(updateData.storage as string);
 			if (updateData.features) updateData.features = JSON.parse(updateData.features as string);
-			if (updateData.variants) updateData.variants = JSON.parse(updateData.variants as string);
+			if (updateData.variants) {
+				const parsedVariants = JSON.parse(updateData.variants as string);
+				updateData.variants = parsedVariants.map((v: any) => {
+					// Si el front nos mandó un imageIndex y tenemos fotos en el array final...
+					if (v.imageIndex !== undefined && v.imageIndex !== null && updateData.images && updateData.images[v.imageIndex]) {
+						v.imageReference = {
+							url: updateData.images[v.imageIndex].url,
+							public_id: updateData.images[v.imageIndex].public_id
+						};
+					} else if (v.imageIndex !== undefined && !updateData.images) {
+						const imgSelected = product.images.at(v.imageIndex);
+						if (imgSelected) {
+							v.imageReference = {
+								url: imgSelected.url,
+								public_id: imgSelected.public_id
+							};
+						}
+					}
+					delete v.imageIndex; // Limpiar basura
+					return v;
+				});
+				// Le casteamos los dos tipos posibles para que haga match con el DTO
+				// updateData.variants = parsedVariants as ITechVariant[] | IClothingVariant[];
+			}
 			if (updateData.tags) updateData.tags = JSON.parse(updateData.tags as string);
 			if (updateData.careInstructions) updateData.careInstructions = JSON.parse(updateData.careInstructions as string);
 			if (updateData.composition) updateData.composition = JSON.parse(updateData.composition as string);
@@ -503,7 +545,18 @@ export class ProductService {
 			console.log(fieldsToSelect);
 			console.log('Parsed data');
 			console.log(updateData);
-			const updatedProduct = await models.Product.findByIdAndUpdate(
+			const TargetModel = product.productType === ProductType.TECH
+				? (models.TechProduct || models.Product.discriminators?.[ProductType.TECH])
+				: (models.ClothingProduct || models.Product.discriminators?.[ProductType.CLOTHING]);
+
+			if (!TargetModel) {
+				throw new AppError('Internal Server Error', 'No se encontró el modelo discriminador', 500);
+			}
+
+			console.log(`Aplicando update sobre el modelo estricto: ${TargetModel.modelName}`);
+
+			// 2. Ejecutamos la actualización sobre el TargetModel en vez de models.Product
+			const updatedProduct = await TargetModel.findByIdAndUpdate(
 				id,
 				{ $set: updateData },
 				{
@@ -519,25 +572,26 @@ export class ProductService {
 			}
 			return updatedProduct as unknown as IProduct;
 		} catch (error) {
+			console.log(error);
 			if (error instanceof AppError) throw error;
 			throw new AppError('Failed to update product', 'Error al actualizar el producto', 500);
 		}
 	}
 
-	static async simpleUpdateProduct(models: TenantModels, id: string, updateData: IProductUpdateDTO): Promise<IProduct> {
-		try {
-			const product = await models.Product.findByIdAndUpdate(id, updateData, {
-				new: true,
-				runValidators: true
-			}).lean() as unknown as IProduct;
+	// static async simpleUpdateProduct(models: TenantModels, id: string, updateData: IProductUpdateDTO): Promise<IProduct> {
+	// 	try {
+	// 		const product = await models.Product.findByIdAndUpdate(id, updateData, {
+	// 			new: true,
+	// 			runValidators: true
+	// 		}).lean() as unknown as IProduct;
 
-			if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
-			return product;
-		} catch (error) {
-			if (error instanceof AppError) throw error;
-			throw new AppError('Failed to update product', 'Error al actualizar el producto', 500);
-		}
-	}
+	// 		if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
+	// 		return product;
+	// 	} catch (error) {
+	// 		if (error instanceof AppError) throw error;
+	// 		throw new AppError('Failed to update product', 'Error al actualizar el producto', 500);
+	// 	}
+	// }
 
 	// ============ DELETE ============
 
@@ -603,7 +657,8 @@ export class ProductService {
 			const operations = items.map((item) => ({
 				updateOne: {
 					filter: {
-						_id: item._id,
+						// Transformamos el string a ObjectId manualmente para el driver nativo
+						_id: new Types.ObjectId(item._id),
 						'variants.sku': item.sku,
 						'variants.stock': { $gte: item.quantity }
 					},
@@ -616,7 +671,8 @@ export class ProductService {
 				}
 			}));
 
-			const result = await models.Product.bulkWrite(operations, { ordered: true });
+			// MAGIA: models.Product.collection salta el filtro restrictivo del Schema Base
+			const result = await models.Product.collection.bulkWrite(operations, { ordered: true });
 
 			if (result.modifiedCount !== items.length) {
 				throw new AppError(
@@ -628,6 +684,7 @@ export class ProductService {
 
 			return true;
 		} catch (error) {
+			console.log(error);
 			if (error instanceof AppError) throw error;
 			throw new AppError(
 				'Failed to reduce variant stock',
@@ -643,8 +700,12 @@ export class ProductService {
 	) {
 		for (const item of items) {
 			try {
-				await models.Product.findOneAndUpdate(
-					{ _id: item.product, 'variants.sku': item.variantSku },
+				// Usamos .collection para bypassear el Strict Mode del Schema Base
+				await models.Product.collection.findOneAndUpdate(
+					{
+						_id: new Types.ObjectId(item.product.toString()),
+						'variants.sku': item.variantSku
+					},
 					{ $inc: { 'variants.$[elem].stock': item.quantity } },
 					{ arrayFilters: [{ 'elem.sku': item.variantSku }] }
 				);

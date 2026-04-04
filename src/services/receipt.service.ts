@@ -72,16 +72,18 @@ export class ReceiptService {
 				doc.moveDown(0.2);
 
 				order.items.forEach(item => {
-					// Format: 1x Producto Nombre (Variante) ... $Total
-					// Recortamos la descripción si es muy larga
 					const title = `${item.productSnapshot?.brand} ${item.productSnapshot?.model}`;
 					const name = title.length > 20 ? title.substring(0, 18) + '..' : title.padEnd(20, ' ');
-					const variantInfo = item.variantLabel ? ` (${item.variantLabel})` : '';
+					const vs = item.variantSnapshot;
+					const variantInfo = vs?.size
+						? ` (${vs.size}${vs.color?.name ? ` - ${vs.color.name}` : ''})`
+						: vs?.attributes?.map((a: any) => a.value).join(' / ')
+							? ` (${vs.attributes!.map((a: any) => a.value).join(' / ')})`
+							: '';
 					const itemName = `${name}${variantInfo}`;
-					
+
 					const totalItem = (item.quantity * item.price).toLocaleString('es-AR', { style: 'currency', currency: 'ARS' });
-					
-					// Fila del item
+
 					doc.text(`${item.quantity}x ${itemName}`, { continued: true });
 					doc.text(`${totalItem}`, { align: 'right' });
 				});

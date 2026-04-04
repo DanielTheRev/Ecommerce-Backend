@@ -14,11 +14,12 @@ import {
 	updateShippingStatus,
 	createLocalOrder,
 	getDailyStats,
-	getTicket
+	getTicket,
+	trackOrder
 } from '../controllers/order.controller';
-import { adminOnly, protect } from '../middleware/auth';
+import { adminOnly, optionalAuth, protect } from '../middleware/auth';
 import { validateSchema } from '@/middleware/validator.middleware';
-import { CreateOrderSchema, UpdatePaymentStatusSchema, UpdateShippingStatusSchema } from '@/schemas/order.schema';
+import { CreateOrderSchema, UpdatePaymentStatusSchema, UpdateShippingStatusSchema, TrackOrderSchema } from '@/schemas/order.schema';
 
 const router: Router = Router();
 // webhooks
@@ -28,8 +29,9 @@ router.post('/ualabis-notification', ualaWebhook);
 router.get('/ualabis-failedNotifications', getNotificationsUala);
 
 // Rutas para usuarios autenticados
-router.post('/', protect, validateSchema(CreateOrderSchema), createOrder); // Crear nueva orden
+router.post('/', optionalAuth, validateSchema(CreateOrderSchema), createOrder); // Crear nueva orden
 router.get('/my-orders', protect, getUserOrders); // Obtener órdenes del usuario
+router.get('/track', validateSchema(TrackOrderSchema), trackOrder); // Rastreo de orden para invitados
 router.get('/:id', protect, getOrderById); // Obtener orden por ID
 router.put('/:id/cancel', protect, cancelOrder); // Cancelar orden
 

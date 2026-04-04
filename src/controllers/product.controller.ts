@@ -1,6 +1,6 @@
 import { NextFunction, Response } from 'express';
-import { IProductCreateDTO, IProductSpec } from '@/interfaces/product.interface';
-import { IVariant } from '@/interfaces/variant.interface';
+import { IProductCreateDTO, IProductSpec, ProductType } from '@/interfaces/product.interface';
+import { IClothingVariant, ITechVariant, IVariant } from '@/interfaces/variant.interface';
 import { ProductService } from '@/services/product.service';
 import { getDolar } from '@/services/dolar.service';
 import { PaymentService } from '@/services/Payment.service';
@@ -93,7 +93,14 @@ export class ProductController {
 		try {
 			data.specifications = JSON.parse(data.specifications as string) as IProductSpec[];
 			data.features = JSON.parse(data.features as string) as string[];
-			data.variants = JSON.parse(data.variants as string) as IVariant[];
+			// Parsear Variantes con polimorfismo estricto
+			const parsedVariants = JSON.parse(data.variants as string);
+
+			if (data.productType === ProductType.TECH) {
+				data.variants = parsedVariants as ITechVariant[];
+			} else if (data.productType === ProductType.CLOTHING) {
+				data.variants = parsedVariants as IClothingVariant[];
+			}
 			if (data.tags) data.tags = JSON.parse(data.tags as string) as string[];
 
 			// Tech-specific: parsear storage si viene
@@ -105,27 +112,9 @@ export class ProductController {
 
 			// SEO: parsear el JSON string (og_image llega como archivo separado)
 			if (data.seo) data.seo = JSON.parse(data.seo as unknown as string);
-			
+
 			const newProduct = await ProductService.createProduct(req.models!, data, imageFiles, ogImageFile, req.tenant?.slug);
 			res.status(201).json(newProduct);
-		} catch (error) {
-			next(error);
-		}
-	}
-
-	// PUT /api/products/:id - Actualizar un producto completo
-	static async updateProduct(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
-		try {
-			const { id } = req.params;
-			const updateData = req.body;
-
-			const product = await ProductService.simpleUpdateProduct(req.models!, id, updateData);
-
-			res.status(200).json({
-				success: true,
-				message: 'Producto actualizado exitosamente',
-				data: product
-			});
 		} catch (error) {
 			next(error);
 		}

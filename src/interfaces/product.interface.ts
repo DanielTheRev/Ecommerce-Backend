@@ -1,5 +1,5 @@
 import { Document, Types } from 'mongoose';
-import { IVariant } from './variant.interface';
+import { IClothingVariant, ITechVariant, IVariant } from './variant.interface';
 
 // ============ ENUMS ============
 
@@ -29,22 +29,7 @@ export enum ClothingSizeType {
 	Unico = 'Talle Único'
 }
 
-export enum IProductCategories {
-	// Tech
-	Electrodomesticos = 'Electrodomésticos',
-	Smartphones = 'Smartphones',
-	Pantallas = 'TV / Monitores',
-	PC = 'PC',
-	Consolas = 'Consolas',
-	// Clothing
-	Remeras = 'Remeras',
-	Pantalones = 'Pantalones',
-	Buzos = 'Buzos / Hoodies',
-	Camperas = 'Camperas',
-	Zapatillas = 'Zapatillas',
-	Accesorios = 'Accesorios',
-	Shorts = 'Shorts'
-}
+
 
 // ============ BASE PRODUCT ============
 
@@ -52,7 +37,7 @@ export interface IProduct {
 	_id: string;
 	productType: ProductType;
 	slug: string;
-	category: IProductCategories;
+	category: string;
 	shortDescription: string;
 	largeDescription: string;
 	brand: string;
@@ -64,7 +49,7 @@ export interface IProduct {
 	images: IProductImage[];
 	features: string[];
 	specifications: IProductSpec[];
-	variants: IVariant[];
+	variants: IVariant[]; // tipo mínimo en base — cada discriminador tiene el tipo exacto
 	tags?: string[];
 	lowStockThreshold?: number;
 	customProfitMargin?: number;
@@ -84,6 +69,7 @@ export interface ITechProduct extends IProduct {
 	screenSize?: string;
 	os?: string;
 	connectivity?: string[];
+	variants: ITechVariant[];
 }
 
 export interface IClothingProduct extends IProduct {
@@ -95,6 +81,7 @@ export interface IClothingProduct extends IProduct {
 	sizeType: ClothingSizeType;
 	careInstructions?: string[];
 	season?: string;
+	variants: IClothingVariant[];
 }
 
 // ============ SUB-INTERFACES ============
@@ -112,6 +99,7 @@ export interface IProductSpec {
 }
 
 export interface IProductPrices {
+	// ── Campos sensibles — select:false en schema (solo admins) ──────────
 	costPrice: {
 		inUSD: number;
 		inARS: number;
@@ -120,17 +108,18 @@ export interface IProductPrices {
 	profitMargin: number;
 	baseCommission: number;
 	cft6Cuotas: number;
+	earnings: {
+		cash_transfer: number;
+		card_3_installments: number;
+		card_6_installments: number;
+		ticket: number;
+	};
+	// ── Campos públicos — siempre presentes ───────────────────────────────
 	efectivo_transferencia: number;
 	tarjeta_credito_debito: number;
 	cuotas: {
 		cuotas_3_si: number;
 		cuotas_6_si: number;
-	};
-	earnings?: {
-		cash_transfer: number;
-		card_3_installments: number;
-		card_6_installments: number;
-		ticket: number;
 	};
 }
 
@@ -154,10 +143,10 @@ export interface IProductCreateDTO {
 	largeDescription: string;
 	price: number;
 	customProfitMargin?: number;
-	category: IProductCategories;
+	category: string;
 	features: string | string[];
 	specifications: string | IProductSpec[];
-	variants: string | IVariant[];
+	variants: string | IClothingVariant[] | ITechVariant[];
 	tags?: string | string[];
 
 	// Tech-specific (opcionales a nivel DTO, Mongoose valida por discriminator)

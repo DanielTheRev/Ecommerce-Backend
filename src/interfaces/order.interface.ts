@@ -82,17 +82,29 @@ export enum PaymentStatus {
 
 // Interface for order items
 export interface IOrderItem {
-	product: mongoose.Types.ObjectId;
-	variantSku: string;
-	variantLabel: string;
-	quantity: number;
-	price: number;
-	// Snapshot del producto al momento de la compra (para integridad de datos)
+	// Snapshot del producto al momento de la compra (con _id para stock ops)
 	productSnapshot: {
+		_id: string;
 		brand: string;
 		model: string;
 		image?: string;
+		slug?: string;
+		// Precios al momento de la compra — necesarios para calcular ganancias post-pago
+		prices: IProductPrices;
 	};
+	// Snapshot de la variante al momento de la compra
+	variantSnapshot: {
+		sku: string;
+		size?: string;                                  // ClothingProduct (talle)
+		attributes?: { key: string; value: string }[];   // TechProduct
+		color?: { name: string; hex: string };
+		imageReference: {
+			url: string;
+			public_id: string;
+		};
+	};
+	quantity: number;
+	price: number;
 }
 
 // Interface for shipping address
@@ -179,6 +191,7 @@ export interface IOrderModel extends mongoose.Model<IOrderDocument> {
 
 import { Item, TransactionsResponse } from 'mercadopago/dist/clients/order/commonTypes';
 import { EcommercePaymentProviders } from './ecommerce.interface';
+import { IProductPrices } from './product.interface';
 
 // Respuestas de los servicios de ordenes para mayor tipado y uso en el front
 export interface OrderPagination {
@@ -244,5 +257,6 @@ export type CreateOrderExtras = MercadoPagoExtras | UalaExtras | ManualPaymentEx
 
 export interface CreateOrderResponse {
 	order: IOrderDocument;
+	safeOrder: IOrder;
 	extras?: CreateOrderExtras;
 }

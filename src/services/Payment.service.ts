@@ -64,7 +64,7 @@ export class PaymentService {
 				identification?: { type: string; number: string }
 			},
 			items: { title: string; quantity: number; unit_price: string }[],
-			paymentData: { token?: string; payment_method_id: string; installments?: number; type: string; payer?: any },
+			mercadoPagoData: { token?: string; payment_method_id: string; installments?: number; type: string; payer?: any },
 			tenantSlug: string,
 			baseUrl: string
 		}
@@ -81,25 +81,7 @@ export class PaymentService {
 			const expirationDate = new Date();
 			expirationDate.setDate(expirationDate.getDate() + 3);
 
-			// Construimos el cuerpo para el API de Payments (/v1/payments)
 			console.log('mp Body');
-			// const mpPaymentBody: PaymentCreateRequest = {
-			// 	transaction_amount: Number(data.total),
-			// 	external_reference: data.orderID,
-			// 	// description: this.getDescriptionQuantity(),
-			// 	installments: Number(data.paymentData.installments),
-			// 	payment_method_id: data.paymentData.payment_method_id,
-			// 	token: data.paymentData.token,
-			// 	payer: {
-			// 		email: data.paymentData.payer?.email || data.payerData.email,
-			// 		first_name: data.paymentData.payer?.first_name || data.payerData.first_name || 'Cliente',
-			// 		last_name: data.paymentData.payer?.last_name || data.payerData.last_name || 'Ecommerce',
-			// 		identification: data.paymentData.payer?.identification || data.payerData.identification
-			// 	},
-			// 	notification_url: data.baseUrl
-			// 		? `https://www.vura.com.ar/api/orders/mercadopago-notification/${data.tenantSlug}?source_news=webhooks`
-			// 		: ''
-			// }
 			const mpOrdersBody: CreateOrderRequest = {
 				type: 'online',
 				capture_mode: 'automatic_async',
@@ -108,10 +90,10 @@ export class PaymentService {
 				total_amount: data.total.toString(),
 				// date_of_expiration: expirationDate.toISOString(),
 				payer: {
-					email: data.paymentData.payer?.email || data.payerData.email,
-					first_name: data.payerData.first_name || data.paymentData.payer?.first_name || 'Cliente',
-					last_name: data.payerData.last_name || data.paymentData.payer?.last_name || 'Ecommerce',
-					identification: data.paymentData.payer?.identification || data.payerData.identification
+					email: data.mercadoPagoData.payer?.email || data.payerData.email,
+					first_name: data.payerData.first_name || data.mercadoPagoData.payer?.first_name || 'Cliente',
+					last_name: data.payerData.last_name || data.mercadoPagoData.payer?.last_name || 'Ecommerce',
+					identification: data.mercadoPagoData.payer?.identification || data.payerData.identification
 				},
 				items: data.items.map(i => ({
 					title: i.title,
@@ -123,10 +105,10 @@ export class PaymentService {
 						{
 							amount: data.total.toString(),
 							payment_method: {
-								id: data.paymentData.payment_method_id,
-								type: data.paymentData.type,
-								...(data.paymentData.token && { token: data.paymentData.token }),
-								...(data.paymentData.type !== 'ticket' && data.paymentData.installments && { installments: Number(data.paymentData.installments) }),
+								id: data.mercadoPagoData.payment_method_id,
+								type: data.mercadoPagoData.type,
+								...(data.mercadoPagoData.token && { token: data.mercadoPagoData.token }),
+								...(data.mercadoPagoData.type !== 'ticket' && data.mercadoPagoData.installments && { installments: Number(data.mercadoPagoData.installments) }),
 							}
 						}
 					]
@@ -135,7 +117,6 @@ export class PaymentService {
 			console.log(JSON.stringify(mpOrdersBody));
 
 			const result = await MercadoPagoService.createOrder(mpConfig.accessToken, mpOrdersBody);
-			console.log(result);
 			return { result, error: null };
 		} catch (error: any) {
 			console.error('Error in withMercadoPago:', error);
