@@ -36,6 +36,7 @@ import { ResendService } from './resend.service';
 // Campos sensibles de precios en el snapshot de la orden — solo visibles para admins
 // Espejo de select:false declarado en orderItem.schema.ts
 export const ADMIN_PRICE_SELECT = [
+	'+items.productSnapshot.providerSnapshot',
 	'+items.productSnapshot.prices.costPrice.inUSD',
 	'+items.productSnapshot.prices.costPrice.inARS',
 	'+items.productSnapshot.prices.dolarPrice',
@@ -75,12 +76,14 @@ export class OrderService {
 			const order = await models.Order.findOne(query)
 				.select(ADMIN_PRICE_SELECT)
 				.populate([
-					{ path: 'user', select: 'name email profilePhoto role' }
+					{ path: 'user', select: 'name email profilePhoto role' },
+					{ path: 'items.productSnapshot.providerSnapshot', strictPopulate: false }
 				]) as IOrderDocument;
 
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
 			return order;
 		} catch (error) {
+			console.log(error);
 			if (error instanceof AppError) throw error;
 			throw new AppError(
 				'Failed to retrieve order',
@@ -134,29 +137,9 @@ export class OrderService {
 				);
 
 			const user = await models.User.findById(userId)
-
-			const items = (await ProductService.getProductsByIds(models, data.items.map((item) => item._id)))
-				.map((product) => {
-					const itemInTheCart = data.items.find((e) => e._id === product._id.toString());
-					if (!itemInTheCart) throw new AppError('Item not found', 'Item no encontrado', 404);
-					const variant = product.variants.find(v => v.sku === itemInTheCart.sku);
-					if (!variant) throw new AppError('Variant not found', 'Variante no encontrada', 404);
-					const imageReference = variant.imageReference;
-					return {
-						data: product,
-						variantSku: itemInTheCart.sku || '',
-						quantity: itemInTheCart.quantity,
-						imageReference
-					};
-				});
-
-			/* verifying variant stock */
-			const variantItems = data.items.map(item => ({
-				_id: item._id,
-				sku: item.sku || '',
-				quantity: item.quantity
-			}));
-			await ProductService.verifyVariantStock(models, variantItems);
+			if (!user) {
+				console.log('Es una compra guest');
+			}
 
 			/* get shipping method */
 			const shippingMethod = await ShippingMethodService.getShippingMethodBy(models, {
@@ -183,13 +166,6 @@ export class OrderService {
 				}
 			}
 
-			/* creating payment service instance */
-			const paymentService = new PaymentService(
-				items,
-				paymentMethod.type,
-				shippingMethod.cost
-			);
-
 			// Validar que el pago en efectivo solo sea permitido con pickup
 			if (
 				paymentMethod.type === PaymentType.CASH &&
@@ -202,38 +178,33 @@ export class OrderService {
 				);
 			}
 
+			const processItems = data.items.map(item => ({
+				_id: item._id,
+				sku: item.sku || '',
+				quantity: item.quantity
+			}));
+			const processedOrderItems = await ProductService.processOrderItems(models, processItems);
+
+			/* creating payment service instance */
+			const paymentService = new PaymentService(
+				processedOrderItems.map(item => ({ data: item.data, quantity: item.quantity })),
+				paymentMethod.type,
+				shippingMethod.cost
+			);
+
 			const finalCost = paymentService.getFinalCost();
 
 			const status = OrderStatus.PENDING_PAYMENT;
-
-			/* reducing variant stock */
-			await ProductService.reduceVariantStock(models, variantItems);
 
 			/* creating order in DB */
 			const newOrder = await (await models.Order.create(
 				{
 					user: userId,
 					status,
-					items: items.map((item) => {
-						const variant = item.data.variants?.find((v: any) => v.sku === item.variantSku) as any;
-						if (!variant) throw new AppError('Variant not found', 'Variante no encontrada', 404);
+					items: processedOrderItems.map((item) => {
 						return {
-							productSnapshot: {
-								_id: item.data._id,
-								brand: item.data.brand,
-								model: item.data.model,
-								image: item.data.images?.[0]?.url || '',
-								slug: item.data.slug || '',
-								// Snapshot de precios — necesario para cálculo de ganancias post-pago
-								prices: item.data.prices
-							},
-							variantSnapshot: {
-								sku: variant.sku,
-								size: variant.size,
-								attributes: variant.attributes,
-								color: variant.color,
-								imageReference: variant.imageReference
-							},
+							productSnapshot: item.productSnapshot,
+							variantSnapshot: item.variantSnapshot,
 							quantity: item.quantity,
 							price: (paymentMethod.type === PaymentType.CARD || paymentMethod.type === PaymentType.TICKET)
 								? item.data.prices.tarjeta_credito_debito
@@ -267,14 +238,16 @@ export class OrderService {
 						? paymentService.getEarnings()
 						: 0
 				}
-
-			)).populate([
-				{ path: 'user', select: 'name email' },
-			])
+			))
+				.populate([
+					{ path: 'user', select: 'name email' },
+					{ path: 'items.productSnapshot.providerSnapshot' }
+				])
 
 			let extras: CreateOrderExtras | undefined;
 			/* Try pay order */
 			if (paymentMethod.type === PaymentType.CARD || paymentMethod.type === PaymentType.TICKET) {
+				console.log('Payment method: ', paymentMethod.type);
 				const config = await EcommerceService.getConfig(models);
 
 
@@ -293,7 +266,7 @@ export class OrderService {
 						mercadoPagoData: data.mercadopagoData,
 						tenantSlug,
 						baseUrl,
-						items: items.map((item) => ({
+						items: processedOrderItems.map((item) => ({
 							title: `${item.data.brand} ${item.data.model}`,
 							quantity: item.quantity,
 							unit_price: (paymentMethod.type === PaymentType.CARD || paymentMethod.type === PaymentType.TICKET)
@@ -350,6 +323,7 @@ export class OrderService {
 				// Guardar el transactionId en la orden
 				await newOrder.save();
 			} else {
+				console.log('Manual payment');
 				// Es un pago MANUAL (Consolidado: Alias, Transferencia, Efectivo)
 				extras = {
 					provider: 'manual',
@@ -364,15 +338,24 @@ export class OrderService {
 
 			/* Sending email confirmation */
 
-			await ResendService.sendOrderConfirmationEmail(newOrder.toObject() as unknown as IOrder);
+			if (paymentMethod.type === PaymentType.ALIAS_TRANSFER || paymentMethod.type === PaymentType.BANK_TRANSFER) {
+				await ResendService.sendTransferEmail(newOrder.toObject() as unknown as IOrder, models);
+			}
+			if (paymentMethod.type === PaymentType.CARD || paymentMethod.type === PaymentType.TICKET) {
+				await ResendService.sendOrderConfirmationEmail(newOrder.toObject() as unknown as IOrder);
+			}
+			if (paymentMethod.type === PaymentType.CASH) {
+				await ResendService.sendCashPaymentEmail(newOrder.toObject() as unknown as IOrder);
+			}
 
 			const safeOrder = {
 				...newOrder.toObject(),
-				items: newOrder.items.map((item) =>
+				items: newOrder.toObject().items.map((item) =>
 				({
 					...item,
 					productSnapshot: {
 						...item.productSnapshot,
+						providerSnapshot: null,
 						prices: {
 							efectivo_transferencia: item.productSnapshot.prices.efectivo_transferencia,
 							tarjeta_credito_debito: item.productSnapshot.prices.tarjeta_credito_debito,
@@ -491,6 +474,11 @@ export class OrderService {
 			order.paymentInfo.status = data.status;
 			order.status = data.status === PaymentStatus.APPROVED ? OrderStatus.PROCESSING_SHIPPING : OrderStatus.PENDING_PAYMENT;
 			const orderUpdated = await order.save();
+
+			if (data.status === PaymentStatus.APPROVED) {
+				await ResendService.sendPaymentReceivedEmail(orderUpdated.toObject() as unknown as IOrder);
+			}
+
 			return orderUpdated;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
@@ -550,6 +538,14 @@ export class OrderService {
 			}
 
 			const orderUpdated = await order.save();
+
+			if (oldStatus !== order.status) {
+				if (order.status === OrderStatus.SHIPPED) {
+					await ResendService.sendOrderShippedEmail(orderUpdated.toObject() as unknown as IOrder);
+				} else if (order.status === OrderStatus.DELIVERED) {
+					await ResendService.sendOrderDeliveredEmail(orderUpdated.toObject() as unknown as IOrder);
+				}
+			}
 
 			return orderUpdated;
 		} catch (error) {

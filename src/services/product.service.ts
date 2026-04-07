@@ -1,16 +1,15 @@
-import { AppError } from '@/errors/app.error';
-import { paginate } from '@/utils/pagination.util';
-import { IProduct, IProductCreateDTO, IProductUpdateDTO, ProductType } from '@/interfaces/product.interface';
 import { TenantModels } from '@/config/modelRegistry';
+import { AppError } from '@/errors/app.error';
+import { EcommercePaymentProviders } from '@/interfaces/ecommerce.interface';
+import { IProduct, IProductCreateDTO, IProductUpdateDTO, ProductType } from '@/interfaces/product.interface';
+import { paginate } from '@/utils/pagination.util';
+import createDOMPurify from 'dompurify';
+import { JSDOM } from 'jsdom';
+import { Types } from 'mongoose';
 import slugify from 'slugify';
 import { getDolar } from './dolar.service';
-import { PaymentService } from './Payment.service';
-import { EcommercePaymentProviders } from '@/interfaces/ecommerce.interface';
 import { ImageService } from './images.service';
-import { JSDOM } from 'jsdom';
-import createDOMPurify from 'dompurify';
-import { ITechVariant, IClothingVariant } from '@/interfaces/variant.interface';
-import { Types } from 'mongoose';
+import { PaymentService } from './Payment.service';
 
 
 export class ProductService {
@@ -54,7 +53,8 @@ export class ProductService {
 		try {
 			const Model = this.getModel(models, productType);
 			const product = await Model.findById(id)
-				.select('+prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas')
+				.select('+provider +prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas')
+				.populate('provider')
 				.lean() as unknown as IProduct;
 			return product;
 		} catch (error) {
@@ -73,6 +73,124 @@ export class ProductService {
 			throw new AppError('Failed to fetch product', 'Error al obtener el producto', 500);
 		}
 	}
+
+	static async processOrderItems(
+		models: TenantModels,
+		items: { _id: string; sku: string; quantity: number }[]
+	) {
+		try {
+			const productIds = items.map(i => i._id);
+			const products = (await models.Product.find({
+				_id: { $in: productIds }
+			}).select('+provider +prices.costPrice +prices.dolarPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.earnings')
+				.populate('provider')
+				.lean()) as unknown as IProduct[];
+			if (products.length === 0)
+				throw new AppError(
+					'No products found for the given IDs',
+					'No se encontraron productos para los IDs dados',
+					404
+				);
+
+			const foundIds = new Set(products.map(p => p._id.toString()));
+			const missingIds = productIds.filter(id => !foundIds.has(id));
+			if (missingIds.length > 0)
+				throw new AppError(
+					'Some products not found for the given IDs',
+					'Algunos productos no se encontraron para los IDs dados',
+					404
+				);
+
+			const finalItems: any[] = [];
+			const bulkOperations: any[] = [];
+
+			for (const item of items) {
+				const product = products.find(p => p._id.toString() === item._id.toString());
+				if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
+
+				const variant = product.variants?.find((v: any) => v.sku === item.sku && v.isActive !== false) as any;
+				if (!variant) {
+					throw new AppError(
+						`Variant ${item.sku} not found`,
+						`Variante ${item.sku} no encontrada o inactiva`,
+						404
+					);
+				}
+
+				const availableStock = variant.stock - (variant.reservedStock || 0);
+				if (availableStock < item.quantity) {
+					throw new AppError(
+						`Insufficient stock for variant ${item.sku}`,
+						`Stock insuficiente para la variante ${item.sku}`,
+						400
+					);
+				}
+
+				bulkOperations.push({
+					updateOne: {
+						filter: {
+							_id: new Types.ObjectId(item._id),
+							'variants.sku': item.sku,
+							'variants.stock': { $gte: item.quantity }
+						},
+						update: {
+							$inc: {
+								'variants.$[elem].stock': -item.quantity
+							}
+						},
+						arrayFilters: [{ 'elem.sku': item.sku }]
+					}
+				});
+
+				// Extraemos los campos estrictamente operativos de la base de datos.
+				// ...variantData absorberá dinámicamente CUALQUIER propiedad presente 
+				// dependiente del tipo de variante (size, attributes, olor, peso, etc)
+				const {
+					stock,
+					reservedStock,
+					isActive,
+					_id,
+					id,
+					...variantData
+				} = variant as any;
+
+				let variantSnapshot = { ...variantData };
+
+				finalItems.push({
+					productSnapshot: {
+						_id: product._id,
+						brand: product.brand,
+						model: product.model,
+						image: variant.imageReference?.url || product.images?.[0]?.url || '',
+						slug: product.slug || '',
+						prices: product.prices,
+						providerSnapshot: product.provider,
+					},
+					variantSnapshot,
+					quantity: item.quantity,
+					price: 0,
+					data: product
+				});
+			}
+
+			if (bulkOperations.length > 0) {
+				const result = await models.Product.collection.bulkWrite(bulkOperations, { ordered: true });
+				if (result.modifiedCount !== items.length) {
+					throw new AppError(
+						'Stock reduction failed for one or more variants',
+						'No se pudo reducir el stock de una o más variantes (posible falta de stock)',
+						400
+					);
+				}
+			}
+
+			return finalItems;
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError('Failed to fetch and process products variants', 'Error al procesar los productos', 500);
+		}
+	}
+
 
 	static async getProductsByIds(models: TenantModels, ids: string[]): Promise<IProduct[]> {
 		try {
@@ -152,7 +270,10 @@ export class ProductService {
 				page,
 				limit,
 				sort: { 'prices.efectivo_transferencia': -1 },
-				select: '+prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.earnings'
+				select: '+provider +prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.earnings',
+				populate: {
+					path: 'provider',
+				}
 			});
 			return result;
 		} catch (error) {
@@ -340,6 +461,7 @@ export class ProductService {
 			// Campos comunes
 			const baseData: any = {
 				slug,
+				provider: data.provider || '',
 				brand: data.brand,
 				shortDescription: this.sanitizeDescription(data.shortDescription),
 				largeDescription: this.sanitizeDescription(data.largeDescription),
@@ -372,9 +494,10 @@ export class ProductService {
 				if (data.composition) baseData.composition = data.composition;
 				if (data.sizeType) baseData.sizeType = data.sizeType;
 				if (data.careInstructions) baseData.careInstructions = data.careInstructions;
+				if (data.season) baseData.season = data.season;
 			}
 
-			const newProduct = await Model.create(baseData);
+			const newProduct = await Model.create(baseData).populate('provider');
 			return newProduct.toObject() as unknown as IProduct;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
@@ -485,6 +608,7 @@ export class ProductService {
 			if (updateData.specifications) updateData.specifications = JSON.parse(updateData.specifications as string);
 			if (updateData.storage) updateData.storage = JSON.parse(updateData.storage as string);
 			if (updateData.features) updateData.features = JSON.parse(updateData.features as string);
+			if (updateData.provider) updateData.provider = updateData.provider;
 			if (updateData.variants) {
 				const parsedVariants = JSON.parse(updateData.variants as string);
 				updateData.variants = parsedVariants.map((v: any) => {
@@ -512,7 +636,7 @@ export class ProductService {
 			if (updateData.tags) updateData.tags = JSON.parse(updateData.tags as string);
 			if (updateData.careInstructions) updateData.careInstructions = JSON.parse(updateData.careInstructions as string);
 			if (updateData.composition) updateData.composition = JSON.parse(updateData.composition as string);
-
+			if (updateData.season) updateData.season = JSON.parse(updateData.season as string);
 			// Parsear SEO si viene como JSON string
 			if (updateData.seo) updateData.seo = JSON.parse(updateData.seo as unknown as string);
 
@@ -577,21 +701,6 @@ export class ProductService {
 			throw new AppError('Failed to update product', 'Error al actualizar el producto', 500);
 		}
 	}
-
-	// static async simpleUpdateProduct(models: TenantModels, id: string, updateData: IProductUpdateDTO): Promise<IProduct> {
-	// 	try {
-	// 		const product = await models.Product.findByIdAndUpdate(id, updateData, {
-	// 			new: true,
-	// 			runValidators: true
-	// 		}).lean() as unknown as IProduct;
-
-	// 		if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
-	// 		return product;
-	// 	} catch (error) {
-	// 		if (error instanceof AppError) throw error;
-	// 		throw new AppError('Failed to update product', 'Error al actualizar el producto', 500);
-	// 	}
-	// }
 
 	// ============ DELETE ============
 
@@ -720,6 +829,20 @@ export class ProductService {
 		}
 	}
 
+	static async getProviderProducts(models: TenantModels, providerId: string) {
+		try {
+			const products = await models.Product.find({ provider: providerId });
+			return products;
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError(
+				'Failed to fetch provider products',
+				'Error al obtener los productos del proveedor',
+				500
+			);
+		}
+	}
+
 	// ============ PRIVATE HELPERS ============
 
 	private static sanitizeDescription(description: string): string {
@@ -763,4 +886,5 @@ export class ProductService {
 			);
 		}
 	}
+
 }

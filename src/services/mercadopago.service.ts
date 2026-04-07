@@ -108,10 +108,10 @@ export class MercadoPagoService {
 	 * Crea una "Order" en MercadoPago (Checkout API vía Orders)
 	 */
 	static async createOrder(accessToken: string, mpOrderData: CreateOrderRequest) {
+		console.log('Create order: Creating order with accessToken: ', accessToken);
 		try {
 			const client = new MercadoPagoConfig({
 				accessToken: accessToken,
-				options: { timeout: 5000 },
 			});
 
 

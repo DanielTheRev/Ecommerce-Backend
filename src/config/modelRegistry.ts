@@ -26,6 +26,8 @@ import { IUser } from '@/interfaces/user.interface';
 import { IHeroSlide } from '@/interfaces/hero.interface';
 import { IBentoConfigDocument } from '@/interfaces/bento.interface';
 import { IShopTheLookDocument } from '@/interfaces/shopTheLook.interface';
+import { IProviderDocument } from '@/interfaces/provider.interface';
+import { providerSchema } from '@/models/provider.model';
 
 /**
  * TenantModels - Todos los modelos Mongoose de un tenant.
@@ -45,6 +47,7 @@ export interface TenantModels {
 	CashRegister: ICashRegisterModel;
 	BentoConfig: Model<IBentoConfigDocument>;
 	ShopTheLook: Model<IShopTheLookDocument>;
+	Provider: Model<IProviderDocument>;
 }
 
 /**
@@ -127,6 +130,11 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		? db.model<IShopTheLookDocument>('ShopTheLook')
 		: db.model<IShopTheLookDocument>('ShopTheLook', ShopTheLookSchema);
 
+	// Provider
+	const ProviderModel = db.models.Provider
+		? db.model<IProviderDocument>('Provider')
+		: db.model<IProviderDocument>('Provider', providerSchema);
+
 	return {
 		Product: ProductModel,
 		TechProduct: TechProductModel,
@@ -140,6 +148,7 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		Banner: BannerModel,
 		CashRegister: CashRegisterModel as ICashRegisterModel,
 		BentoConfig: BentoConfigModel,
-		ShopTheLook: ShopTheLookModel
+		ShopTheLook: ShopTheLookModel,
+		Provider: ProviderModel
 	};
 }

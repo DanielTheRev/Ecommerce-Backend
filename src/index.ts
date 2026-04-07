@@ -20,6 +20,7 @@ import productRoutes from './routes/productRoutes.routes';
 import shippingRoutes from './routes/shippingRoutes.routes';
 import shopTheLookRoutes from './routes/shopTheLook.routes';
 import { socketManager } from './sockets/socketManager';
+import providerRoutes from './routes/provider.routes';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -120,6 +121,7 @@ app.use('/api/bento', resolveTenant, bentoRoutes);
 app.use('/api/config', resolveTenant, ecommerceConfigRoutes);
 app.use('/api/cash-register', resolveTenant, cashRegisterRoutes);
 app.use('/api/shop-the-look', resolveTenant, shopTheLookRoutes);
+app.use('/api/provider', resolveTenant, providerRoutes);
 
 // Error handler middleware
 app.use(errorMiddleware);

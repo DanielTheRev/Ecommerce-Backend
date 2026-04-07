@@ -67,6 +67,7 @@ const TechVariantZodSchema = z.object({
 export const CreateProductSchema = z.object({
 	body: z.object({
 		productType: z.enum(ProductType),
+		provider: z.string().optional(),
 		brand: z.string().min(1, 'Brand is required').max(200),
 		model: z.string().min(1, 'Model is required').max(200),
 		category: z.string(),
@@ -132,6 +133,7 @@ export const CreateProductSchema = z.object({
 export const UpdateProductSchema = z.object({
 	body: z.object({
 		productType: z.enum(ProductType).optional(),
+		provider: z.string().optional(),
 		brand: z.string().max(200).optional(),
 		model: z.string().max(200).optional(),
 		category: z.string().optional(),
@@ -166,6 +168,7 @@ export const UpdateProductSchema = z.object({
 			percentage: z.number().min(0).max(100)
 		}))).optional(),
 		careInstructions: jsonString.pipe(z.array(z.string())).optional(),
+		season: z.string().optional(),
 
 		// SEO (og_image llega como archivo separado, no se valida aquí)
 		seo: jsonString.pipe(z.object({

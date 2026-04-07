@@ -140,6 +140,11 @@ const BaseProductSchema = new Schema(
 				url: { type: String },
 				public_id: { type: String }
 			}
+		},
+		provider: {
+			type: Schema.Types.ObjectId,
+			ref: 'Provider',
+			select: false
 		}
 	},
 	{

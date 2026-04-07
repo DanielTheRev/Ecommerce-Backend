@@ -1,4 +1,4 @@
-import { IProductCategories } from '@/interfaces/product.interface';
+
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import { Product } from '../models/Product.model';
@@ -37,7 +37,7 @@ function getTechProducts() {
 	for (const s of samsungModels) {
 		items.push({
 			brand: 'Samsung', model: s.model, price: s.price,
-			category: IProductCategories.Smartphones,
+			category: 'Smartphones',
 			shortDescription: `Samsung Galaxy ${s.model} - Smartphone de última generación`,
 			largeDescription: `<p>El Samsung Galaxy ${s.model} combina rendimiento y diseño en un smartphone potente.</p>`,
 			features: ['Nuevo', '5G', `${s.ram} RAM`],
@@ -67,7 +67,7 @@ function getTechProducts() {
 	for (const ip of iphones) {
 		items.push({
 			brand: 'Apple', model: ip.model, price: ip.price,
-			category: IProductCategories.Smartphones,
+			category: 'Smartphones',
 			shortDescription: `Apple ${ip.model} - Experiencia premium`,
 			largeDescription: `<p>${ip.model} con chip de última generación y cámara profesional.</p>`,
 			features: ['Nuevo', '5G', 'Face ID'], specifications: [{ key: 'Chip', value: 'A-Series' }],
@@ -90,7 +90,7 @@ function getTechProducts() {
 	for (const m of motos) {
 		items.push({
 			brand: 'Motorola', model: m.model, price: m.price,
-			category: IProductCategories.Smartphones,
+			category: 'Smartphones',
 			shortDescription: `Motorola Moto ${m.model}`, largeDescription: `<p>Moto ${m.model}, gran relación precio-calidad.</p>`,
 			features: ['Nuevo', '4G', `${m.ram} RAM`], specifications: [{ key: 'RAM', value: m.ram }],
 			ram: m.ram, processor: 'MediaTek', os: 'Android 14',
@@ -109,7 +109,7 @@ function getTechProducts() {
 	for (const x of xiaomis) {
 		items.push({
 			brand: 'Xiaomi', model: x.model, price: x.price,
-			category: IProductCategories.Smartphones,
+			category: 'Smartphones',
 			shortDescription: `Xiaomi ${x.model}`, largeDescription: `<p>Xiaomi ${x.model} con tecnología Snapdragon.</p>`,
 			features: ['Nuevo', '4G', `${x.ram} RAM`], specifications: [{ key: 'RAM', value: x.ram }],
 			ram: x.ram, processor: 'Snapdragon', os: 'Android 14', storage: x.storage,
@@ -120,11 +120,11 @@ function getTechProducts() {
 
 	// Consolas
 	const consolas = [
-		{ brand: 'Sony', model: 'PlayStation 5 Slim', price: 520, cat: IProductCategories.Consolas },
-		{ brand: 'Sony', model: 'PlayStation 5 Pro', price: 750, cat: IProductCategories.Consolas },
-		{ brand: 'Microsoft', model: 'Xbox Series X', price: 480, cat: IProductCategories.Consolas },
-		{ brand: 'Microsoft', model: 'Xbox Series S', price: 280, cat: IProductCategories.Consolas },
-		{ brand: 'Nintendo', model: 'Switch OLED', price: 310, cat: IProductCategories.Consolas },
+		{ brand: 'Sony', model: 'PlayStation 5 Slim', price: 520, cat: 'Consolas' },
+		{ brand: 'Sony', model: 'PlayStation 5 Pro', price: 750, cat: 'Consolas' },
+		{ brand: 'Microsoft', model: 'Xbox Series X', price: 480, cat: 'Consolas' },
+		{ brand: 'Microsoft', model: 'Xbox Series S', price: 280, cat: 'Consolas' },
+		{ brand: 'Nintendo', model: 'Switch OLED', price: 310, cat: 'Consolas' },
 	];
 	for (const c of consolas) {
 		items.push({
@@ -146,7 +146,7 @@ function getTechProducts() {
 	];
 	for (const t of tvs) {
 		items.push({
-			brand: t.brand, model: t.model, price: t.price, category: IProductCategories.Pantallas,
+			brand: t.brand, model: t.model, price: t.price, category: 'Pantallas',
 			shortDescription: `${t.brand} ${t.model} Smart TV`, largeDescription: `<p>Televisor ${t.brand} ${t.model} con resolución 4K.</p>`,
 			features: ['4K', 'Smart TV', 'HDR'], specifications: [{ key: 'Resolución', value: '4K UHD' }],
 			screenSize: t.model.match(/\d+"/)?.[0] || '55"', storage: [],
@@ -178,7 +178,7 @@ function getClothingProducts() {
 	];
 	for (const r of remeras) {
 		items.push({
-			brand: r.brand, model: r.model, price: r.price, category: IProductCategories.Remeras,
+			brand: r.brand, model: r.model, price: r.price, category: 'Remeras',
 			shortDescription: `Remera ${r.brand} ${r.model}`, largeDescription: `<p>Remera ${r.brand} ${r.model}, ideal para el día a día.</p>`,
 			features: ['Nueva', r.material], specifications: [{ key: 'Material', value: r.material }],
 			gender: 'Hombre', fit: 'Regular', material: r.material, sizeType: 'Ropa',
@@ -202,7 +202,7 @@ function getClothingProducts() {
 	];
 	for (const p of pantalones) {
 		items.push({
-			brand: p.brand, model: p.model, price: p.price, category: IProductCategories.Pantalones,
+			brand: p.brand, model: p.model, price: p.price, category: 'Pantalones',
 			shortDescription: `Pantalón ${p.brand} ${p.model}`, largeDescription: `<p>${p.brand} ${p.model}, comodidad y estilo.</p>`,
 			features: ['Nuevo', p.material], specifications: [{ key: 'Material', value: p.material }],
 			gender: 'Hombre', fit: p.model.includes('Slim') ? 'Slim' : 'Regular', material: p.material, sizeType: 'Ropa',
@@ -221,7 +221,7 @@ function getClothingProducts() {
 	];
 	for (const b of buzos) {
 		items.push({
-			brand: b.brand, model: b.model, price: b.price, category: IProductCategories.Buzos,
+			brand: b.brand, model: b.model, price: b.price, category: 'Buzos',
 			shortDescription: `Buzo ${b.brand} ${b.model}`, largeDescription: `<p>Hoodie ${b.brand} ${b.model}, abrigo premium.</p>`,
 			features: ['Nuevo', 'Capucha', b.material], specifications: [{ key: 'Material', value: b.material }],
 			gender: 'Unisex', fit: 'Regular', material: b.material, sizeType: 'Ropa',
@@ -238,7 +238,7 @@ function getClothingProducts() {
 	];
 	for (const c of camperas) {
 		items.push({
-			brand: c.brand, model: c.model, price: c.price, category: IProductCategories.Camperas,
+			brand: c.brand, model: c.model, price: c.price, category: 'Camperas',
 			shortDescription: `Campera ${c.brand} ${c.model}`, largeDescription: `<p>Campera ${c.brand} ${c.model}.</p>`,
 			features: ['Nueva', 'Impermeable'], specifications: [{ key: 'Material', value: c.material }],
 			gender: 'Hombre', fit: 'Regular', material: c.material, sizeType: 'Ropa', season: 'Invierno',
@@ -258,7 +258,7 @@ function getClothingProducts() {
 	];
 	for (const z of zapas) {
 		items.push({
-			brand: z.brand, model: z.model, price: z.price, category: IProductCategories.Zapatillas,
+			brand: z.brand, model: z.model, price: z.price, category: 'Zapatillas',
 			shortDescription: `${z.brand} ${z.model}`, largeDescription: `<p>Zapatillas ${z.brand} ${z.model}, un clásico.</p>`,
 			features: ['Nuevas', 'Clásicas'], specifications: [{ key: 'Tipo', value: 'Urbana' }],
 			gender: 'Unisex', fit: 'Regular', material: 'Cuero/Textil', sizeType: 'Calzado',
@@ -274,7 +274,7 @@ function getClothingProducts() {
 	];
 	for (const s of shorts) {
 		items.push({
-			brand: s.brand, model: s.model, price: s.price, category: IProductCategories.Shorts,
+			brand: s.brand, model: s.model, price: s.price, category: 'Shorts',
 			shortDescription: `Short ${s.brand} ${s.model}`, largeDescription: `<p>Short deportivo ${s.brand}.</p>`,
 			features: ['Nuevo', 'Deportivo'], specifications: [{ key: 'Tipo', value: 'Running' }],
 			gender: 'Hombre', fit: 'Regular', material: 'Poliéster', sizeType: 'Ropa',

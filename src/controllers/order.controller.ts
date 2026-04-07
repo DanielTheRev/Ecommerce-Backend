@@ -1,17 +1,15 @@
+import { NotificationSeverity, NotificationType } from '@/interfaces/notification.interface';
 import {
 	CreateOrderDTO,
-	OrderStatus,
-	PaymentStatus,
 	updatePaymentStatusDTO,
 	updateShippingStatusDTO
 } from '@/interfaces/order.interface';
-import { NotificationSeverity, NotificationType } from '@/interfaces/notification.interface';
-import { UalaOrderStatus, UalaWebhook } from '@/interfaces/ualaWebhook.interface';
+import { UalaWebhook } from '@/interfaces/ualaWebhook.interface';
 import { AuthRequest } from '@/middleware/auth';
-import { OrderService } from '@/services/order.service';
-import { MercadoPagoService } from '@/services/mercadopago.service';
-import { ReceiptService } from '@/services/receipt.service';
 import { EcommerceService } from '@/services/ecommerce.service';
+import { MercadoPagoService } from '@/services/mercadopago.service';
+import { OrderService } from '@/services/order.service';
+import { ReceiptService } from '@/services/receipt.service';
 import { socketManager } from '@/sockets/socketManager';
 import { NextFunction, Response } from 'express';
 import UalaApiCheckout from 'ualabis-nodejs';

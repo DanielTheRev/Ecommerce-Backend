@@ -2,6 +2,10 @@ import mongoose, { Document } from 'mongoose';
 import { OrderData } from 'ualabis-nodejs/dist/types/order';
 import { PaymentType } from './paymentMethod.interface';
 import { IPickupPoint, ShippingType } from './shippingMethods.interface';
+import { Item, TransactionsResponse } from 'mercadopago/dist/clients/order/commonTypes';
+import { EcommercePaymentProviders } from './ecommerce.interface';
+import { IProductPrices } from './product.interface';
+import { IProvider } from './provider.interface';
 
 export interface CreateOrderDTO {
 	items: { _id: string; sku: string; quantity: number }[];
@@ -91,6 +95,7 @@ export interface IOrderItem {
 		slug?: string;
 		// Precios al momento de la compra — necesarios para calcular ganancias post-pago
 		prices: IProductPrices;
+		providerSnapshot: IProvider;
 	};
 	// Snapshot de la variante al momento de la compra
 	variantSnapshot: {
@@ -163,6 +168,7 @@ export interface IOrder {
 	_id: string; // Used when lean()
 	user?: mongoose.Types.ObjectId;
 	seller?: mongoose.Types.ObjectId; // Empleado que realizó la venta local
+	providerSnapshot?: IProvider;
 	saleType: SaleType;
 	buyerData: IFormPayerData;
 	items: IOrderItem[];
@@ -189,9 +195,7 @@ export interface IOrderModel extends mongoose.Model<IOrderDocument> {
 	findByUser(userId: string): Promise<IOrderDocument[]>;
 }
 
-import { Item, TransactionsResponse } from 'mercadopago/dist/clients/order/commonTypes';
-import { EcommercePaymentProviders } from './ecommerce.interface';
-import { IProductPrices } from './product.interface';
+
 
 // Respuestas de los servicios de ordenes para mayor tipado y uso en el front
 export interface OrderPagination {

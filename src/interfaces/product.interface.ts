@@ -1,5 +1,6 @@
 import { Document, Types } from 'mongoose';
 import { IClothingVariant, ITechVariant, IVariant } from './variant.interface';
+import { IProvider } from './provider.interface';
 
 // ============ ENUMS ============
 
@@ -36,6 +37,7 @@ export enum ClothingSizeType {
 export interface IProduct {
 	_id: string;
 	productType: ProductType;
+	provider: IProvider;
 	slug: string;
 	category: string;
 	shortDescription: string;
@@ -137,6 +139,7 @@ export interface IProductSeo {
 
 export interface IProductCreateDTO {
 	productType: ProductType;
+	provider: string;
 	brand: string;
 	model: string;
 	shortDescription: string;
@@ -164,6 +167,7 @@ export interface IProductCreateDTO {
 	sizeType?: string;
 	careInstructions?: string | string[];
 	seo?: Partial<IProductSeo>;
+	season?: string;
 }
 
 export interface IProductUpdateDTO extends Partial<IProductCreateDTO> {

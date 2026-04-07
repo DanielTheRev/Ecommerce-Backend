@@ -1,5 +1,6 @@
 import { IOrderItem } from '@/interfaces/order.interface';
 import { Schema } from 'mongoose';
+import { providerSchema } from '../provider.model';
 
 // Campos de precios sensibles — solo visible para admins (select: false = default excluido)
 // Para incluirlos: .select('+items.productSnapshot.prices.costPrice ...')
@@ -14,6 +15,10 @@ export const orderItemSchema = new Schema<IOrderItem>({
 		model: { type: String, required: true },
 		image: { type: String, default: '' },
 		slug: { type: String, default: '' },
+		providerSnapshot: {
+			type: providerSchema,
+			...ADMIN_ONLY
+		},
 		// Precios al momento de la compra — captura el estado exacto en el instante de la venta
 		prices: {
 			// ── Campos PÚBLICOS (cliente los puede ver) ─────────────────────
@@ -40,23 +45,9 @@ export const orderItemSchema = new Schema<IOrderItem>({
 			}
 		}
 	},
-	// Snapshot de la variante elegida — sin reconstruir nada en runtime
-	// ClothingProduct: tiene size | TechProduct: tiene attributes
 	variantSnapshot: {
-		sku: { type: String, required: true, trim: true, uppercase: true },
-		size: { type: String, trim: true },                // ClothingProduct (talle)
-		attributes: [{                                     // TechProduct (RAM, storage, etc.)
-			key: { type: String },
-			value: { type: String }
-		}],
-		color: {
-			name: { type: String, trim: true },
-			hex: { type: String, trim: true }
-		},
-		imageReference: {
-			url: { type: String, required: false },
-			public_id: { type: String, required: false }
-		},
+		type: Schema.Types.Mixed,
+		required: true
 	},
 	quantity: {
 		type: Number,

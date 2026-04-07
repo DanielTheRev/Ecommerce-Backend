@@ -1,11 +1,11 @@
-import { NextFunction, Response } from 'express';
+import { EcommercePaymentProviders } from '@/interfaces/ecommerce.interface';
 import { IProductCreateDTO, IProductSpec, ProductType } from '@/interfaces/product.interface';
-import { IClothingVariant, ITechVariant, IVariant } from '@/interfaces/variant.interface';
-import { ProductService } from '@/services/product.service';
+import { IClothingVariant, ITechVariant } from '@/interfaces/variant.interface';
+import { AuthRequest } from '@/middleware/auth';
 import { getDolar } from '@/services/dolar.service';
 import { PaymentService } from '@/services/Payment.service';
-import { EcommercePaymentProviders } from '@/interfaces/ecommerce.interface';
-import { AuthRequest } from '@/middleware/auth';
+import { ProductService } from '@/services/product.service';
+import { NextFunction, Response } from 'express';
 
 export class ProductController {
 	// GET /api/products/list - Productos con precios completos (admin) - paginado
@@ -98,8 +98,10 @@ export class ProductController {
 
 			if (data.productType === ProductType.TECH) {
 				data.variants = parsedVariants as ITechVariant[];
-			} else if (data.productType === ProductType.CLOTHING) {
+			}
+			if (data.productType === ProductType.CLOTHING) {
 				data.variants = parsedVariants as IClothingVariant[];
+				if (data.season) data.season = JSON.parse(data.season as string) as string;
 			}
 			if (data.tags) data.tags = JSON.parse(data.tags as string) as string[];
 
