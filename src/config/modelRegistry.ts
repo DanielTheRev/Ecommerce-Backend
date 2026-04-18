@@ -14,6 +14,7 @@ import { shippingOptionSchema } from '@/models/ShippingOption.model';
 import { userSchema } from '@/models/User.model';
 import { BentoConfigSchema } from '@/models/BentoConfig.model';
 import { ShopTheLookSchema } from '@/models/shopTheLook.model';
+import { addressSchema } from '@/models/Address.model';
 
 // Interfaces
 import { ICashRegisterDocument, ICashRegisterModel } from '@/interfaces/cash-register.interface';
@@ -26,6 +27,7 @@ import { IUser } from '@/interfaces/user.interface';
 import { IHeroSlide } from '@/interfaces/hero.interface';
 import { IBentoConfigDocument } from '@/interfaces/bento.interface';
 import { IShopTheLookDocument } from '@/interfaces/shopTheLook.interface';
+import { IAddressDocument } from '@/interfaces/address.interface';
 import { IProviderDocument } from '@/interfaces/provider.interface';
 import { providerSchema } from '@/models/provider.model';
 
@@ -48,6 +50,7 @@ export interface TenantModels {
 	BentoConfig: Model<IBentoConfigDocument>;
 	ShopTheLook: Model<IShopTheLookDocument>;
 	Provider: Model<IProviderDocument>;
+	Address: Model<IAddressDocument>;
 }
 
 /**
@@ -135,6 +138,11 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		? db.model<IProviderDocument>('Provider')
 		: db.model<IProviderDocument>('Provider', providerSchema);
 
+	// Address
+	const AddressModel = db.models.Address
+		? db.model<IAddressDocument>('Address')
+		: db.model<IAddressDocument>('Address', addressSchema);
+
 	return {
 		Product: ProductModel,
 		TechProduct: TechProductModel,
@@ -149,6 +157,7 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		CashRegister: CashRegisterModel as ICashRegisterModel,
 		BentoConfig: BentoConfigModel,
 		ShopTheLook: ShopTheLookModel,
-		Provider: ProviderModel
+		Provider: ProviderModel,
+		Address: AddressModel
 	};
 }

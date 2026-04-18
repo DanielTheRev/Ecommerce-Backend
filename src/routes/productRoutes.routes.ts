@@ -10,11 +10,11 @@ const router: Router = Router();
 
 
 const multerConfig = multer().fields([
-	{ name: 'images', maxCount: 5 },
+	{ name: 'images', maxCount: 10 },
 	{ name: 'seoImage', maxCount: 1 }
 ]);
 // Rutas protegidas (solo administradores)
-router.get('/list', protect, adminOnly, ProductController.getProducts); // products con precios completos
+router.get('/admin/list', protect, adminOnly, ProductController.getProducts); // products con precios completos
 router.post('/calculate-prices', protect, adminOnly, validateSchema(PriceCalculatorSchema), ProductController.calculatePrice); // Calculadora de precios
 router.get('/complete/:id', protect, adminOnly, ProductController.getProductWCompletePrices); // product con precios completos
 router.post('/', protect, adminOnly, multerConfig, validateSchema(CreateProductSchema), ProductController.createProduct); // Crear producto

@@ -21,6 +21,7 @@ import shippingRoutes from './routes/shippingRoutes.routes';
 import shopTheLookRoutes from './routes/shopTheLook.routes';
 import { socketManager } from './sockets/socketManager';
 import providerRoutes from './routes/provider.routes';
+import addressRoutes from './routes/address.routes';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -122,6 +123,7 @@ app.use('/api/config', resolveTenant, ecommerceConfigRoutes);
 app.use('/api/cash-register', resolveTenant, cashRegisterRoutes);
 app.use('/api/shop-the-look', resolveTenant, shopTheLookRoutes);
 app.use('/api/provider', resolveTenant, providerRoutes);
+app.use('/api/addresses', resolveTenant, addressRoutes);
 
 // Error handler middleware
 app.use(errorMiddleware);

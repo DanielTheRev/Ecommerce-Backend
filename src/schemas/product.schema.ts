@@ -75,6 +75,8 @@ export const CreateProductSchema = z.object({
 		largeDescription: z.string().min(1, 'Large description is required'),
 		price: z.string().or(z.number()).transform(v => Number(v)).refine(v => v > 0, 'Price must be positive'),
 		customProfitMargin: z.string().or(z.number()).transform(v => v === '' ? undefined : Number(v)).optional(),
+		customProfitMargin1Pay: z.string().or(z.number()).transform(v => v === '' ? undefined : Number(v)).optional(),
+		customProfitMarginInstallments: z.string().or(z.number()).transform(v => v === '' ? undefined : Number(v)).optional(),
 		discount: z.string().or(z.number()).transform(v => Number(v)).default(0),
 
 		features: jsonString.pipe(z.array(z.string())),
@@ -141,6 +143,8 @@ export const UpdateProductSchema = z.object({
 		largeDescription: z.string().optional(),
 		price: z.string().or(z.number()).transform(v => Number(v)).optional(),
 		customProfitMargin: z.string().or(z.number()).transform(v => v === '' ? undefined : Number(v)).optional(),
+		customProfitMargin1Pay: z.string().or(z.number()).transform(v => v === '' ? undefined : Number(v)).optional(),
+		customProfitMarginInstallments: z.string().or(z.number()).transform(v => v === '' ? undefined : Number(v)).optional(),
 		discount: z.string().or(z.number()).transform(v => Number(v)).optional(),
 		deletedImages: z.string().optional(),
 
@@ -208,6 +212,8 @@ export const PriceCalculatorSchema = z.object({
 		costPrice: z.number().positive('Cost price must be positive'),
 		revenuePercentage: z.number().optional(),
 		cft: z.number().optional(),
-		customProfitMargin: z.string().or(z.number()).transform(v => v === '' ? undefined : Number(v)).optional()
+		customProfitMargin: z.string().or(z.number()).transform(v => v === '' ? undefined : Number(v)).optional(),
+		customProfitMargin1Pay: z.string().or(z.number()).transform(v => v === '' ? undefined : Number(v)).optional(),
+		customProfitMarginInstallments: z.string().or(z.number()).transform(v => v === '' ? undefined : Number(v)).optional()
 	})
 });

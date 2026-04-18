@@ -12,6 +12,14 @@ export interface IProviderDocument extends Document {
     province?: string;
     zipCode?: string;
   };
+  paymentData: {
+    cvu?: string;
+    alias: string;
+    bank?: string;
+    accountNumber?: string;
+    accountType?: string;
+    accountHolder: string;
+  };
   active: boolean;
 }
 
@@ -26,6 +34,14 @@ export interface IProvider {
     city?: string;
     province?: string;
     zipCode?: string;
+  };
+  paymentData: {
+    cvu?: string;
+    alias: string;
+    bank?: string;
+    accountNumber?: string;
+    accountType?: string;
+    accountHolder: string;
   };
   active: boolean;
 }

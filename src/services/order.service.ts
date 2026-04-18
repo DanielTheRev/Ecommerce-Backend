@@ -13,7 +13,8 @@ import {
 	CreateOrderExtras,
 	SaleType,
 	ISplitPayment,
-	IOrder
+	IOrder,
+	IProductSnapshot
 } from '@/interfaces/order.interface';
 import { EcommerceService } from './ecommerce.service';
 import { EcommercePaymentProviders } from '@/interfaces/ecommerce.interface';
@@ -31,6 +32,7 @@ import { FilterQuery } from 'mongoose';
 import { TenantModels } from '@/config/modelRegistry';
 import { PaymentElement } from '@/interfaces/mp_payment.interface';
 import { ResendService } from './resend.service';
+import { IVariant } from '@/interfaces/variant.interface';
 
 
 // Campos sensibles de precios en el snapshot de la orden — solo visibles para admins
@@ -185,32 +187,66 @@ export class OrderService {
 			}));
 			const processedOrderItems = await ProductService.processOrderItems(models, processItems);
 
+			let installments: number | undefined = undefined;
+			if (paymentMethod.type === PaymentType.CARD && data.mercadopagoData?.installments) {
+				installments = data.mercadopagoData.installments;
+				console.log('Se seleccino tarjeta y 1 pago');
+			}
+
 			/* creating payment service instance */
 			const paymentService = new PaymentService(
 				processedOrderItems.map(item => ({ data: item.data, quantity: item.quantity })),
 				paymentMethod.type,
-				shippingMethod.cost
+				shippingMethod.cost,
+				installments
 			);
 
 			const finalCost = paymentService.getFinalCost();
 
 			const status = OrderStatus.PENDING_PAYMENT;
 
+			const orderItems = processedOrderItems.map((item) => {
+				let unitPrice = item.data.prices.efectivo_transferencia;
+				switch (paymentMethod.type) {
+					case PaymentType.CARD:
+						if (installments !== undefined && installments === 1) {
+							console.log(`installments existe, y su valor es: ${installments}`);
+							unitPrice = item.data.prices.efectivo_transferencia;
+						} else {
+							console.log(`installments existe, y su valor es: ${installments}`);
+							unitPrice = item.data.prices.tarjeta_credito_debito;
+						}
+						break;
+					case PaymentType.TICKET:
+						unitPrice = item.data.prices.tarjeta_credito_debito;
+						break;
+					case PaymentType.CASH:
+						unitPrice = item.data.prices.efectivo_transferencia;
+						break;
+					case PaymentType.BANK_TRANSFER:
+						unitPrice = item.data.prices.efectivo_transferencia;
+						break;
+					case PaymentType.ALIAS_TRANSFER:
+						unitPrice = item.data.prices.efectivo_transferencia;
+						break;
+					default:
+						unitPrice = item.data.prices.efectivo_transferencia;
+						break;
+				}
+				return {
+					productSnapshot: item.productSnapshot as IProductSnapshot,
+					variantSnapshot: item.variantSnapshot as IVariant,
+					quantity: item.quantity as number,
+					price: unitPrice as number
+				};
+			});
+
 			/* creating order in DB */
 			const newOrder = await (await models.Order.create(
 				{
 					user: userId,
 					status,
-					items: processedOrderItems.map((item) => {
-						return {
-							productSnapshot: item.productSnapshot,
-							variantSnapshot: item.variantSnapshot,
-							quantity: item.quantity,
-							price: (paymentMethod.type === PaymentType.CARD || paymentMethod.type === PaymentType.TICKET)
-								? item.data.prices.tarjeta_credito_debito
-								: item.data.prices.efectivo_transferencia,
-						};
-					}),
+					items: orderItems,
 					shippingInfo: {
 						type: shippingMethod.type,
 						pickupPoint: data.shippingMethod.pickupPoint,
@@ -266,12 +302,11 @@ export class OrderService {
 						mercadoPagoData: data.mercadopagoData,
 						tenantSlug,
 						baseUrl,
-						items: processedOrderItems.map((item) => ({
-							title: `${item.data.brand} ${item.data.model}`,
+						items: orderItems.map((item) => ({
+							title: `${item.productSnapshot.brand} ${item.productSnapshot.model}`,
 							quantity: item.quantity,
-							unit_price: (paymentMethod.type === PaymentType.CARD || paymentMethod.type === PaymentType.TICKET)
-								? item.data.prices.tarjeta_credito_debito.toString()
-								: item.data.prices.efectivo_transferencia.toString()
+							unit_price: item.price.toString(),
+							picture_url: item.variantSnapshot.imageReference?.url || ''
 						}))
 					});
 
@@ -338,15 +373,15 @@ export class OrderService {
 
 			/* Sending email confirmation */
 
-			if (paymentMethod.type === PaymentType.ALIAS_TRANSFER || paymentMethod.type === PaymentType.BANK_TRANSFER) {
-				await ResendService.sendTransferEmail(newOrder.toObject() as unknown as IOrder, models);
-			}
-			if (paymentMethod.type === PaymentType.CARD || paymentMethod.type === PaymentType.TICKET) {
-				await ResendService.sendOrderConfirmationEmail(newOrder.toObject() as unknown as IOrder);
-			}
-			if (paymentMethod.type === PaymentType.CASH) {
-				await ResendService.sendCashPaymentEmail(newOrder.toObject() as unknown as IOrder);
-			}
+			// if (paymentMethod.type === PaymentType.ALIAS_TRANSFER || paymentMethod.type === PaymentType.BANK_TRANSFER) {
+			// 	await ResendService.sendTransferEmail(newOrder.toObject() as unknown as IOrder, models);
+			// }
+			// if (paymentMethod.type === PaymentType.CARD || paymentMethod.type === PaymentType.TICKET) {
+			// 	await ResendService.sendOrderConfirmationEmail(newOrder.toObject() as unknown as IOrder);
+			// }
+			// if (paymentMethod.type === PaymentType.CASH) {
+			// 	await ResendService.sendCashPaymentEmail(newOrder.toObject() as unknown as IOrder);
+			// }
 
 			const safeOrder = {
 				...newOrder.toObject(),

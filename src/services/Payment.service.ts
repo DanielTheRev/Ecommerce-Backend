@@ -9,48 +9,53 @@ import { CreateOrderRequest } from 'mercadopago/dist/clients/order/create/types'
 import UalaApiCheckout from 'ualabis-nodejs';
 import { EcommerceService } from './ecommerce.service';
 import { MercadoPagoService } from './mercadopago.service';
+import { Item } from 'mercadopago/dist/clients/order/commonTypes';
 
 export class PaymentService {
 	private preferredPaymentTypes = [
 		PaymentType.CASH,
 		PaymentType.BANK_TRANSFER,
-		PaymentType.ALIAS_TRANSFER
+		PaymentType.ALIAS_TRANSFER,
+		PaymentType.TICKET
 	];
 	private itemsFromCart: { data: IProduct; quantity: number }[] = [];
 
 	private shippingCost: number = 0;
 	private isPreferredPaymentType: boolean = true;
+	private installments: number | null = null;
 
-	constructor(items: typeof this.itemsFromCart, paymentType: PaymentType, shippingCost: number) {
+	constructor(items: typeof this.itemsFromCart, paymentType: PaymentType, shippingCost: number, installments?: number) {
 		this.itemsFromCart = items;
 		this.shippingCost = shippingCost;
 		this.isPreferredPaymentType = this.preferredPaymentTypes.includes(paymentType);
+		this.installments = installments ?? null;
 	}
 
 	static theOrderIsPreferredPayment(orderType: PaymentType) {
 		const preferredPaymentTypes = [
 			PaymentType.CASH,
 			PaymentType.BANK_TRANSFER,
-			PaymentType.ALIAS_TRANSFER
+			PaymentType.ALIAS_TRANSFER,
+			PaymentType.TICKET
 		];
 		return preferredPaymentTypes.includes(orderType);
 	}
 
-	async withUalaBiss(orderID: string) {
-		try {
-			const ualaOrder = await UalaApiCheckout.createOrder({
-				amount: this.getFinalCost(),
-				callbackSuccess: process.env.callbackSuccess + `?id=${orderID}` || '',
-				callbackFail: process.env.callbackFail + `?id=${orderID}` || '',
-				notificationUrl: `${process.env.notificationUrl}?id=${orderID}`,
-				description: this.getDescriptionQuantity()
-			});
-			return { ualaOrder, error: null };
-		} catch (error) {
-			console.log(error);
-			return { ualaOrder: null, error };
-		}
-	}
+	// async withUalaBiss(orderID: string) {
+	// 	try {
+	// 		const ualaOrder = await UalaApiCheckout.createOrder({
+	// 			amount: this.getFinalCost(),
+	// 			callbackSuccess: process.env.callbackSuccess + `?id=${orderID}` || '',
+	// 			callbackFail: process.env.callbackFail + `?id=${orderID}` || '',
+	// 			notificationUrl: `${process.env.notificationUrl}?id=${orderID}`,
+	// 			description: this.getDescriptionQuantity()
+	// 		});
+	// 		return { ualaOrder, error: null };
+	// 	} catch (error) {
+	// 		console.log(error);
+	// 		return { ualaOrder: null, error };
+	// 	}
+	// }
 
 	async withMercadoPago(
 		data: {
@@ -63,7 +68,7 @@ export class PaymentService {
 				last_name?: string;
 				identification?: { type: string; number: string }
 			},
-			items: { title: string; quantity: number; unit_price: string }[],
+			items: Item[],
 			mercadoPagoData: { token?: string; payment_method_id: string; installments?: number; type: string; payer?: any },
 			tenantSlug: string,
 			baseUrl: string
@@ -135,18 +140,22 @@ export class PaymentService {
 	}
 
 	static async CalculatePrices(
-		paymentProvider: EcommercePaymentProviders,
-		cost_price: number,
-		dolar: number,
-		models?: TenantModels,
-		customProfitMargin?: number
+		data: {
+			paymentProvider: EcommercePaymentProviders,
+			cost_price: number,
+			dolar: number,
+			models?: TenantModels,
+			customProfitMargin?: number,
+			customProfitMargin1Pay?: number,
+			customProfitMarginInstallments?: number
+		}
 	) {
 		try {
-			if (paymentProvider === EcommercePaymentProviders.UALA) {
-				return await this.calculatePricesWithUala(cost_price, dolar, models, customProfitMargin);
-			} else {
-				return await this.calculatePricesWithMercadoPago(cost_price, dolar, models, customProfitMargin);
-			}
+			// if (paymentProvider === EcommercePaymentProviders.UALA) {
+			// return await this.calculatePricesWithUala(cost_price, dolar, models, customProfitMargin);
+			// } else {
+			return await this.calculatePricesWithMercadoPago(data);
+			// }
 		} catch (error) {
 			console.error('Error in CalculatePrices:', error);
 			throw new AppError(
@@ -157,139 +166,185 @@ export class PaymentService {
 		}
 	}
 
-	private static async calculatePricesWithUala(
-		cost_price: number,
-		dolar: number,
-		models?: TenantModels,
-		customProfitMargin?: number
-	): Promise<IProductPrices> {
-		try {
-			// * cost_price es el precio de compra del product viene en USD o deberia.
-			const config = await EcommerceService.getConfig(models!);
-			const ualaConfig = config.paymentGateways.uala;
+	// private static async calculatePricesWithUala(
+	// 	cost_price: number,
+	// 	dolar: number,
+	// 	models?: TenantModels,
+	// 	customProfitMargin?: number
+	// ): Promise<IProductPrices> {
+	// 	try {
+	// 		// * cost_price es el precio de compra del product viene en USD o deberia.
+	// 		const config = await EcommerceService.getConfig(models!);
+	// 		const ualaConfig = config.paymentGateways.uala;
 
-			// 1. Obtenemos los valores y los normalizamos inmediatamente
-			// Si el usuario proveyó un margen custom para este producto, lo usamos. Si no, usamos el global.
-			const rawProfit = customProfitMargin !== undefined ? customProfitMargin : config.profit;
-			const rawBaseComm = ualaConfig.baseCommission; // Puede ser 4.9 o 0.049
-			const rawCFT3 = ualaConfig.cft3cuotas; // Puede ser 18.9 o 0.189
-			const rawCFT6 = ualaConfig.cft6Cuotas; // Puede ser 18.9 o 0.189
+	// 		// 1. Obtenemos los valores y los normalizamos inmediatamente
+	// 		// Si el usuario proveyó un margen custom para este producto, lo usamos. Si no, usamos el global.
+	// 		const rawProfit = customProfitMargin !== undefined ? customProfitMargin : config.profit;
+	// 		const rawBaseComm = ualaConfig.baseCommission; // Puede ser 4.9 o 0.049
+	// 		const rawCFT3 = ualaConfig.cft3cuotas; // Puede ser 18.9 o 0.189
+	// 		const rawCFT6 = ualaConfig.cft6Cuotas; // Puede ser 18.9 o 0.189
 
-			const profitFactor = this.normalizePercentage(rawProfit);
-			const baseCommFactor = this.normalizePercentage(rawBaseComm);
-			const cft3Factor = this.normalizePercentage(rawCFT3);
-			const cft6Factor = this.normalizePercentage(rawCFT6);
-			const ivaFactor = 1 + config.taxes.iva / 100; // El IVA siempre suele ser 21, así que 1.21
+	// 		const profitFactor = this.normalizePercentage(rawProfit);
+	// 		const baseCommFactor = this.normalizePercentage(rawBaseComm);
+	// 		const cft3Factor = this.normalizePercentage(rawCFT3);
+	// 		const cft6Factor = this.normalizePercentage(rawCFT6);
+	// 		const ivaFactor = 1 + config.taxes.iva / 100; // El IVA siempre suele ser 21, así que 1.21
 
-			// 2. Costo base
-			const basePriceInArs = cost_price * dolar;
+	// 		// 2. Costo base
+	// 		const basePriceInArs = cost_price * dolar;
 
-			// Si profitFactor es 0.10, la ganancia es base * 0.10
-			const targetPrice = basePriceInArs * (1 + profitFactor);
+	// 		// Si profitFactor es 0.10, la ganancia es base * 0.10
+	// 		const targetPrice = basePriceInArs * (1 + profitFactor);
 
-			// 4. Cálculo de la Tasa Total de Ualá con IVA
-			// (Comisión Base + CFT) * 1.21
-			const totalTasa6Cuotas = (baseCommFactor + cft6Factor) * ivaFactor;
-			const totalTasa3Cuotas = (baseCommFactor + cft3Factor) * ivaFactor;
+	// 		// 4. Cálculo de la Tasa Total de Ualá con IVA
+	// 		// (Comisión Base + CFT) * 1.21
+	// 		const totalTasa6Cuotas = (baseCommFactor + cft6Factor) * ivaFactor;
+	// 		const totalTasa3Cuotas = (baseCommFactor + cft3Factor) * ivaFactor;
 
-			const price6Installments = Math.round(targetPrice / (1 - totalTasa6Cuotas));
+	// 		const price6Installments = Math.round(targetPrice / (1 - totalTasa6Cuotas));
 
-			// 1. Calculamos cuánto nos descuenta Ualá realmente en cada caso
-			const ualaTake6 = price6Installments * totalTasa6Cuotas;
-			const ualaTake3 = price6Installments * totalTasa3Cuotas; // Usamos price6 porque es tu base de cobro
+	// 		// 1. Calculamos cuánto nos descuenta Ualá realmente en cada caso
+	// 		const ualaTake6 = price6Installments * totalTasa6Cuotas;
+	// 		const ualaTake3 = price6Installments * totalTasa3Cuotas; // Usamos price6 porque es tu base de cobro
 
-			return {
-				costPrice: {
-					inUSD: cost_price,
-					inARS: basePriceInArs
-				},
-				dolarPrice: dolar,
-				profitMargin: profitFactor,
-				baseCommission: baseCommFactor,
-				cft6Cuotas: cft6Factor,
-				efectivo_transferencia: Math.round(targetPrice),
-				tarjeta_credito_debito: price6Installments,
-				cuotas: {
-					cuotas_3_si: Math.round(price6Installments / 3),
-					cuotas_6_si: Math.round(price6Installments / 6)
-				},
-				earnings: {
-					// En efectivo, tu ganancia es simplemente el sobreprecio aplicados
-					cash_transfer: Math.round(targetPrice - basePriceInArs),
+	// 		return {
+	// 			costPrice: {
+	// 				inUSD: cost_price,
+	// 				inARS: basePriceInArs
+	// 			},
+	// 			dolarPrice: dolar,
+	// 			profitMargin: profitFactor,
+	// 			baseCommission: baseCommFactor,
+	// 			cft6Cuotas: cft6Factor,
+	// 			efectivo_transferencia: Math.round(targetPrice),
+	// 			tarjeta_credito_debito: price6Installments,
+	// 			cuotas: {
+	// 				cuotas_3_si: Math.round(price6Installments / 3),
+	// 				cuotas_6_si: Math.round(price6Installments / 6)
+	// 			},
+	// 			earnings: {
+	// 				// En efectivo, tu ganancia es simplemente el sobreprecio aplicados
+	// 				cash_transfer: Math.round(targetPrice - basePriceInArs),
 
-					// En 3 cuotas: cobrás el precio de 6, pero Ualá te descuenta la tasa de 3
-					card_3_installments: Math.round(price6Installments - basePriceInArs - ualaTake3),
+	// 				// En 3 cuotas: cobrás el precio de 6, pero Ualá te descuenta la tasa de 3
+	// 				card_3_installments: Math.round(price6Installments - basePriceInArs - ualaTake3),
 
-					// En 6 cuotas: cobrás el precio de 6 y Ualá te descuenta la tasa de 6 (debería ser igual a tu profit original)
-					card_6_installments: Math.round(price6Installments - basePriceInArs - ualaTake6),
+	// 				// En 6 cuotas: cobrás el precio de 6 y Ualá te descuenta la tasa de 6 (debería ser igual a tu profit original)
+	// 				card_6_installments: Math.round(price6Installments - basePriceInArs - ualaTake6),
 
-					// Ticket: Cobrás el precio de tarjeta (o efectivo?), pero Ualá solo descuenta la base. 
-					// Usaremos el precio de tarjeta por seguridad.
-					ticket: Math.round(price6Installments - basePriceInArs - (price6Installments * baseCommFactor * ivaFactor))
-				}
-			};
-		} catch (error) {
-			throw new AppError(
-				'Failed to calculate prices with Uala on PaymentService.calculatePricesWithUala',
-				'Error al calcular precios con Uala',
-				500
-			);
-		}
-	}
+	// 				// Ticket: Cobrás el precio de tarjeta (o efectivo?), pero Ualá solo descuenta la base. 
+	// 				// Usaremos el precio de tarjeta por seguridad.
+	// 				ticket: Math.round(price6Installments - basePriceInArs - (price6Installments * baseCommFactor * ivaFactor))
+	// 			}
+	// 		};
+	// 	} catch (error) {
+	// 		throw new AppError(
+	// 			'Failed to calculate prices with Uala on PaymentService.calculatePricesWithUala',
+	// 			'Error al calcular precios con Uala',
+	// 			500
+	// 		);
+	// 	}
+	// }
 
 
 	private static async calculatePricesWithMercadoPago(
-		cost_price: number,
-		dolar: number,
-		models?: TenantModels,
-		customProfitMargin?: number
+		data: {
+			cost_price: number,
+			dolar: number,
+			models?: TenantModels,
+			customProfitMargin?: number, // Margen general (por si se usa un solo input)
+			customProfitMargin1Pay?: number, // Margen gordo para Efectivo/Transf (Ej: 100%)
+			customProfitMarginInstallments?: number // Margen achato para Cuotas (Ej: 40%)
+		}
 	): Promise<IProductPrices> {
 		try {
+			const { cost_price, dolar, models, customProfitMargin, customProfitMargin1Pay, customProfitMarginInstallments } = data;
 			const config = await EcommerceService.getConfig(models!);
 			const mpConfig = config.paymentGateways.mercadopago;
 
-			const rawProfit = customProfitMargin !== undefined ? customProfitMargin : config.profit;
+			// =========================================================
+			// PASO 1: DEFINIR QUÉ GANANCIA USAR (El fallback)
+			// Si mandaste un profit específico, usa ese. Si no, usa el general. 
+			// Si no hay general, usa el de la configuración de la tienda.
+			// =========================================================
+			const rawProfit1Pay = customProfitMargin1Pay ?? customProfitMargin ?? config.profit;
+			const rawProfitInstallments = customProfitMarginInstallments ?? customProfitMargin1Pay ?? config.profit;
+
 			const rawBaseComm = mpConfig.baseCommission;
 			const rawCFT3 = mpConfig.cft3cuotas;
 			const rawCFT6 = mpConfig.cft6Cuotas;
 
-			const profitFactor = this.normalizePercentage(rawProfit);
+			// Normalizamos todo a decimales (ej: 40% -> 0.40)
+			const profitFactor1Pay = this.normalizePercentage(rawProfit1Pay);
+			const profitFactorInstallments = this.normalizePercentage(rawProfitInstallments);
 			const baseCommFactor = this.normalizePercentage(rawBaseComm);
 			const cft3Factor = this.normalizePercentage(rawCFT3);
 			const cft6Factor = this.normalizePercentage(rawCFT6);
 			const ivaFactor = 1 + config.taxes.iva / 100;
 
-			const basePriceInArs = cost_price * dolar;
-			const targetPrice = basePriceInArs * (1 + profitFactor);
+			// =========================================================
+			// PASO 2: NUESTRO COSTO BASE Y LO QUE QUEREMOS EN MANO
+			// =========================================================
+			const basePriceInArs = cost_price * dolar; // Costo puro
 
-			// MercadoPago suele tener comisiones distintas, pero el esquema de "restar del total" es similar
-			const totalTasa6Cuotas = (baseCommFactor + cft6Factor) * ivaFactor;
+			// Acá está la magia: Calculamos dos bolsillos distintos
+			const targetPrice1Pay = basePriceInArs * (1 + profitFactor1Pay);
+			const targetPriceInstallments = basePriceInArs * (1 + profitFactorInstallments);
+
+			// =========================================================
+			// PASO 3: LAS COMISIONES TOTALES DE MERCADO PAGO
+			// =========================================================
+			const cft1Factor = baseCommFactor * ivaFactor; // Débito, Crédito 1 Pago, Dinero MP
 			const totalTasa3Cuotas = (baseCommFactor + cft3Factor) * ivaFactor;
+			const totalTasa6Cuotas = (baseCommFactor + cft6Factor) * ivaFactor;
 
-			const price6Installments = Math.round(targetPrice / (1 - totalTasa6Cuotas));
-			const mpTake6 = price6Installments * totalTasa6Cuotas;
+			// =========================================================
+			// PASO 4: FÓRMULA GROSS-UP (Inflar el precio final)
+			// Dividimos nuestro objetivo de bolsillo por (1 - Tasa MP)
+			// para que cuando MP nos saque la comisión, caigamos exacto en el target.
+			// =========================================================
+			const price1Payment = Math.round(targetPrice1Pay / (1 - cft1Factor));
+			const price6Installments = Math.round(targetPriceInstallments / (1 - totalTasa6Cuotas));
+
+			// Calculamos cuánto nos arranca MP en plata exacta para el dashboard de ganancias
+			const mpTake1 = price1Payment * cft1Factor;
 			const mpTake3 = price6Installments * totalTasa3Cuotas;
+			const mpTake6 = price6Installments * totalTasa6Cuotas;
 
+			// =========================================================
+			// PASO 5: ARMAR LA RESPUESTA PARA EL FRONTEND
+			// =========================================================
 			return {
 				costPrice: {
 					inUSD: cost_price,
 					inARS: basePriceInArs
 				},
 				dolarPrice: dolar,
-				profitMargin: profitFactor,
+				profitMargin: profitFactor1Pay, // Mostramos el margen de 1 pago como referencia
+				profitMarginInstallments: profitFactorInstallments,
+				profitMargin1Pay: profitFactor1Pay,
 				baseCommission: baseCommFactor,
 				cft6Cuotas: cft6Factor,
-				efectivo_transferencia: Math.round(targetPrice),
-				tarjeta_credito_debito: price6Installments,
+
+				// LOS PRECIOS PARA LA WEB
+				efectivo_transferencia: Math.round(price1Payment),
+				tarjeta_credito_debito: price6Installments, // Este es el Precio de Lista
 				cuotas: {
 					cuotas_3_si: Math.round(price6Installments / 3),
 					cuotas_6_si: Math.round(price6Installments / 6)
 				},
+
+				// NUESTRAS GANANCIAS LIMPIAS (Lo que llega al banco - el costo de la zapatilla)
 				earnings: {
-					cash_transfer: Math.round(targetPrice - basePriceInArs),
+					// Si es por transferencia, no pagamos la comisión de MP y ganamos esa plata extra
+					cash_transfer: Math.round(price1Payment - basePriceInArs),
+					card_1_installments: Math.round(price1Payment - basePriceInArs - mpTake1),
+					// Cuotas: Precio Lista - Costo - Tajada de MP
 					card_3_installments: Math.round(price6Installments - basePriceInArs - mpTake3),
 					card_6_installments: Math.round(price6Installments - basePriceInArs - mpTake6),
-					ticket: Math.round(price6Installments - basePriceInArs - (price6Installments * baseCommFactor * ivaFactor))
+
+					// Ticket (Pago Fácil / Rapipago) cobra lo mismo que 1 pago / débito
+					ticket: Math.round(price1Payment - basePriceInArs - mpTake1)
 				}
 			};
 		} catch (error) {
@@ -304,6 +359,9 @@ export class PaymentService {
 
 	getFinalCost() {
 		if (this.isPreferredPaymentType) {
+			return this.CalculatePricesWithOutCard() + this.shippingCost;
+		}
+		if (this.installments === 1) {
 			return this.CalculatePricesWithOutCard() + this.shippingCost;
 		}
 		return this.CalculatePriceWithCard() + this.shippingCost;

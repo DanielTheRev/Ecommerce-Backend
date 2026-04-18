@@ -54,7 +54,6 @@ export interface IProduct {
 	variants: IVariant[]; // tipo mínimo en base — cada discriminador tiene el tipo exacto
 	tags?: string[];
 	lowStockThreshold?: number;
-	customProfitMargin?: number;
 	isActive: boolean;
 	isFeatured: boolean;
 	seo: IProductSeo;
@@ -108,10 +107,13 @@ export interface IProductPrices {
 	};
 	dolarPrice: number;
 	profitMargin: number;
+	profitMargin1Pay: number;
+	profitMarginInstallments: number;
 	baseCommission: number;
 	cft6Cuotas: number;
 	earnings: {
 		cash_transfer: number;
+		card_1_installments: number;
 		card_3_installments: number;
 		card_6_installments: number;
 		ticket: number;
@@ -146,6 +148,8 @@ export interface IProductCreateDTO {
 	largeDescription: string;
 	price: number;
 	customProfitMargin?: number;
+	customProfitMargin1Pay?: number;
+	customProfitMarginInstallments?: number;
 	category: string;
 	features: string | string[];
 	specifications: string | IProductSpec[];

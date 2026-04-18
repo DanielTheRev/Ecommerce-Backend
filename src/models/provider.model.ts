@@ -6,6 +6,14 @@ export const providerSchema = new Schema({
   cuit: { type: String }, // ¡Ahora que sos monotributista vas a valorar pedir esto!
   contactEmail: { type: String },
   phone: { type: String },
+  paymentData: {
+    cvu: { type: String },
+    alias: { type: String },
+    bank: { type: String },
+    accountNumber: { type: String },
+    accountType: { type: String },
+    accountHolder: { type: String },
+  },
   address: {
     street: String,
     number: String,

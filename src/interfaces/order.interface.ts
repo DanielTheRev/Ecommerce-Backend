@@ -87,16 +87,7 @@ export enum PaymentStatus {
 // Interface for order items
 export interface IOrderItem {
 	// Snapshot del producto al momento de la compra (con _id para stock ops)
-	productSnapshot: {
-		_id: string;
-		brand: string;
-		model: string;
-		image?: string;
-		slug?: string;
-		// Precios al momento de la compra — necesarios para calcular ganancias post-pago
-		prices: IProductPrices;
-		providerSnapshot: IProvider;
-	};
+	productSnapshot: IProductSnapshot;
 	// Snapshot de la variante al momento de la compra
 	variantSnapshot: {
 		sku: string;
@@ -110,6 +101,16 @@ export interface IOrderItem {
 	};
 	quantity: number;
 	price: number;
+}
+
+export interface IProductSnapshot {
+	_id: string;
+	brand: string;
+	model: string;
+	image?: string;
+	slug?: string;
+	prices: IProductPrices;
+	providerSnapshot: IProvider;
 }
 
 // Interface for shipping address

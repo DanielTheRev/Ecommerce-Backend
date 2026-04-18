@@ -53,7 +53,7 @@ export class ProductService {
 		try {
 			const Model = this.getModel(models, productType);
 			const product = await Model.findById(id)
-				.select('+provider +prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas')
+				.select('+provider +prices.costPrice +prices.earnings +prices.dolarPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.profitMargin1Pay +prices.profitMarginInstallments')
 				.populate('provider')
 				.lean() as unknown as IProduct;
 			return product;
@@ -410,11 +410,15 @@ export class ProductService {
 			const { venta } = await getDolar();
 
 			const prices = await PaymentService.CalculatePrices(
-				EcommercePaymentProviders.MERCADOPAGO,
-				data.price,
-				venta,
-				models,
-				data.customProfitMargin
+				{
+					paymentProvider: EcommercePaymentProviders.MERCADOPAGO,
+					cost_price: data.price,
+					dolar: venta,
+					models,
+					customProfitMargin: data.customProfitMargin,
+					customProfitMargin1Pay: data.customProfitMargin1Pay,
+					customProfitMarginInstallments: data.customProfitMarginInstallments
+				}
 			);
 
 			if (imagesDTO.length === 0) throw new AppError('No images provided', 'No se proporcionaron imágenes', 400);
@@ -497,9 +501,11 @@ export class ProductService {
 				if (data.season) baseData.season = data.season;
 			}
 
-			const newProduct = await Model.create(baseData).populate('provider');
+			const newProduct = await Model.create(baseData)
+			await newProduct.populate('provider');
 			return newProduct.toObject() as unknown as IProduct;
 		} catch (error) {
+			console.log(error);
 			if (error instanceof AppError) throw error;
 			throw new AppError('Failed to create product', 'Error al crear el producto', 500);
 		}
@@ -518,7 +524,8 @@ export class ProductService {
 			// Es necesario como fallback cuando el admin solo cambia customProfitMargin
 			// sin enviar un price nuevo — evita calcular con costPrice undefined.
 			const product = await models.Product.findById(id)
-				.select('+prices.costPrice')
+				.select('+provider +prices.costPrice +prices.dolarPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.profitMargin1Pay +prices.profitMarginInstallments')
+				.populate('provider')
 				.lean() as unknown as IProduct;
 
 			if (!product) {
@@ -585,9 +592,11 @@ export class ProductService {
 				updateData.slug = this.generateSlug(newBrand, newModel);
 			}
 
-			if (updateData.price || updateData.customProfitMargin !== undefined) {
+			if (updateData.price || updateData.customProfitMargin1Pay !== undefined || updateData.customProfitMarginInstallments !== undefined) {
 				const { venta } = await getDolar();
-				const currentCustomProfitMargin = updateData.customProfitMargin !== undefined ? updateData.customProfitMargin : product.customProfitMargin;
+				const currentCustomProfitMargin = updateData.customProfitMargin !== undefined ? updateData.customProfitMargin : product.prices.profitMargin;
+				const currentProfitMargin1Pay = updateData.customProfitMargin1Pay !== undefined ? updateData.customProfitMargin1Pay : product.prices.profitMargin1Pay;
+				const currentProfitMarginInstallments = updateData.customProfitMarginInstallments !== undefined ? updateData.customProfitMarginInstallments : product.prices.profitMarginInstallments;
 
 				// Attempt to get the current base price. If updateData.price is provided, use it.
 				// Otherwise try temporary product.price. As a final fallback, safely cast the stored base price cost
@@ -596,15 +605,20 @@ export class ProductService {
 					: product.prices.costPrice.inUSD;
 
 				const prices = await PaymentService.CalculatePrices(
-					EcommercePaymentProviders.MERCADOPAGO,
-					currentPrice as number,
-					venta,
-					models,
-					currentCustomProfitMargin
+					{
+						paymentProvider: EcommercePaymentProviders.MERCADOPAGO,
+						cost_price: currentPrice as number,
+						dolar: venta,
+						models,
+						customProfitMargin: currentCustomProfitMargin,
+						customProfitMargin1Pay: currentProfitMargin1Pay,
+						customProfitMarginInstallments: currentProfitMarginInstallments
+					}
 				);
 				updateData.prices = prices;
+				if (updateData.customProfitMargin1Pay) updateData.prices.profitMargin1Pay = Number(updateData.customProfitMargin1Pay);
+				if (updateData.customProfitMarginInstallments) updateData.prices.profitMarginInstallments = Number(updateData.customProfitMarginInstallments);
 			};
-
 			if (updateData.specifications) updateData.specifications = JSON.parse(updateData.specifications as string);
 			if (updateData.storage) updateData.storage = JSON.parse(updateData.storage as string);
 			if (updateData.features) updateData.features = JSON.parse(updateData.features as string);
@@ -686,7 +700,8 @@ export class ProductService {
 				{
 					new: true,
 					runValidators: true,
-					select: fieldsToSelect
+					select: fieldsToSelect,
+					populate: 'provider'
 				}
 			).lean();
 

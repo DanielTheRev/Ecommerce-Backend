@@ -15,19 +15,31 @@ cloudinary.config({
 });
 
 export class ImageService {
-	private constructor() {
+	private constructor() { }
 
+	/**
+	 * Limpia el ID para que sea compatible con las URLs de Cloudinary
+	 * Borra caracteres especiales, acentos y convierte espacios en guiones
+	 */
+	private static sanitizeId(id: string): string {
+		return id
+			.normalize('NFD') // Descompone caracteres con acentos (á -> a + ´)
+			.replace(/[\u0300-\u036f]/g, '') // Elimina los acentos
+			.replace(/[^a-zA-Z0-9\s-_]/g, '') // Elimina todo lo que no sea letra, nro, espacio, - o _ (chau &)
+			.trim()
+			.replace(/\s+/g, '-'); // Reemplaza espacios (uno o más) por un solo guion
 	}
+
 	/**
 	 * Upload an image to cloudinary from file or URL
 	 * @param source - Express.Multer.File o string (URL)
 	 */
 	static async UploadImage(source: Express.Multer.File | string, id: string, folder: string) {
 		let contentToUpload: string;
+
 		if (typeof source === 'string') {
 			contentToUpload = source;
 		} else {
-			// Si es un archivo Multer, usamos el Parser
 			const parser = new DataURIParser();
 			const extName = path.extname(source.originalname).toString();
 			const file64 = parser.format(extName, source.buffer);
@@ -39,14 +51,16 @@ export class ImageService {
 		}
 
 		try {
-			// 2. Subida con parámetros de optimización
+			// Sanitizamos el ID antes de enviarlo
+			const cleanId = this.sanitizeId(id);
+
 			const img_uploaded = await cloudinary.uploader.upload(contentToUpload, {
-				public_id: `${id}-${uuidv4()}`,
+				public_id: `${cleanId}-${uuidv4()}`, // ID limpio + identificador único
 				overwrite: true,
 				folder: folder,
-				resource_type: 'auto', // Detecta si es jpg, png, webp, etc.
+				resource_type: 'auto',
 				transformation: [
-					{ quality: 'auto', fetch_format: 'auto' } // Optimización desde el origen
+					{ quality: 'auto', fetch_format: 'auto' }
 				]
 			});
 
@@ -66,15 +80,16 @@ export class ImageService {
 		folder: string
 	) {
 		try {
+			// Usamos el mismo proceso de sanitización para subidas masivas
 			const uploads = files.map((file) => this.UploadImage(file.source, file.id, folder));
 			const uploaded = await Promise.all(uploads);
-			const formattedImages = uploaded.map((image) => ({
+
+			return uploaded.map((image) => ({
 				public_id: image.public_id,
 				url: image.secure_url,
 				width: image.width,
 				height: image.height
 			}));
-			return formattedImages;
 		} catch (error) {
 			console.log(error);
 			throw new AppError(

@@ -101,7 +101,7 @@ export class ProductController {
 			}
 			if (data.productType === ProductType.CLOTHING) {
 				data.variants = parsedVariants as IClothingVariant[];
-				if (data.season) data.season = JSON.parse(data.season as string) as string;
+				if (data.season) data.season = data.season;
 			}
 			if (data.tags) data.tags = JSON.parse(data.tags as string) as string[];
 
@@ -207,15 +207,17 @@ export class ProductController {
 	// POST /api/products/calculate-prices - Calcular precios antes de guardar
 	static async calculatePrice(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
-			const { costPrice, customProfitMargin } = req.body;
+			const { costPrice, customProfitMargin, customProfitMargin1Pay, customProfitMarginInstallments } = req.body;
 			const { venta } = await getDolar();
-			const prices = await PaymentService.CalculatePrices(
-				EcommercePaymentProviders.MERCADOPAGO,
-				costPrice,
-				venta,
-				req.models!,
-				customProfitMargin
-			);
+			const prices = await PaymentService.CalculatePrices({
+				paymentProvider: EcommercePaymentProviders.MERCADOPAGO,
+				cost_price: costPrice,
+				dolar: venta,
+				models: req.models!,
+				customProfitMargin,
+				customProfitMargin1Pay,
+				customProfitMarginInstallments
+			});
 
 			res.status(200).json(prices);
 		} catch (error) {

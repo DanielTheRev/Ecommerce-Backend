@@ -48,6 +48,16 @@ const BaseProductSchema = new Schema(
 				default: 1.30,
 				select: false
 			},
+			profitMargin1Pay: {
+				type: Number,
+				required: false,
+				select: false
+			},
+			profitMarginInstallments: {
+				type: Number,
+				required: false,
+				select: false
+			},
 			baseCommission: {
 				type: Number,
 				default: 4.9,
@@ -95,11 +105,7 @@ const BaseProductSchema = new Schema(
 			default: 0,
 			min: 0
 		},
-		customProfitMargin: {
-			type: Number,
-			required: false,
-			select: false
-		},
+
 		images: [
 			{
 				url: { type: String, required: true },
