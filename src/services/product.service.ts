@@ -10,6 +10,7 @@ import slugify from 'slugify';
 import { getDolar } from './dolar.service';
 import { ImageService } from './images.service';
 import { PaymentService } from './Payment.service';
+import { SkuService } from './sku.service';
 
 
 export class ProductService {
@@ -437,8 +438,18 @@ export class ProductService {
 						};
 					}
 					delete v.imageIndex; // Lo borramos para que Mongoose no chille
+					delete v.sku; // Ignorar SKU del frontend — lo genera el backend
 					return v;
 				});
+
+				// ── Auto-generar SKUs para todas las variantes ──
+				data.variants = await SkuService.generateSkusForVariants(
+					models,
+					data.variants as any[],
+					data.category,
+					data.productType,
+					data.brand
+				);
 			}
 
 			// Subir og_image a Cloudinary si se proporcionó
@@ -625,7 +636,7 @@ export class ProductService {
 			if (updateData.provider) updateData.provider = updateData.provider;
 			if (updateData.variants) {
 				const parsedVariants = JSON.parse(updateData.variants as string);
-				updateData.variants = parsedVariants.map((v: any) => {
+				const processedVariants = parsedVariants.map((v: any) => {
 					// Si el front nos mandó un imageIndex y tenemos fotos en el array final...
 					if (v.imageIndex !== undefined && v.imageIndex !== null && updateData.images && updateData.images[v.imageIndex]) {
 						v.imageReference = {
@@ -644,8 +655,37 @@ export class ProductService {
 					delete v.imageIndex; // Limpiar basura
 					return v;
 				});
-				// Le casteamos los dos tipos posibles para que haga match con el DTO
-				// updateData.variants = parsedVariants as ITechVariant[] | IClothingVariant[];
+
+				// ── Auto-generar SKUs para variantes NUEVAS ──
+				const existingVariants = processedVariants.filter((v: any) => v._id);
+				const newVariants = processedVariants.filter((v: any) => !v._id);
+
+				if (newVariants.length > 0) {
+					// Ignorar cualquier SKU que haya mandado el frontend en variantes nuevas
+					newVariants.forEach((v: any) => delete v.sku);
+
+					// Reutilizar la secuencia de variantes existentes si las hay
+					let existingSequence: number | undefined;
+					if (existingVariants.length > 0 && existingVariants[0].sku) {
+						existingSequence = SkuService.extractSequenceFromSku(existingVariants[0].sku) ?? undefined;
+					}
+
+					const category = (updateData.category as string) || product.category;
+					const brand = (updateData.brand as string) || product.brand;
+
+					const generated = await SkuService.generateSkusForVariants(
+						models,
+						newVariants,
+						category,
+						product.productType as ProductType,
+						brand,
+						existingSequence
+					);
+
+					updateData.variants = [...existingVariants, ...generated] as any;
+				} else {
+					updateData.variants = processedVariants as any;
+				}
 			}
 			if (updateData.tags) updateData.tags = JSON.parse(updateData.tags as string);
 			if (updateData.careInstructions) updateData.careInstructions = JSON.parse(updateData.careInstructions as string);

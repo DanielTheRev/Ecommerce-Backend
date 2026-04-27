@@ -20,7 +20,11 @@ export enum ClothingFit {
 	Regular = 'Regular',
 	Slim = 'Slim',
 	Oversized = 'Oversized',
-	Relaxed = 'Relaxed'
+	Relaxed = 'Relaxed',
+	Boxy = 'Boxy',
+	Straight = 'Straight',
+	Tapered = 'Tapered',
+	Baggy = 'Baggy'
 }
 
 export enum ClothingSizeType {

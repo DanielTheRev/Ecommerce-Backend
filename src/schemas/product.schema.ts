@@ -30,7 +30,7 @@ const VariantColorSchema = z.object({
 
 // Clothing Variant Schema (Vura) — size requerido, sin attributes
 const ClothingVariantZodSchema = z.object({
-	sku: z.string().min(1, 'SKU es requerido'),
+	sku: z.string().optional(),
 	size: z.string().min(1, 'El talle es requerido'),
 	color: VariantColorSchema.optional(),
 	stock: z.number().int().min(0).default(0),
@@ -46,7 +46,7 @@ const ClothingVariantZodSchema = z.object({
 
 // Tech Variant Schema (Electromix) — attributes requerido, sin size
 const TechVariantZodSchema = z.object({
-	sku: z.string().min(1, 'SKU es requerido'),
+	sku: z.string().optional(),
 	attributes: z.array(z.object({
 		key: z.string().min(1),
 		value: z.string().min(1)
