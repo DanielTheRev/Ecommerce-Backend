@@ -1,6 +1,7 @@
 import { NotificationSeverity, NotificationType } from '@/interfaces/notification.interface';
 import {
 	CreateOrderDTO,
+	PayOrderDTO,
 	updatePaymentStatusDTO,
 	updateShippingStatusDTO
 } from '@/interfaces/order.interface';
@@ -122,7 +123,7 @@ export const mercadopagoWebhook = async (req: AuthRequest, res: Response) => {
 	return res.sendStatus(200);
 };
 
-// Crear nueva orden
+// Crear nueva orden (solo crea, no cobra)
 export const createOrder = async (req: AuthRequest, res: Response, next: NextFunction) => {
 	try {
 		const userId = req.user ? req.user._id : undefined;
@@ -135,6 +136,38 @@ export const createOrder = async (req: AuthRequest, res: Response, next: NextFun
 		}
 		return res.status(201).json({
 			message: 'Orden creada exitosamente',
+			order: safeOrder,
+			extras
+		});
+	} catch (error) {
+		console.log(error);
+		return next(error);
+	}
+};
+
+// Intentar pagar una orden existente (reintentable)
+export const payOrder = async (req: AuthRequest, res: Response, next: NextFunction) => {
+	try {
+		const { id } = req.params;
+		const userId = req.user ? req.user._id : undefined;
+		const { mercadopagoData } = req.body as PayOrderDTO;
+		const baseUrl = `${req.protocol}://${req.get('host')}`;
+
+		const { order, safeOrder, extras } = await OrderService.payOrder(
+			req.models!,
+			id,
+			mercadopagoData,
+			userId,
+			req.tenant!.slug,
+			baseUrl
+		);
+
+		if (req.tenant) {
+			socketManager.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'payment');
+		}
+
+		return res.status(200).json({
+			message: 'Pago procesado exitosamente',
 			order: safeOrder,
 			extras
 		});

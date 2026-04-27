@@ -70,10 +70,36 @@ export enum SaleType {
 // Enum for order status
 export enum OrderStatus {
 	PENDING_PAYMENT = 'PENDING_PAYMENT',
+	PAYMENT_FAILED = 'PAYMENT_FAILED',
 	PROCESSING_SHIPPING = 'PROCESSING_SHIPPING',
 	SHIPPED = 'SHIPPED',
 	DELIVERED = 'DELIVERED',
 	CANCELLED = 'CANCELLED'
+}
+
+// Interfaces para el nuevo flujo de pago separado
+export interface PayOrderDTO {
+	mercadopagoData?: {
+		token?: string;
+		payment_method_id: string;
+		installments: number;
+		type: string;
+		payer?: {
+			email: string;
+			first_name: string;
+			last_name: string;
+		};
+		identification?: {
+			type: string;
+			number: string;
+		}
+	}
+}
+
+export interface PayOrderResponse {
+	order: IOrderDocument;
+	safeOrder: IOrder;
+	extras?: CreateOrderExtras;
 }
 
 // Enum for payment status

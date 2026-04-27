@@ -75,3 +75,26 @@ export const TrackOrderSchema = z.object({
 		email: z.string().email('Debe ser un email válido')
 	})
 });
+
+export const PayOrderSchema = z.object({
+	params: z.object({
+		id: z.string().min(1, 'Se requiere el ID de la orden')
+	}),
+	body: z.object({
+		mercadopagoData: z.object({
+			token: z.string().optional(),
+			payment_method_id: z.string(),
+			installments: z.number().int().positive().optional(),
+			type: z.string(),
+			payer: z.object({
+				email: z.email(),
+				first_name: z.string().optional(),
+				last_name: z.string().optional()
+			}).optional(),
+			identification: z.object({
+				type: z.string(),
+				number: z.string()
+			}).optional()
+		}).optional()
+	})
+});

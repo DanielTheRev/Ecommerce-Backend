@@ -190,7 +190,6 @@ export class OrderService {
 			let installments: number | undefined = undefined;
 			if (paymentMethod.type === PaymentType.CARD && data.mercadopagoData?.installments) {
 				installments = data.mercadopagoData.installments;
-				console.log('Se seleccino tarjeta y 1 pago');
 			}
 
 			/* creating payment service instance */
@@ -210,10 +209,8 @@ export class OrderService {
 				switch (paymentMethod.type) {
 					case PaymentType.CARD:
 						if (installments !== undefined && installments === 1) {
-							console.log(`installments existe, y su valor es: ${installments}`);
 							unitPrice = item.data.prices.efectivo_transferencia;
 						} else {
-							console.log(`installments existe, y su valor es: ${installments}`);
 							unitPrice = item.data.prices.tarjeta_credito_debito;
 						}
 						break;
@@ -221,14 +218,8 @@ export class OrderService {
 						unitPrice = item.data.prices.tarjeta_credito_debito;
 						break;
 					case PaymentType.CASH:
-						unitPrice = item.data.prices.efectivo_transferencia;
-						break;
 					case PaymentType.BANK_TRANSFER:
-						unitPrice = item.data.prices.efectivo_transferencia;
-						break;
 					case PaymentType.ALIAS_TRANSFER:
-						unitPrice = item.data.prices.efectivo_transferencia;
-						break;
 					default:
 						unitPrice = item.data.prices.efectivo_transferencia;
 						break;
@@ -241,7 +232,7 @@ export class OrderService {
 				};
 			});
 
-			/* creating order in DB */
+			/* creating order in DB — SIN intentar cobro */
 			const newOrder = await (await models.Order.create(
 				{
 					user: userId,
@@ -280,128 +271,24 @@ export class OrderService {
 					{ path: 'items.productSnapshot.providerSnapshot' }
 				])
 
+			// Para pagos manuales, no se necesita un paso separado de pago
 			let extras: CreateOrderExtras | undefined;
-			/* Try pay order */
-			if (paymentMethod.type === PaymentType.CARD || paymentMethod.type === PaymentType.TICKET) {
-				console.log('Payment method: ', paymentMethod.type);
-				const config = await EcommerceService.getConfig(models);
-
-
-				// Prioridad a MercadoPago si está activo y tenemos los datos necesarios
-				if (config.paymentGateways.mercadopago.active && data.mercadopagoData) {
-					const { result, error } = await paymentService.withMercadoPago({
-						orderID: newOrder.id,
-						models,
-						total: finalCost,
-						payerData: {
-							email: user ? user.email : data.formPayerData.email,
-							first_name: user ? user.name.split(' ')[0] : data.formPayerData.firstName,
-							last_name: user ? user.name.split(' ').slice(1).join(' ') : data.formPayerData.lastName,
-							identification: data.mercadopagoData.identification
-						},
-						mercadoPagoData: data.mercadopagoData,
-						tenantSlug,
-						baseUrl,
-						items: orderItems.map((item) => ({
-							title: `${item.productSnapshot.brand} ${item.productSnapshot.model}`,
-							quantity: item.quantity,
-							unit_price: item.price.toString(),
-							picture_url: item.variantSnapshot.imageReference?.url || ''
-						}))
-					});
-
-					if (error || !result) {
-						throw new AppError('Failed to process MercadoPago payment', error || 'Error al procesar el pago de MercadoPago', 500);
-					}
-
-					newOrder.paymentInfo.transactionId = String(result.id);
-					newOrder.paymentInfo.mercadopagoData = {
-						items: result.items!,
-						status: result.status!,
-						status_detail: result.status_detail!,
-						total_amount: result.total_amount!,
-						total_paid_amount: result.total_paid_amount!,
-						transactions: result.transactions!
-					};
-
-					// Si el pago es exitoso
-					if (result.status === 'processed' || result.status === 'approved') {
-						newOrder.paymentInfo.status = PaymentStatus.APPROVED;
-						newOrder.status = OrderStatus.PROCESSING_SHIPPING;
-						newOrder.paymentInfo.paymentDate = new Date();
-						newOrder.history.push({
-							status: OrderStatus.PROCESSING_SHIPPING,
-							timestamp: new Date(),
-							note: 'Pago acreditado automáticamente'
-						});
-
-						// Cálculo de ganancias preliminar
-						const mpConfig = config.paymentGateways.mercadopago;
-						const installments = data.mercadopagoData.installments || 1;
-						const totalWithTaxes = finalCost / 1.21;
-						const commission = mpConfig.baseCommission;
-						// Para tickets (installments suele ser 1 o undefined), usamos la tasa base.
-						const cft = (paymentMethod.type === PaymentType.TICKET) ? 0 : (installments <= 3 ? mpConfig.cft3cuotas : mpConfig.cft6Cuotas);
-						const totalCost = totalWithTaxes * (1 - (commission + cft / 100));
-						newOrder.earnings = finalCost - totalCost;
-					}
-
-					extras = {
-						id: result.id,
-						status: result.status,
-						status_detail: result.status_detail,
-						provider: EcommercePaymentProviders.MERCADOPAGO,
-						ticket_url: result.status === 'action_required' ? result.transactions?.payments?.[0]?.payment_method?.ticket_url : undefined,
-						qr: result.status === 'action_required' ? result.transactions?.payments?.[0]?.payment_method?.qr_code : undefined
-					};
-				}
-				// Guardar el transactionId en la orden
-				await newOrder.save();
-			} else {
-				console.log('Manual payment');
-				// Es un pago MANUAL (Consolidado: Alias, Transferencia, Efectivo)
+			if (
+				paymentMethod.type !== PaymentType.CARD &&
+				paymentMethod.type !== PaymentType.TICKET
+			) {
+				console.log('Manual payment — orden creada sin gateway');
 				extras = {
 					provider: 'manual',
 					name: paymentMethod.name || 'Manual',
 					instructions: paymentMethod.description || 'Pendiente de confirmación manual',
 					status: 'waiting_confirmation'
 				};
-
 				newOrder.paymentInfo.status = PaymentStatus.PENDING;
 				await newOrder.save();
 			}
 
-			/* Sending email confirmation */
-
-			// if (paymentMethod.type === PaymentType.ALIAS_TRANSFER || paymentMethod.type === PaymentType.BANK_TRANSFER) {
-			// 	await ResendService.sendTransferEmail(newOrder.toObject() as unknown as IOrder, models);
-			// }
-			// if (paymentMethod.type === PaymentType.CARD || paymentMethod.type === PaymentType.TICKET) {
-			// 	await ResendService.sendOrderConfirmationEmail(newOrder.toObject() as unknown as IOrder);
-			// }
-			// if (paymentMethod.type === PaymentType.CASH) {
-			// 	await ResendService.sendCashPaymentEmail(newOrder.toObject() as unknown as IOrder);
-			// }
-
-			const safeOrder = {
-				...newOrder.toObject(),
-				items: newOrder.toObject().items.map((item) =>
-				({
-					...item,
-					productSnapshot: {
-						...item.productSnapshot,
-						providerSnapshot: null,
-						prices: {
-							efectivo_transferencia: item.productSnapshot.prices.efectivo_transferencia,
-							tarjeta_credito_debito: item.productSnapshot.prices.tarjeta_credito_debito,
-							cuotas: {
-								cuotas_3_si: item.productSnapshot.prices.cuotas.cuotas_3_si,
-								cuotas_6_si: item.productSnapshot.prices.cuotas.cuotas_6_si
-							}
-						}
-					}
-				}))
-			} as unknown as IOrder;
+			const safeOrder = this.buildSafeOrder(newOrder);
 
 			return { order: newOrder, safeOrder: safeOrder!, extras };
 		} catch (error) {
@@ -409,6 +296,246 @@ export class OrderService {
 			if (error instanceof AppError) throw error;
 			throw new AppError('Failed to create order', 'Error al intentar crear la orden', 500);
 		}
+	}
+
+	/**
+	 * Intenta cobrar una orden existente. Puede reintentarse N veces.
+	 * Solo funciona para órdenes en status PENDING_PAYMENT o PAYMENT_FAILED.
+	 * Si la orden ya está pagada → 409 Conflict.
+	 */
+	static async payOrder(
+		models: TenantModels,
+		orderId: string,
+		mercadopagoData: CreateOrderDTO['mercadopagoData'],
+		userId: string | undefined,
+		tenantSlug: string,
+		baseUrl: string
+	): Promise<CreateOrderResponse> {
+		try {
+			const order = await models.Order.findById(orderId)
+				.select(ADMIN_PRICE_SELECT)
+				.populate([
+					{ path: 'user', select: 'name email' },
+					{ path: 'items.productSnapshot.providerSnapshot' }
+				]) as IOrderDocument;
+
+			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
+
+			// Validar ownership: si la orden tiene usuario, debe coincidir
+			if (order.user && userId && order.user._id.toString() !== userId.toString()) {
+				throw new AppError(
+					'You can only pay your own orders',
+					'Solo podés pagar tus propias órdenes',
+					403
+				);
+			}
+
+			// Validar que la orden sea pagable
+			if (order.status === OrderStatus.PROCESSING_SHIPPING ||
+				order.status === OrderStatus.SHIPPED ||
+				order.status === OrderStatus.DELIVERED) {
+				throw new AppError(
+					'Order is already paid',
+					'Esta orden ya fue pagada',
+					409
+				);
+			}
+
+			if (order.status === OrderStatus.CANCELLED) {
+				throw new AppError(
+					'Order is cancelled',
+					'Esta orden fue cancelada y no se puede pagar',
+					400
+				);
+			}
+
+			// Solo PENDING_PAYMENT y PAYMENT_FAILED pueden intentar pago
+			if (order.status !== OrderStatus.PENDING_PAYMENT && order.status !== OrderStatus.PAYMENT_FAILED) {
+				throw new AppError(
+					'Order cannot be paid in current status',
+					'La orden no puede ser pagada en su estado actual',
+					400
+				);
+			}
+
+			const paymentMethodType = order.paymentInfo.method;
+
+			// Para pagos manuales, no necesitan pasar por acá
+			if (
+				paymentMethodType !== PaymentType.CARD &&
+				paymentMethodType !== PaymentType.TICKET
+			) {
+				throw new AppError(
+					'Manual payments do not require this endpoint',
+					'Los pagos manuales no requieren este endpoint. La orden ya fue creada con éxito.',
+					400
+				);
+			}
+
+			// Verificar que tengamos datos de MP para cobrar
+			if (!mercadopagoData) {
+				throw new AppError(
+					'MercadoPago data is required for card/ticket payments',
+					'Se requieren datos de MercadoPago para pagos con tarjeta/ticket',
+					400
+				);
+			}
+
+			const config = await EcommerceService.getConfig(models);
+			if (!config.paymentGateways.mercadopago.active) {
+				throw new AppError(
+					'MercadoPago is not configured',
+					'MercadoPago no está configurado para esta tienda',
+					400
+				);
+			}
+
+			// Calcular installments para seleccionar precio correcto
+			let installments: number | undefined = undefined;
+			if (paymentMethodType === PaymentType.CARD && mercadopagoData.installments) {
+				installments = mercadopagoData.installments;
+			}
+
+			// Construir PaymentService desde los datos ya guardados en la orden
+			const itemsForPaymentService = order.items.map(item => ({
+				data: item.productSnapshot as any,
+				quantity: item.quantity
+			}));
+
+			const paymentService = new PaymentService(
+				itemsForPaymentService,
+				paymentMethodType,
+				order.shippingInfo.cost,
+				installments
+			);
+
+			const finalCost = order.total; // Usamos el total ya calculado en createOrder
+
+			// Armar datos del payer desde los datos ya guardados en la orden
+			const buyerData = order.buyerData;
+			const orderUser = order.user as any; // puede ser populated o null
+
+			const payerEmail = orderUser?.email || buyerData?.email;
+			const payerFirstName = orderUser?.name?.split(' ')[0] || buyerData?.firstName || 'Cliente';
+			const payerLastName = orderUser?.name?.split(' ').slice(1).join(' ') || buyerData?.lastName || 'Ecommerce';
+
+			const { result, error } = await paymentService.withMercadoPago({
+				orderID: order.id,
+				models,
+				total: finalCost,
+				payerData: {
+					email: payerEmail,
+					first_name: payerFirstName,
+					last_name: payerLastName,
+					identification: mercadopagoData.identification
+				},
+				mercadoPagoData: mercadopagoData,
+				tenantSlug,
+				baseUrl,
+				items: order.items.map((item) => ({
+					title: `${item.productSnapshot.brand} ${item.productSnapshot.model}`,
+					quantity: item.quantity,
+					unit_price: item.price.toString(),
+					picture_url: item.variantSnapshot?.imageReference?.url || ''
+				}))
+			});
+
+			let extras: CreateOrderExtras | undefined;
+
+			if (error || !result) {
+				// Pago falló → marcamos la orden como PAYMENT_FAILED (reintentable)
+				order.status = OrderStatus.PAYMENT_FAILED;
+				order.paymentInfo.status = PaymentStatus.REJECTED;
+				order.history.push({
+					status: OrderStatus.PAYMENT_FAILED,
+					timestamp: new Date(),
+					note: `Intento de pago fallido: ${error || 'Error desconocido'}`
+				});
+				await order.save();
+
+				throw new AppError(
+					'Payment failed',
+					`El pago falló: ${error || 'Error al procesar el pago'}. Podés intentarlo de nuevo.`,
+					402
+				);
+			}
+
+			// Pago procesado por MP — actualizar la orden
+			order.paymentInfo.transactionId = String(result.id);
+			order.paymentInfo.mercadopagoData = {
+				items: result.items!,
+				status: result.status!,
+				status_detail: result.status_detail!,
+				total_amount: result.total_amount!,
+				total_paid_amount: result.total_paid_amount!,
+				transactions: result.transactions!
+			};
+
+			// Si el pago es exitoso inmediatamente
+			if (result.status === 'processed' || result.status === 'approved') {
+				order.paymentInfo.status = PaymentStatus.APPROVED;
+				order.status = OrderStatus.PROCESSING_SHIPPING;
+				order.paymentInfo.paymentDate = new Date();
+				order.history.push({
+					status: OrderStatus.PROCESSING_SHIPPING,
+					timestamp: new Date(),
+					note: 'Pago acreditado automáticamente'
+				});
+
+				// Cálculo de ganancias preliminar
+				const mpConfig = config.paymentGateways.mercadopago;
+				const mpInstallments = mercadopagoData.installments || 1;
+				const totalWithTaxes = finalCost / 1.21;
+				const commission = mpConfig.baseCommission;
+				const cft = (paymentMethodType === PaymentType.TICKET) ? 0 : (mpInstallments <= 3 ? mpConfig.cft3cuotas : mpConfig.cft6Cuotas);
+				const totalCost = totalWithTaxes * (1 - (commission + cft / 100));
+				order.earnings = finalCost - totalCost;
+			}
+
+			extras = {
+				id: result.id,
+				status: result.status,
+				status_detail: result.status_detail,
+				provider: EcommercePaymentProviders.MERCADOPAGO,
+				ticket_url: result.status === 'action_required' ? result.transactions?.payments?.[0]?.payment_method?.ticket_url : undefined,
+				qr: result.status === 'action_required' ? result.transactions?.payments?.[0]?.payment_method?.qr_code : undefined
+			};
+
+			await order.save();
+
+			const safeOrder = this.buildSafeOrder(order);
+
+			return { order, safeOrder: safeOrder!, extras };
+		} catch (error) {
+			console.log(error);
+			if (error instanceof AppError) throw error;
+			throw new AppError('Failed to process payment', 'Error al intentar procesar el pago', 500);
+		}
+	}
+
+	/**
+	 * Helper: construye un objeto de orden sin datos sensibles para enviar al frontend.
+	 */
+	private static buildSafeOrder(order: IOrderDocument): IOrder {
+		return {
+			...order.toObject(),
+			items: order.toObject().items.map((item: any) =>
+			({
+				...item,
+				productSnapshot: {
+					...item.productSnapshot,
+					providerSnapshot: null,
+					prices: {
+						efectivo_transferencia: item.productSnapshot.prices.efectivo_transferencia,
+						tarjeta_credito_debito: item.productSnapshot.prices.tarjeta_credito_debito,
+						cuotas: {
+							cuotas_3_si: item.productSnapshot.prices.cuotas.cuotas_3_si,
+							cuotas_6_si: item.productSnapshot.prices.cuotas.cuotas_6_si
+						}
+					}
+				}
+			}))
+		} as unknown as IOrder;
 	}
 
 	static async getOrdersByUserId(models: TenantModels, userId: string, query: {
@@ -841,10 +968,10 @@ export class OrderService {
 				);
 			}
 
-			if (order.status !== OrderStatus.PENDING_PAYMENT) {
+			if (order.status !== OrderStatus.PENDING_PAYMENT && order.status !== OrderStatus.PAYMENT_FAILED) {
 				throw new AppError(
 					'Only pending orders can be cancelled',
-					'Solo se pueden cancelar órdenes pendientes',
+					'Solo se pueden cancelar órdenes pendientes de pago',
 					400
 				);
 			}
