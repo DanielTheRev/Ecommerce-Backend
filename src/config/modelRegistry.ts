@@ -16,6 +16,8 @@ import { BentoConfigSchema } from '@/models/BentoConfig.model';
 import { ShopTheLookSchema } from '@/models/shopTheLook.model';
 import { addressSchema } from '@/models/Address.model';
 import { SkuCounterSchema, ISkuCounterDocument } from '@/models/SkuCounter.model';
+import { favoriteSchema } from '@/models/Favorite.model';
+import { IFavoriteDocument } from '@/interfaces/favorites.interface';
 
 // Interfaces
 import { ICashRegisterDocument, ICashRegisterModel } from '@/interfaces/cash-register.interface';
@@ -53,6 +55,7 @@ export interface TenantModels {
 	Provider: Model<IProviderDocument>;
 	Address: Model<IAddressDocument>;
 	SkuCounter: Model<ISkuCounterDocument>;
+	Favorite: Model<IFavoriteDocument>;
 }
 
 /**
@@ -150,6 +153,11 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		? db.model<ISkuCounterDocument>('SkuCounter')
 		: db.model<ISkuCounterDocument>('SkuCounter', SkuCounterSchema);
 
+	// Favorite
+	const FavoriteModel = db.models.Favorite
+		? db.model<IFavoriteDocument>('Favorite')
+		: db.model<IFavoriteDocument>('Favorite', favoriteSchema);
+
 	return {
 		Product: ProductModel,
 		TechProduct: TechProductModel,
@@ -166,6 +174,7 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		ShopTheLook: ShopTheLookModel,
 		Provider: ProviderModel,
 		Address: AddressModel,
-		SkuCounter: SkuCounterModel
+		SkuCounter: SkuCounterModel,
+		Favorite: FavoriteModel
 	};
 }

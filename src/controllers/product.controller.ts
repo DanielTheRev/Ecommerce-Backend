@@ -170,18 +170,29 @@ export class ProductController {
 
 			const page = parseInt(req.query.page as string) || 1;
 			const limit = parseInt(req.query.limit as string) || 10;
+			const sortBy = req.query.sortBy as string | undefined || 'createdAt';
+			const sortOrder = req.query.sortOrder as string | undefined || 'asc';
+			const result = await ProductService.searchProducts({
+				models: req.models!,
+				filters: {
+					q: q as string,
+					minPrice: minPrice ? parseFloat(minPrice as string) : undefined,
+					maxPrice: maxPrice ? parseFloat(maxPrice as string) : undefined,
+					minRating: minRating ? parseFloat(minRating as string) : undefined,
+					category: category as string,
+					brand: brand as string,
+					gender: gender as string,
+					tags: tags as string,
+					featured: featured as unknown as boolean,
+					sortBy: sortBy,
+					sortOrder: sortOrder
+				},
+				page: page,
+				limit: limit,
+				productType: productType
+			})
 
-			const result = await ProductService.searchProducts(req.models!, {
-				q: q as string,
-				minPrice: minPrice ? parseFloat(minPrice as string) : undefined,
-				maxPrice: maxPrice ? parseFloat(maxPrice as string) : undefined,
-				minRating: minRating ? parseFloat(minRating as string) : undefined,
-				category: category as string,
-				brand: brand as string,
-				gender: gender as string,
-				tags: tags as string,
-				featured: featured as unknown as boolean
-			}, page, limit, productType);
+
 
 			res.status(200).json({
 				success: true,

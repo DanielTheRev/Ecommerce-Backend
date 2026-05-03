@@ -1,11 +1,27 @@
 import { AppError } from '@/errors/app.error';
 import { IBanner } from '@/interfaces/home.interface';
 import { TenantModels } from '@/config/modelRegistry';
+import { ImageService } from './images.service';
 
 export class BannerService {
-  static async createBanner(models: TenantModels, data: IBanner): Promise<IBanner> {
+  static async createBanner(models: TenantModels, data: IBanner & { imageFile?: Express.Multer.File }, tenantSlug?: string): Promise<IBanner> {
+    if (!tenantSlug) throw new AppError('No tenant slug provided', 'Error interno del servidor', 500);
+    
+    const finalSource = data.imageFile || data.image;
+    if (!finalSource) {
+      throw new AppError('No image provided', 'No se proporcionó imagen para el banner', 400);
+    }
+
     try {
-      const banner = await models.Banner.create(data);
+      const bannerCount = await models.Banner.countDocuments();
+      const imageId = `banner-${bannerCount + 1}-${Date.now()}`;
+      
+      const img_uploaded = await ImageService.UploadImage(finalSource, imageId, `${tenantSlug}/banner-images`);
+      
+      const bannerPayload = { ...data, image: img_uploaded.secure_url };
+      delete bannerPayload.imageFile;
+
+      const banner = await models.Banner.create(bannerPayload);
       return banner;
     } catch (error: any) {
       console.log(error);
@@ -43,11 +59,27 @@ export class BannerService {
     }
   }
 
-  static async updateBanner(models: TenantModels, id: string, data: Partial<IBanner>): Promise<IBanner> {
+  static async updateBanner(models: TenantModels, id: string, data: Partial<IBanner> & { imageFile?: Express.Multer.File }, tenantSlug?: string): Promise<IBanner> {
+    if (!tenantSlug) throw new AppError('No tenant slug provided', 'Error interno del servidor', 500);
     try {
       if (!id || !data) throw new AppError('Banner not found', 'Banner no encontrado', 404);
-      const fieldsToSelect = Object.keys(data).join(' ');
-      const banner = await models.Banner.findByIdAndUpdate(id, data, { new: true, runValidators: true, select: fieldsToSelect }).lean();
+      
+      const bannerPayload: any = { ...data };
+      
+      if (data.imageFile) {
+        const imageId = `banner-${id}-update-${Date.now()}`;
+        const img_uploaded = await ImageService.UploadImage(data.imageFile, imageId, `${tenantSlug}/banner-images`);
+        bannerPayload.image = img_uploaded.secure_url;
+      } else if (data.image && typeof data.image === 'string' && data.image.startsWith('data:')) {
+        const imageId = `banner-${id}-update-${Date.now()}`;
+        const img_uploaded = await ImageService.UploadImage(data.image, imageId, `${tenantSlug}/banner-images`);
+        bannerPayload.image = img_uploaded.secure_url;
+      }
+
+      delete bannerPayload.imageFile;
+
+      const fieldsToSelect = Object.keys(bannerPayload).join(' ');
+      const banner = await models.Banner.findByIdAndUpdate(id, bannerPayload, { new: true, runValidators: true, select: fieldsToSelect }).lean();
       if (!banner) throw new AppError('Banner not found', 'Banner no encontrado', 404);
       return banner;
     } catch (error) {

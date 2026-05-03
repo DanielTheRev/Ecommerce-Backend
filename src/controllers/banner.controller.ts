@@ -5,7 +5,9 @@ import { AuthRequest } from '@/middleware/auth';
 export class BannerController {
   static async createBanner(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const banner = await BannerService.createBanner(req.models!, req.body);
+      let data = req.body;
+      const imageFile = req.file;
+      const banner = await BannerService.createBanner(req.models!, { ...data, imageFile }, req.tenant?.slug);
       return res.status(201).json(banner);
     } catch (error) {
       return next(error);
@@ -39,7 +41,9 @@ export class BannerController {
   static async updateBanner(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const banner = await BannerService.updateBanner(req.models!, id, req.body);
+      let data = req.body;
+      const imageFile = req.file;
+      const banner = await BannerService.updateBanner(req.models!, id, { ...data, imageFile }, req.tenant?.slug);
       res.status(200).json(banner);
     } catch (error) {
       next(error);

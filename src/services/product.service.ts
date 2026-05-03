@@ -330,25 +330,32 @@ export class ProductService {
 	}
 
 	static async searchProducts(
-		models: TenantModels,
-		filters: {
-			q?: string;
-			minPrice?: number;
-			maxPrice?: number;
-			minRating?: number;
-			category?: string;
-			brand?: string;
-			gender?: string;
-			tags?: string;
-			featured?: boolean;
-		},
-		page: number = 1,
-		limit: number = 10,
-		productType?: string
+		data: {
+			models: TenantModels,
+			filters: {
+				q?: string;
+				minPrice?: number;
+				maxPrice?: number;
+				minRating?: number;
+				category?: string;
+				brand?: string;
+				gender?: string;
+				tags?: string;
+				featured?: boolean;
+				sortBy?: 'createdAt' | 'price' | string;
+				sortOrder?: 'asc' | 'desc' | string;
+			},
+			page?: number,
+			limit?: number,
+			productType?: string
+		}
 	) {
+		const { models, filters, page = 1, limit = 10, productType } = data;
 		try {
 			const Model = this.getModel(models, productType);
 			const query: any = {};
+
+			query.isActive = true
 
 			if (filters.featured) {
 				query.isFeatured = filters.featured;
@@ -391,10 +398,14 @@ export class ProductService {
 				query.tags = { $in: tags };
 			}
 
+			const sortField = filters.sortBy === 'createdAt' ? 'createdAt' :
+				filters.sortBy === 'price' ? 'prices.efectivo_transferencia' :
+					'prices.efectivo_transferencia';
+			const sortDirection = filters.sortOrder === 'desc' ? 1 : -1;
 			const result = await paginate(Model, query, {
 				page,
 				limit,
-				sort: { 'prices.efectivo_transferencia': -1 }
+				sort: { [sortField]: sortDirection }
 			});
 			return result;
 

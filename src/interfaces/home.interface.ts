@@ -10,7 +10,8 @@ export interface IHomeConfig {
 	heroSlides: IHeroSlide[]
 	bentoConfig: IBentoConfig | null;
 	shopTheLook: IShopTheLook[];
-	featuredProducts: IProduct[];
+	news: IProduct[];
+	mostSales: IProduct[];
 }
 
 

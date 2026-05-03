@@ -4,7 +4,7 @@ export const CreateBannerSchema = z.object({
 	body: z.object({
 		brandName: z.string().min(1, 'Brand Name is required'),
 		description: z.string().min(1, 'Description is required'),
-		image: z.url('Image must be a valid URL'),
+		image: z.string().optional(),
 		title: z.string().min(1, 'Title is required'),
 		subtitle: z.string().min(1, 'Subtitle is required'),
 		
@@ -12,8 +12,8 @@ export const CreateBannerSchema = z.object({
 		buttonClass: z.string().optional(),
 		icon: z.string().optional(),
 		
-		isActive: z.boolean().optional(),
-		order: z.number().int().optional()
+		isActive: z.boolean().optional().or(z.string().transform((value) => Boolean(value))),
+		order: z.number().int().optional().or(z.string().transform((value) => Number(value)))
 	})
 });
 
@@ -21,7 +21,7 @@ export const UpdateBannerSchema = z.object({
 	body: z.object({
 		brandName: z.string().optional(),
 		description: z.string().optional(),
-		image: z.url().optional(),
+		image: z.string().optional(),
 		title: z.string().optional(),
 		subtitle: z.string().optional(),
 		
@@ -29,7 +29,7 @@ export const UpdateBannerSchema = z.object({
 		buttonClass: z.string().optional(),
 		icon: z.string().optional(),
 		
-		isActive: z.boolean().optional(),
-		order: z.number().int().optional()
+		isActive: z.boolean().optional().or(z.string().transform((value) => Boolean(value))),
+		order: z.number().int().optional().or(z.string().transform((value) => Number(value)))
 	})
 });

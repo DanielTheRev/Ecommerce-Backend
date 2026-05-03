@@ -97,15 +97,36 @@ export class HomeService {
 		// Fetch Hero Slides
 		const heroSlides = await HeroService.getActiveSlides(models);
 		const bentoConfig = await BentoService.getBentoConfig(models);
-		const ShopTheLooks = await ShopTheLookService.getActiveLooks(models)
-		const featuredProducts = (await ProductService.searchProducts(models, { featured: true })).data as unknown as IProduct[];
+		const ShopTheLooks = await ShopTheLookService.getActiveLooks(models);
+
+		// Últimos productos subidos
+		const news = (await ProductService.searchProducts({
+			models,
+			filters: {
+				sortBy: 'createdAt',
+				sortOrder: 'asc'
+			},
+			page: 1,
+			limit: 12
+		})).data as unknown as IProduct[];
+
+		// Productos más vendidos (controlado por isFeatured mientras no haya ventas reales)
+		const mostSales = (await ProductService.searchProducts({
+			models,
+			filters: {
+				featured: true
+			},
+			limit: 8
+		})).data as unknown as IProduct[];
+
 		return {
 			heroSlides,
 			offers: this.offers,
 			productByBrand,
 			bentoConfig,
 			shopTheLook: ShopTheLooks,
-			featuredProducts
+			news,
+			mostSales
 		};
 	}
 }
