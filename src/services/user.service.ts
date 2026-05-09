@@ -68,6 +68,51 @@ export class UserService {
 			);
 		}
 	}
+	static async getAllClients(models: TenantModels, page: number, limit: number, q?: string) {
+		try {
+			const skip = (page - 1) * limit;
+
+			const filter: Record<string, any> = {
+				role: Role.user,
+				email: { $ne: 'ventas@local.com' }
+			};
+
+			if (q) {
+				filter.$or = [
+					{ name: { $regex: q, $options: 'i' } },
+					{ email: { $regex: q, $options: 'i' } }
+				];
+			}
+
+			const [clients, total] = await Promise.all([
+				models.User.find(filter)
+					.select('-password')
+					.sort({ createdAt: -1 })
+					.skip(skip)
+					.limit(limit)
+					.lean(),
+				models.User.countDocuments(filter)
+			]);
+
+			return {
+				data: clients,
+				pagination: {
+					total,
+					page,
+					limit,
+					totalPages: Math.ceil(total / limit)
+				}
+			};
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError(
+				'Error retrieving clients',
+				'Error al intentar obtener los clientes',
+				500
+			);
+		}
+	}
+
 	static async getOrCreateGenericUser(models: TenantModels) {
 		try {
 			// Find existing generic user

@@ -2,6 +2,7 @@ export interface IEcommerceConfig {
 	key: string;
 	name?: string;
 	profit: number;
+	costCurrency?: 'USD' | 'ARS';
 	taxes: {
 		iva: number;
 	};
@@ -23,7 +24,10 @@ export interface IEcommerceConfig {
 		tiktok: string;
 	};
 	brands: string[],
-	categories: string[]
+	categories: string[],
+	shippingConfig?: {
+		freeShippingThreshold: number;
+	}
 }
 
 export interface IEcommercePaymentGateway {
@@ -84,6 +88,9 @@ export interface IEcommerceConfigPublic {
 	};
 	brands: string[];
 	categories: string[];
+	shippingConfig?: {
+		freeShippingThreshold: number;
+	};
 	paymentGateways: {
 		mercadopago: {
 			publicKey: string;

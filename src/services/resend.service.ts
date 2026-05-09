@@ -332,6 +332,78 @@ export class ResendService {
     }
   }
 
+  static async sendBackInStockEmail(
+    userEmail: string,
+    userName: string,
+    product: { brand: string; model: string; slug: string; images: { url: string }[]; prices: { efectivo_transferencia: number } }
+  ) {
+    try {
+      const resend = new Resend(this.#apikey);
+      const productName = `${product.brand} ${product.model}`;
+      const productImage = product.images?.[0]?.url || '';
+      const productUrl = `https://vura.com.ar/products/${product.slug}`;
+      const priceFormatted = product.prices.efectivo_transferencia.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' });
+
+      const emailHtml = `
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #111;">
+          <div style="text-align: center; padding-bottom: 20px;">
+            <img src="https://res.cloudinary.com/dmdwze9lj/image/upload/v1775017539/vura/vura_logo_cfrpou.webp" alt="Vura Logo" width="120" style="display: block; margin: 0 auto;" />
+            <h1 style="font-size: 24px; font-weight: normal; margin: 20px 0 5px 0;">¡Volvió al stock!</h1>
+            <p style="font-size: 14px; color: #757575; margin: 0;">Un producto de tus favoritos ya está disponible</p>
+          </div>
+
+          <p style="font-size: 16px; margin-bottom: 20px;">
+            Hola ${userName}, ¡buenas noticias! Un producto que tenés en tus favoritos volvió a estar disponible.
+          </p>
+
+          <div style="background-color: #f9f9f9; padding: 20px; border-radius: 4px; margin-bottom: 30px;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse;">
+              <tr>
+                <td width="120" style="padding: 0 15px 0 0; vertical-align: top;">
+                  <img src="${productImage}" alt="${productName}" width="100" style="display: block; border-radius: 4px;" />
+                </td>
+                <td style="vertical-align: top;">
+                  <p style="margin: 0 0 5px 0; font-family: Arial, sans-serif; font-size: 16px; font-weight: bold; text-transform: uppercase; color: #111;">
+                    ${productName}
+                  </p>
+                  <p style="margin: 0; font-family: Arial, sans-serif; font-size: 14px; color: #111;">
+                    ${priceFormatted}
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="text-align: center; margin-bottom: 30px;">
+            <a href="${productUrl}" style="background-color: #111; color: #fff; padding: 14px 32px; text-decoration: none; font-weight: bold; border-radius: 4px; display: inline-block; font-size: 16px;">Comprar Ahora</a>
+          </div>
+
+          <p style="font-size: 13px; color: #757575; text-align: center; margin-bottom: 30px;">
+            ¡Apurate antes de que se agote nuevamente!
+          </p>
+
+          <div style="text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #eeeeee;">
+            <a href="https://vura.com.ar" style="font-size: 16px; font-weight: bold; color: #111; text-decoration: none;">Vura.com.ar</a>
+          </div>
+        </div>
+      `;
+
+      const { data, error } = await resend.emails.send({
+        from: 'Vura <ordenes@vura.com.ar>',
+        to: userEmail,
+        subject: `Vura - ¡${productName} volvió al stock!`,
+        html: emailHtml,
+      });
+
+      if (error) throw error;
+      console.log('✅ Back in stock email sent to: ', userEmail, data);
+      return true;
+    } catch (error: any) {
+      console.error('❌ Failed to send back in stock email:', error);
+      return false;
+    }
+  }
+
   private static buildItemsHtml(order: IOrder): string {
     if (!order.items || order.items.length === 0) return '';
     return order.items.map(item => {

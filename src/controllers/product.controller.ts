@@ -16,7 +16,9 @@ export class ProductController {
 			const productType = req.query.type as string | undefined;
 			const q = req.query.q as string | undefined;
 			const category = req.query.category as string | undefined;
-			const result = await ProductService.getPaginatedProductsWCompletePrices(req.models!, page, limit, productType, q, category);
+			const isActive = req.query.isActive !== undefined ? req.query.isActive === 'true' : undefined;
+			const providerId = req.query.provider as string | undefined;
+			const result = await ProductService.getPaginatedProductsWCompletePrices(req.models!, page, limit, productType, q, category, isActive, providerId);
 			res.status(200).json(result);
 		} catch (error) {
 			next(error);
@@ -134,6 +136,24 @@ export class ProductController {
 
 			const updatedProduct = await ProductService.updateProductById(req.models!, id, data, imageFiles, ogImageFile, req.tenant?.slug);
 			res.status(200).json(updatedProduct);
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// PATCH /api/products/bulk-status - Actualizar estado de varios productos
+	static async bulkUpdateStatus(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { ids, isActive } = req.body;
+			if (!Array.isArray(ids)) {
+				res.status(400).json({ success: false, message: 'Se requiere un array de IDs' });
+				return;
+			}
+			await ProductService.bulkUpdateStatus(req.models!, ids, isActive);
+			res.status(200).json({
+				success: true,
+				message: `Productos ${isActive ? 'activados' : 'desactivados'} exitosamente`
+			});
 		} catch (error) {
 			next(error);
 		}

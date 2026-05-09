@@ -11,6 +11,7 @@ import { getDolar } from './dolar.service';
 import { ImageService } from './images.service';
 import { PaymentService } from './Payment.service';
 import { SkuService } from './sku.service';
+import { EcommerceService } from './ecommerce.service';
 
 
 export class ProductService {
@@ -251,7 +252,7 @@ export class ProductService {
 		}
 	}
 
-	static async getPaginatedProductsWCompletePrices(models: TenantModels, page: number = 1, limit: number = 10, productType?: string, q?: string, category?: string) {
+	static async getPaginatedProductsWCompletePrices(models: TenantModels, page: number = 1, limit: number = 10, productType?: string, q?: string, category?: string, isActive?: boolean, providerId?: string) {
 		try {
 			const Model = this.getModel(models, productType);
 
@@ -266,11 +267,18 @@ export class ProductService {
 			if (category) {
 				query.category = category;
 			}
+			if (isActive !== undefined) {
+				query.isActive = isActive;
+			}
+
+			if (providerId) {
+				query.provider = providerId;
+			}
 
 			const result = await paginate(Model, query, {
 				page,
 				limit,
-				sort: { 'prices.efectivo_transferencia': -1 },
+				sort: { 'createdAt': -1 },
 				select: '+provider +prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.earnings',
 				populate: {
 					path: 'provider',
@@ -535,6 +543,64 @@ export class ProductService {
 
 	// ============ UPDATE ============
 
+	/**
+	 * Recalcula masivamente los precios de todos los productos basándose en una nueva configuración.
+	 * Utiliza bulkWrite para mayor eficiencia en la base de datos.
+	 */
+	static async recalculateAllProductsPrices(models: TenantModels, config: any): Promise<void> {
+		try {
+			console.log('🔄 Iniciando recalculo masivo de precios...');
+			// Obtenemos todos los productos. Necesitamos los campos del precio base.
+			const products = await models.Product.find({})
+				.select('+prices.costPrice +prices.profitMargin1Pay +prices.profitMarginInstallments')
+				.lean() as unknown as IProduct[];
+
+			if (!products || products.length === 0) {
+				console.log('No hay productos para recalcular.');
+				return;
+			}
+
+			const { venta: dolarVenta } = await getDolar();
+			const isARS = config.costCurrency === 'ARS';
+			const bulkOps = [];
+
+			for (const product of products) {
+				if (!product.prices || !product.prices.costPrice) continue;
+
+				// Definir el costo base a usar según la nueva configuración
+				const baseCost = isARS ? product.prices.costPrice.inARS : product.prices.costPrice.inUSD;
+
+				// Recalcular los precios usando la nueva configuración inyectada
+				const calculatedPrices = await PaymentService.CalculatePrices({
+					paymentProvider: EcommercePaymentProviders.MERCADOPAGO, // Por defecto MP
+					cost_price: baseCost,
+					dolar: dolarVenta,
+					models,
+					config, // Pasamos la configuración para evitar Múltiples queries
+					customProfitMargin1Pay: product.prices.profitMargin1Pay,
+					customProfitMarginInstallments: product.prices.profitMarginInstallments
+				});
+
+				// Preparar la operación de actualización para MongoDB
+				bulkOps.push({
+					updateOne: {
+						filter: { _id: product._id },
+						update: { $set: { prices: calculatedPrices } }
+					}
+				});
+			}
+
+			// Ejecutar todas las actualizaciones de una vez
+			if (bulkOps.length > 0) {
+				const result = await models.Product.bulkWrite(bulkOps);
+				console.log(`✅ Recalculo masivo completado. Productos actualizados: ${result.modifiedCount}`);
+			}
+		} catch (error) {
+			console.error('❌ Error en recalculo masivo:', error);
+			// No lanzamos error para no bloquear el flujo principal de updateConfig
+		}
+	}
+
 	static async updateProductById(models: TenantModels, id: string, updateData: Partial<IProductUpdateDTO>, files: Express.Multer.File[], ogImageFile: Express.Multer.File | null, tenantSlug: string = 'general'): Promise<IProduct> {
 		console.log('updateProductById');
 		console.log('Data:');
@@ -622,9 +688,11 @@ export class ProductService {
 
 				// Attempt to get the current base price. If updateData.price is provided, use it.
 				// Otherwise try temporary product.price. As a final fallback, safely cast the stored base price cost
+				const config = await EcommerceService.getConfig(models);
+				const isARS = config.costCurrency === 'ARS';
 				const currentPrice = updateData.price !== undefined
 					? updateData.price
-					: product.prices.costPrice.inUSD;
+					: (isARS ? product.prices.costPrice.inARS : product.prices.costPrice.inUSD);
 
 				const prices = await PaymentService.CalculatePrices(
 					{
@@ -904,6 +972,23 @@ export class ProductService {
 			throw new AppError(
 				'Failed to fetch provider products',
 				'Error al obtener los productos del proveedor',
+				500
+			);
+		}
+	}
+
+	static async bulkUpdateStatus(models: TenantModels, ids: string[], isActive: boolean): Promise<boolean> {
+		try {
+			await models.Product.updateMany(
+				{ _id: { $in: ids.map(id => new Types.ObjectId(id)) } },
+				{ $set: { isActive } }
+			);
+			return true;
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError(
+				'Failed to bulk update product status',
+				'Error al actualizar el estado masivo de los productos',
 				500
 			);
 		}

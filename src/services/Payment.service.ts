@@ -145,6 +145,7 @@ export class PaymentService {
 			cost_price: number,
 			dolar: number,
 			models?: TenantModels,
+			config?: any,
 			customProfitMargin?: number,
 			customProfitMargin1Pay?: number,
 			customProfitMarginInstallments?: number
@@ -252,6 +253,7 @@ export class PaymentService {
 			cost_price: number,
 			dolar: number,
 			models?: TenantModels,
+			config?: any,
 			customProfitMargin?: number, // Margen general (por si se usa un solo input)
 			customProfitMargin1Pay?: number, // Margen gordo para Efectivo/Transf (Ej: 100%)
 			customProfitMarginInstallments?: number // Margen achato para Cuotas (Ej: 40%)
@@ -259,7 +261,7 @@ export class PaymentService {
 	): Promise<IProductPrices> {
 		try {
 			const { cost_price, dolar, models, customProfitMargin, customProfitMargin1Pay, customProfitMarginInstallments } = data;
-			const config = await EcommerceService.getConfig(models!);
+			const config = data.config || await EcommerceService.getConfig(models!);
 			const mpConfig = config.paymentGateways.mercadopago;
 
 			// =========================================================
@@ -285,7 +287,9 @@ export class PaymentService {
 			// =========================================================
 			// PASO 2: NUESTRO COSTO BASE Y LO QUE QUEREMOS EN MANO
 			// =========================================================
-			const basePriceInArs = cost_price * dolar; // Costo puro
+			const isARS = config.costCurrency === 'ARS';
+			const basePriceInArs = isARS ? cost_price : cost_price * dolar; // Costo puro
+			const inUSD = isARS ? cost_price / dolar : cost_price;
 
 			// Acá está la magia: Calculamos dos bolsillos distintos
 			const targetPrice1Pay = basePriceInArs * (1 + profitFactor1Pay);
@@ -316,7 +320,7 @@ export class PaymentService {
 			// =========================================================
 			return {
 				costPrice: {
-					inUSD: cost_price,
+					inUSD: inUSD,
 					inARS: basePriceInArs
 				},
 				dolarPrice: dolar,

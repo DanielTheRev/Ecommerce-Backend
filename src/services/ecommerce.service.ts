@@ -4,6 +4,7 @@ import { TenantModels } from '@/config/modelRegistry';
 import { decrypt, encrypt } from '@/utils/encryption';
 import { flattenObject } from '@/utils/object.util';
 import { MercadoPagoService } from './mercadopago.service';
+import { ProductService } from './product.service';
 
 export class EcommerceService {
 	private static readonly SENSITIVE_FIELDS_SELECT = '+paymentGateways.uala.credentials.userName +paymentGateways.uala.credentials.clientId +paymentGateways.uala.credentials.clientSecret +paymentGateways.mercadopago.accessToken +paymentGateways.mercadopago.webhookSecret';
@@ -76,6 +77,7 @@ export class EcommerceService {
 				social: publicConfig.social!,
 				brands: publicConfig.brands,
 				categories: publicConfig.categories,
+				shippingConfig: publicConfig.shippingConfig,
 				paymentGateways: {
 					mercadopago: {
 						publicKey: publicConfig.paymentGateways?.mercadopago?.publicKey || '',
@@ -134,6 +136,9 @@ export class EcommerceService {
 
 	static updateConfig = async (models: TenantModels, data: IEcommerceConfig, userId?: string): Promise<IEcommerceConfig> => {
 		try {
+			// 1. Obtenemos la configuración antigua antes de actualizar
+			const oldConfig = await models.EcommerceConfig.findOne({ key: 'global_config' }).lean() as unknown as IEcommerceConfig;
+
 			this.encryptEcommerceConfig(data);
 
 			if (userId) {
@@ -153,11 +158,28 @@ export class EcommerceService {
 				{ new: true, runValidators: true, upsert: true }
 			)
 				.select(this.SENSITIVE_FIELDS_SELECT)
-				.lean();
+				.lean() as unknown as IEcommerceConfig;
 
 			if (!updatedConfig) throw new AppError('Failed to update config', 'Error al actualizar configuración', 500);
 
-			return this.decryptEcommerceConfig(updatedConfig as unknown as IEcommerceConfig);
+			const finalConfig = this.decryptEcommerceConfig(updatedConfig);
+
+			// 2. Comparamos los valores para ver si necesitamos recalcular todos los productos
+			if (oldConfig) {
+				const costCurrencyChanged = oldConfig.costCurrency !== finalConfig.costCurrency;
+				const profitChanged = oldConfig.profit !== finalConfig.profit;
+				const ivaChanged = oldConfig.taxes?.iva !== finalConfig.taxes?.iva;
+
+				if (costCurrencyChanged || profitChanged || ivaChanged) {
+					// Disparamos el recálculo masivo en segundo plano de manera asíncrona
+					// no le ponemos await para no bloquear la respuesta HTTP
+					ProductService.recalculateAllProductsPrices(models, finalConfig).catch(err => {
+						console.error('Error in background mass recalculation:', err);
+					});
+				}
+			}
+
+			return finalConfig;
 		} catch (error) {
 			console.log(error);
 			if (error instanceof AppError) throw error;

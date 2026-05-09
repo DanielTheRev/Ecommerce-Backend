@@ -192,11 +192,17 @@ export class OrderService {
 				installments = data.mercadopagoData.installments;
 			}
 
+			/* calculate free shipping logic */
+			const config = await EcommerceService.getConfig(models);
+			const threshold = config.shippingConfig?.freeShippingThreshold ?? 50000;
+			const subtotalBase = processedOrderItems.reduce((acc, item) => acc + (item.data.prices.efectivo_transferencia * item.quantity), 0);
+			const appliedShippingCost = subtotalBase >= threshold ? 0 : shippingMethod.cost;
+
 			/* creating payment service instance */
 			const paymentService = new PaymentService(
 				processedOrderItems.map(item => ({ data: item.data, quantity: item.quantity })),
 				paymentMethod.type,
-				shippingMethod.cost,
+				appliedShippingCost,
 				installments
 			);
 
@@ -241,7 +247,7 @@ export class OrderService {
 					shippingInfo: {
 						type: shippingMethod.type,
 						pickupPoint: data.shippingMethod.pickupPoint,
-						cost: shippingMethod.cost
+						cost: appliedShippingCost
 					},
 					paymentInfo: {
 						method: paymentMethod.type,

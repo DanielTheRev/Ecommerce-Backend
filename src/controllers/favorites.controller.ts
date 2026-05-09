@@ -40,4 +40,29 @@ export class FavoritesController {
 			next(error);
 		}
 	}
+
+	// ==================== ADMIN ====================
+
+	static async getFavoritesByProduct(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const results = await FavoritesService.getFavoritesByProduct(req.models!);
+			res.status(200).json({ success: true, count: results.length, data: results });
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	static async notifyBackInStock(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { productId } = req.params;
+			const result = await FavoritesService.notifyBackInStock(req.models!, productId);
+			res.status(200).json({
+				success: true,
+				message: `Emails enviados a ${result.sentCount} usuarios`,
+				data: result
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
 }

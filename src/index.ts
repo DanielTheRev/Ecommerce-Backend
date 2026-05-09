@@ -23,6 +23,7 @@ import { socketManager } from './sockets/socketManager';
 import providerRoutes from './routes/provider.routes';
 import addressRoutes from './routes/address.routes';
 import favoritesRoutes from './routes/favorites.routes';
+import userRoutes from './routes/user.routes';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -126,6 +127,7 @@ app.use('/api/shop-the-look', resolveTenant, shopTheLookRoutes);
 app.use('/api/provider', resolveTenant, providerRoutes);
 app.use('/api/addresses', resolveTenant, addressRoutes);
 app.use('/api/favorites', resolveTenant, favoritesRoutes);
+app.use('/api/users', resolveTenant, userRoutes);
 
 // Error handler middleware
 app.use(errorMiddleware);

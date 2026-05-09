@@ -13,6 +13,11 @@ const EcommerceSchema = new Schema(
 		taxes: {
 			iva: { type: Number, default: 21 } // en argentina es 21%
 		},
+		costCurrency: {
+			type: String,
+			enum: ['USD', 'ARS'],
+			default: 'USD'
+		},
 		// Pasarelas de Pago
 		paymentGateways: {
 			uala: {
@@ -72,6 +77,9 @@ const EcommerceSchema = new Schema(
 			required: false,
 			default: []
 		}],
+		shippingConfig: {
+			freeShippingThreshold: { type: Number, default: 50000 }
+		},
 		// Metadata para el CMS
 		lastModifiedBy: { type: Schema.Types.ObjectId, ref: 'User', required: false }
 	},
