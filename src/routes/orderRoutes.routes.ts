@@ -15,6 +15,7 @@ import {
 	updateShippingStatus,
 	createLocalOrder,
 	getDailyStats,
+	getSalesStats,
 	getTicket,
 	trackOrder
 } from '../controllers/order.controller';
@@ -44,6 +45,7 @@ router.post('/updatePaymentStatus', protect, adminOnly, validateSchema(UpdatePay
 router.post('/updateShippingStatus', protect, adminOnly, validateSchema(UpdateShippingStatusSchema), updateShippingStatus); // actualizar estado de una order desde el cliente
 router.get('/admin/stats', protect, adminOnly, getOrderStats); // Obtener estadísticas (admin)
 router.get('/admin/daily-stats', protect, adminOnly, getDailyStats); // Obtener estadísticas diarias (admin)
+router.get('/admin/sales-stats', protect, adminOnly, getSalesStats); // Obtener estadísticas de ventas por rango (admin)
 router.post('/admin/local-sale', protect, adminOnly, createLocalOrder); // Crear venta local (admin/employee)
 router.get('/:id/ticket', protect, getTicket); // Obtener ticket PDF de venta
 

@@ -412,6 +412,25 @@ export const getDailyStats = async (req: AuthRequest, res: Response, next: NextF
 	}
 };
 
+// Obtener estadísticas de ventas por rango (solo admin)
+export const getSalesStats = async (req: AuthRequest, res: Response, next: NextFunction) => {
+	console.log('Get sales stats');
+	try {
+		const range = (req.query.range as 'day' | 'week' | 'month' | 'year') || 'day';
+		const date = req.query.date as string | undefined;
+
+		// Leer moneda de la config de la tienda
+		const config = await EcommerceService.getConfig(req.models!);
+		const currency = (config.costCurrency as 'USD' | 'ARS') || 'ARS';
+
+		const stats = await OrderService.getSalesStats(req.models!, range, date, currency);
+		return res.json(stats);
+	} catch (error) {
+		console.log(error);
+		return next(error);
+	}
+};
+
 // Rastreo de orden para clientes
 export const trackOrder = async (req: AuthRequest, res: Response, next: NextFunction) => {
 	console.log('Track order');

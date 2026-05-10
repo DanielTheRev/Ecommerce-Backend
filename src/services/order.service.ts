@@ -1278,4 +1278,174 @@ export class OrderService {
 			);
 		}
 	}
+
+	/**
+	 * Estadísticas de ventas por rango (día, semana, mes, año).
+	 * Solo incluye órdenes con paymentInfo.status === APPROVED.
+	 * Incluye ventas online y POS (saleType: LOCAL/ONLINE).
+	 */
+	static async getSalesStats(
+		models: TenantModels,
+		range: 'day' | 'week' | 'month' | 'year',
+		dateParam?: string,
+		currency: 'USD' | 'ARS' = 'ARS'
+	) {
+		try {
+			const targetDate = dateParam ? new Date(dateParam) : new Date();
+
+			// Calcular from/to según el rango
+			let from: Date;
+			let to: Date;
+
+			switch (range) {
+				case 'day':
+					from = new Date(targetDate);
+					from.setHours(0, 0, 0, 0);
+					to = new Date(targetDate);
+					to.setHours(23, 59, 59, 999);
+					break;
+				case 'week': {
+					from = new Date(targetDate);
+					const dayOfWeek = from.getDay();
+					from.setDate(from.getDate() - dayOfWeek);
+					from.setHours(0, 0, 0, 0);
+					to = new Date(from);
+					to.setDate(to.getDate() + 6);
+					to.setHours(23, 59, 59, 999);
+					break;
+				}
+				case 'month':
+					from = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1, 0, 0, 0, 0);
+					to = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0, 23, 59, 59, 999);
+					break;
+				case 'year':
+					from = new Date(targetDate.getFullYear(), 0, 1, 0, 0, 0, 0);
+					to = new Date(targetDate.getFullYear(), 11, 31, 23, 59, 59, 999);
+					break;
+			}
+
+			// Solo órdenes APROBADAS en el rango (fix del bug de getDailyStats)
+			const approvedOrders = await models.Order.find({
+				createdAt: { $gte: from, $lte: to },
+				'paymentInfo.status': PaymentStatus.APPROVED
+			})
+				.select(ADMIN_PRICE_SELECT)
+				.populate([
+					{ path: 'user', select: 'name email' },
+					{ path: 'items.productSnapshot.providerSnapshot', strictPopulate: false }
+				])
+				.lean();
+
+			// ── KPIs globales ───────────────────────────────────────────────────────
+			let totalRevenue = 0;
+			let totalEarnings = 0;
+			let totalCostPrice = 0;
+			let localSalesCount = 0;
+			let onlineSalesCount = 0;
+			const revenueByMethod: Record<string, number> = {};
+
+			// ── Daily breakdown (para el chart) ────────────────────────────────────
+			const breakdownMap = new Map<string, { revenue: number; earnings: number; count: number }>();
+
+			// ── Sales con detalle de comprador y proveedor ──────────────────────────
+			const salesWithDetails: any[] = [];
+
+			for (const order of approvedOrders) {
+				totalRevenue += order.total;
+				totalEarnings += Number(order.earnings) || 0;
+
+				if (order.saleType === SaleType.LOCAL) localSalesCount++;
+				else onlineSalesCount++;
+
+				// Ingresos por método de pago
+				if (order.splitPayments && order.splitPayments.length > 0) {
+					order.splitPayments.forEach((sp: any) => {
+						revenueByMethod[sp.method] = (revenueByMethod[sp.method] || 0) + sp.amount;
+					});
+				} else {
+					const method = order.paymentInfo?.method || 'unknown';
+					revenueByMethod[method] = (revenueByMethod[method] || 0) + order.total;
+				}
+
+				// Costo de proveedor por item (deuda al proveedor)
+				const itemsWithDetail: any[] = [];
+				for (const item of (order.items as any[])) {
+					const snapshot = item.productSnapshot;
+					const costPriceValue = currency === 'USD'
+						? (snapshot?.prices?.costPrice?.inUSD ?? 0)
+						: (snapshot?.prices?.costPrice?.inARS ?? 0);
+
+					totalCostPrice += costPriceValue * item.quantity;
+
+					itemsWithDetail.push({
+						productName: `${snapshot?.brand ?? ''} ${snapshot?.model ?? ''}`.trim(),
+						quantity: item.quantity,
+						unitPrice: item.price,
+						costPrice: costPriceValue,
+						provider: snapshot?.providerSnapshot
+							? { name: snapshot.providerSnapshot.name ?? 'Sin proveedor' }
+							: null
+					});
+				}
+
+				// Buyer info
+				const orderUser = order.user as any;
+				const buyer = orderUser
+					? { name: orderUser.name, email: orderUser.email }
+					: order.buyerData
+						? { name: `${order.buyerData.firstName} ${order.buyerData.lastName}`, email: order.buyerData.email }
+						: null;
+
+				salesWithDetails.push({
+					orderId: (order as any)._id.toString(),
+					orderNumber: order.orderNumber,
+					createdAt: (order as any).createdAt,
+					saleType: order.saleType,
+					total: order.total,
+					earnings: Number(order.earnings) || 0,
+					paymentMethod: order.paymentInfo?.method,
+					buyer,
+					items: itemsWithDetail
+				});
+
+				// Daily breakdown
+				const dayKey = new Date((order as any).createdAt).toISOString().split('T')[0];
+				const existing = breakdownMap.get(dayKey) || { revenue: 0, earnings: 0, count: 0 };
+				breakdownMap.set(dayKey, {
+					revenue: existing.revenue + order.total,
+					earnings: existing.earnings + (Number(order.earnings) || 0),
+					count: existing.count + 1
+				});
+			}
+
+			// Ordenar breakdown por fecha ascendente
+			const dailyBreakdown = Array.from(breakdownMap.entries())
+				.sort(([a], [b]) => a.localeCompare(b))
+				.map(([date, data]) => ({ date, ...data }));
+
+			// Ordenar ventas por fecha descendente (más recientes primero)
+			salesWithDetails.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+			return {
+				range,
+				from: from.toISOString(),
+				to: to.toISOString(),
+				currency,
+				totalRevenue,
+				totalEarnings,
+				totalCostPrice,
+				salesCount: {
+					total: approvedOrders.length,
+					local: localSalesCount,
+					online: onlineSalesCount
+				},
+				revenueByMethod,
+				dailyBreakdown,
+				salesWithDetails
+			};
+		} catch (error) {
+			console.error(error);
+			throw new AppError('Failed to get sales stats', 'Error al obtener las estadísticas de ventas', 500);
+		}
+	}
 }
