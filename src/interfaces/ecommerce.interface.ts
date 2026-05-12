@@ -1,11 +1,28 @@
+export type PricingMethod = 'markup' | 'margin';
+
+export interface IPricingStrategy {
+	/** 'markup' = sobre el costo (default), 'margin' = sobre el precio de venta */
+	method: PricingMethod;
+	/** Si true, el precio de transferencia incluye el gross-up de la comisión de pasarela (iguala con tarjeta 1 pago) */
+	transferGrossUp: boolean;
+	/** Si true, el vendedor absorbe el CFT de cuotas (cuotas sin interés). Si false, no ofrece cuotas. */
+	absorbInstallments: boolean;
+}
+
 export interface IEcommerceConfig {
 	key: string;
 	name?: string;
+	/** @deprecated Usar profit1Pay / profitInstallments. Se mantiene como fallback. */
 	profit: number;
+	/** Margen global para contado / transferencia / débito / 1 pago */
+	profit1Pay?: number;
+	/** Margen global para cuotas */
+	profitInstallments?: number;
 	costCurrency?: 'USD' | 'ARS';
 	taxes: {
 		iva: number;
 	};
+	pricingStrategy?: IPricingStrategy;
 	paymentGateways: IEcommercePaymentGateway;
 	callbackURLs: {
 		success: string;
@@ -91,6 +108,8 @@ export interface IEcommerceConfigPublic {
 	shippingConfig?: {
 		freeShippingThreshold: number;
 	};
+	/** El e-commerce necesita saber si se ofrecen cuotas sin interés */
+	absorbInstallments: boolean;
 	paymentGateways: {
 		mercadopago: {
 			publicKey: string;

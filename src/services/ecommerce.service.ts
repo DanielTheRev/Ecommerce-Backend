@@ -78,6 +78,7 @@ export class EcommerceService {
 				brands: publicConfig.brands,
 				categories: publicConfig.categories,
 				shippingConfig: publicConfig.shippingConfig,
+				absorbInstallments: publicConfig.pricingStrategy?.absorbInstallments ?? true,
 				paymentGateways: {
 					mercadopago: {
 						publicKey: publicConfig.paymentGateways?.mercadopago?.publicKey || '',
@@ -134,7 +135,7 @@ export class EcommerceService {
 		}
 	};
 
-	static updateConfig = async (models: TenantModels, data: IEcommerceConfig, userId?: string): Promise<IEcommerceConfig> => {
+	static updateConfig = async (models: TenantModels, data: IEcommerceConfig, userId?: string): Promise<{ config: IEcommerceConfig; shouldRecalculate: boolean }> => {
 		try {
 			// 1. Obtenemos la configuración antigua antes de actualizar
 			const oldConfig = await models.EcommerceConfig.findOne({ key: 'global_config' }).lean() as unknown as IEcommerceConfig;
@@ -164,22 +165,25 @@ export class EcommerceService {
 
 			const finalConfig = this.decryptEcommerceConfig(updatedConfig);
 
-			// 2. Comparamos los valores para ver si necesitamos recalcular todos los productos
+			// 2. Detectamos si algo que afecta precios cambió — devolvemos flag al frontend
+			// El vendedor decide si quiere recalcular (via modal de confirmación)
+			let shouldRecalculate = false;
 			if (oldConfig) {
 				const costCurrencyChanged = oldConfig.costCurrency !== finalConfig.costCurrency;
 				const profitChanged = oldConfig.profit !== finalConfig.profit;
+				const profit1PayChanged = oldConfig.profit1Pay !== finalConfig.profit1Pay;
+				const profitInstallmentsChanged = oldConfig.profitInstallments !== finalConfig.profitInstallments;
 				const ivaChanged = oldConfig.taxes?.iva !== finalConfig.taxes?.iva;
+				const pricingMethodChanged = oldConfig.pricingStrategy?.method !== finalConfig.pricingStrategy?.method;
+				const grossUpChanged = oldConfig.pricingStrategy?.transferGrossUp !== finalConfig.pricingStrategy?.transferGrossUp;
+				const absorbChanged = oldConfig.pricingStrategy?.absorbInstallments !== finalConfig.pricingStrategy?.absorbInstallments;
 
-				if (costCurrencyChanged || profitChanged || ivaChanged) {
-					// Disparamos el recálculo masivo en segundo plano de manera asíncrona
-					// no le ponemos await para no bloquear la respuesta HTTP
-					ProductService.recalculateAllProductsPrices(models, finalConfig).catch(err => {
-						console.error('Error in background mass recalculation:', err);
-					});
-				}
+				shouldRecalculate = costCurrencyChanged || profitChanged || profit1PayChanged
+					|| profitInstallmentsChanged || ivaChanged || pricingMethodChanged
+					|| grossUpChanged || absorbChanged;
 			}
 
-			return finalConfig;
+			return { config: finalConfig, shouldRecalculate };
 		} catch (error) {
 			console.log(error);
 			if (error instanceof AppError) throw error;
@@ -189,6 +193,14 @@ export class EcommerceService {
 				500
 			);
 		}
+	};
+
+	/**
+	 * Recálculo masivo de precios — invocado MANUALMENTE por el vendedor tras confirmar en el modal.
+	 */
+	static triggerPriceRecalculation = async (models: TenantModels): Promise<void> => {
+		const config = await this.getConfig(models);
+		await ProductService.recalculateAllProductsPrices(models, config);
 	};
 
 	static deleteConfig = async (models: TenantModels): Promise<void> => {

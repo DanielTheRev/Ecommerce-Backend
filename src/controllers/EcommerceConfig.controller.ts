@@ -105,12 +105,26 @@ export class EcommerceConfigController {
 			const data = req.body;
 			const userId = req.user ? (req.user._id as string).toString() : undefined;
 
-			const updatedConfig = await EcommerceService.updateConfig(req.models!, data, userId);
+			const { config: updatedConfig, shouldRecalculate } = await EcommerceService.updateConfig(req.models!, data, userId);
 
 			res.status(200).json({
 				success: true,
 				message: 'Configuración actualizada exitosamente',
-				data: updatedConfig
+				data: updatedConfig,
+				shouldRecalculate
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// POST /api/Ecommerce/config/recalculate-prices - Recálculo masivo manual
+	static async triggerRecalculation(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			await EcommerceService.triggerPriceRecalculation(req.models!);
+			res.status(200).json({
+				success: true,
+				message: 'Recálculo masivo de precios completado'
 			});
 		} catch (error) {
 			next(error);

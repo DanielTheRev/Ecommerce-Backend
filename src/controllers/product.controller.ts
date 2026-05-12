@@ -3,7 +3,7 @@ import { IProductCreateDTO, IProductSpec, ProductType } from '@/interfaces/produ
 import { IClothingVariant, ITechVariant } from '@/interfaces/variant.interface';
 import { AuthRequest } from '@/middleware/auth';
 import { getDolar } from '@/services/dolar.service';
-import { PaymentService } from '@/services/Payment.service';
+import { FinancialsService } from '@/services/Financials.service';
 import { ProductService } from '@/services/product.service';
 import { NextFunction, Response } from 'express';
 
@@ -238,16 +238,17 @@ export class ProductController {
 	// POST /api/products/calculate-prices - Calcular precios antes de guardar
 	static async calculatePrice(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
-			const { costPrice, customProfitMargin, customProfitMargin1Pay, customProfitMarginInstallments } = req.body;
+			const { costPrice, customProfitMargin, customProfitMargin1Pay, customProfitMarginInstallments, customPricingMethod } = req.body;
 			const { venta } = await getDolar();
-			const prices = await PaymentService.CalculatePrices({
+			const prices = await FinancialsService.CalculatePrices({
 				paymentProvider: EcommercePaymentProviders.MERCADOPAGO,
 				cost_price: costPrice,
 				dolar: venta,
 				models: req.models!,
 				customProfitMargin,
 				customProfitMargin1Pay,
-				customProfitMarginInstallments
+				customProfitMarginInstallments,
+				customPricingMethod
 			});
 
 			res.status(200).json(prices);

@@ -488,14 +488,9 @@ export class OrderService {
 					note: 'Pago acreditado automáticamente'
 				});
 
-				// Cálculo de ganancias preliminar
-				const mpConfig = config.paymentGateways.mercadopago;
+				// Usar las ganancias pre-calculadas por producto (respeta márgenes custom)
 				const mpInstallments = mercadopagoData.installments || 1;
-				const totalWithTaxes = finalCost / 1.21;
-				const commission = mpConfig.baseCommission;
-				const cft = (paymentMethodType === PaymentType.TICKET) ? 0 : (mpInstallments <= 3 ? mpConfig.cft3cuotas : mpConfig.cft6Cuotas);
-				const totalCost = totalWithTaxes * (1 - (commission + cft / 100));
-				order.earnings = finalCost - totalCost;
+				order.earnings = paymentService.getEarnings(mpInstallments);
 			}
 
 			extras = {

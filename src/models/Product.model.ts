@@ -68,6 +68,11 @@ const BaseProductSchema = new Schema(
 				default: 18.9,
 				select: false
 			},
+			customPricingMethod: {
+				type: String,
+				enum: ['markup', 'margin'],
+				select: false
+			},
 			efectivo_transferencia: {
 				type: Number,
 				required: true,

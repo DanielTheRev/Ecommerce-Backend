@@ -1,6 +1,7 @@
 import { Document, Types } from 'mongoose';
 import { IClothingVariant, ITechVariant, IVariant } from './variant.interface';
 import { IProvider } from './provider.interface';
+import { PricingMethod } from './ecommerce.interface';
 
 // ============ ENUMS ============
 
@@ -115,6 +116,8 @@ export interface IProductPrices {
 	profitMarginInstallments: number;
 	baseCommission: number;
 	cft6Cuotas: number;
+	/** Override del método de cálculo por producto ('markup' | 'margin'). Si undefined, usa el global. */
+	customPricingMethod?: PricingMethod;
 	earnings: {
 		cash_transfer: number;
 		card_1_installments: number;
@@ -154,6 +157,7 @@ export interface IProductCreateDTO {
 	customProfitMargin?: number;
 	customProfitMargin1Pay?: number;
 	customProfitMarginInstallments?: number;
+	customPricingMethod?: PricingMethod;
 	category: string;
 	features: string | string[];
 	specifications: string | IProductSpec[];

@@ -18,6 +18,7 @@ router.get('/mercadopago-methods', EcommerceConfigController.getMercadoPagoMetho
 router.get('/', EcommerceConfigController.getConfig);
 router.post('/', EcommerceConfigController.createConfig);
 router.put('/', EcommerceConfigController.updateConfig);
+router.post('/recalculate-prices', EcommerceConfigController.triggerRecalculation);
 router.delete('/', EcommerceConfigController.deleteConfig);
 
 export default router;

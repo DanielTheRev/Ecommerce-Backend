@@ -7,11 +7,35 @@ const EcommerceSchema = new Schema(
 		// Configuración de Ganancias
 		profit: {
 			type: Number,
-			default: 10, // por defecto el 10%
+			default: 10, // por defecto el 10% — fallback legacy
+			min: 0
+		},
+		profit1Pay: {
+			type: Number,
+			min: 0
+		},
+		profitInstallments: {
+			type: Number,
 			min: 0
 		},
 		taxes: {
 			iva: { type: Number, default: 21 } // en argentina es 21%
+		},
+		// Estrategia de Pricing — configurable por el vendedor
+		pricingStrategy: {
+			method: {
+				type: String,
+				enum: ['markup', 'margin'],
+				default: 'markup'
+			},
+			transferGrossUp: {
+				type: Boolean,
+				default: true
+			},
+			absorbInstallments: {
+				type: Boolean,
+				default: true
+			}
 		},
 		costCurrency: {
 			type: String,

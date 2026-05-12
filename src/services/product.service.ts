@@ -10,6 +10,7 @@ import slugify from 'slugify';
 import { getDolar } from './dolar.service';
 import { ImageService } from './images.service';
 import { PaymentService } from './Payment.service';
+import { FinancialsService } from './Financials.service';
 import { SkuService } from './sku.service';
 import { EcommerceService } from './ecommerce.service';
 
@@ -55,7 +56,7 @@ export class ProductService {
 		try {
 			const Model = this.getModel(models, productType);
 			const product = await Model.findById(id)
-				.select('+provider +prices.costPrice +prices.earnings +prices.dolarPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.profitMargin1Pay +prices.profitMarginInstallments')
+				.select('+provider  +prices.costPrice +prices.earnings +prices.customPricingMethod +prices.dolarPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.profitMargin1Pay +prices.profitMarginInstallments')
 				.populate('provider')
 				.lean() as unknown as IProduct;
 			return product;
@@ -429,7 +430,7 @@ export class ProductService {
 			const slug = this.generateSlug(data.brand, data.model);
 			const { venta } = await getDolar();
 
-			const prices = await PaymentService.CalculatePrices(
+			const prices = await FinancialsService.CalculatePrices(
 				{
 					paymentProvider: EcommercePaymentProviders.MERCADOPAGO,
 					cost_price: data.price,
@@ -437,7 +438,8 @@ export class ProductService {
 					models,
 					customProfitMargin: data.customProfitMargin,
 					customProfitMargin1Pay: data.customProfitMargin1Pay,
-					customProfitMarginInstallments: data.customProfitMarginInstallments
+					customProfitMarginInstallments: data.customProfitMarginInstallments,
+					customPricingMethod: data.customPricingMethod
 				}
 			);
 
@@ -571,14 +573,15 @@ export class ProductService {
 				const baseCost = isARS ? product.prices.costPrice.inARS : product.prices.costPrice.inUSD;
 
 				// Recalcular los precios usando la nueva configuración inyectada
-				const calculatedPrices = await PaymentService.CalculatePrices({
+				const calculatedPrices = await FinancialsService.CalculatePrices({
 					paymentProvider: EcommercePaymentProviders.MERCADOPAGO, // Por defecto MP
 					cost_price: baseCost,
 					dolar: dolarVenta,
 					models,
 					config, // Pasamos la configuración para evitar Múltiples queries
 					customProfitMargin1Pay: product.prices.profitMargin1Pay,
-					customProfitMarginInstallments: product.prices.profitMarginInstallments
+					customProfitMarginInstallments: product.prices.profitMarginInstallments,
+					customPricingMethod: product.prices.customPricingMethod
 				});
 
 				// Preparar la operación de actualización para MongoDB
@@ -694,7 +697,7 @@ export class ProductService {
 					? updateData.price
 					: (isARS ? product.prices.costPrice.inARS : product.prices.costPrice.inUSD);
 
-				const prices = await PaymentService.CalculatePrices(
+				const prices = await FinancialsService.CalculatePrices(
 					{
 						paymentProvider: EcommercePaymentProviders.MERCADOPAGO,
 						cost_price: currentPrice as number,
@@ -702,7 +705,8 @@ export class ProductService {
 						models,
 						customProfitMargin: currentCustomProfitMargin,
 						customProfitMargin1Pay: currentProfitMargin1Pay,
-						customProfitMarginInstallments: currentProfitMarginInstallments
+						customProfitMarginInstallments: currentProfitMarginInstallments,
+						customPricingMethod: updateData.customPricingMethod ?? product.prices.customPricingMethod
 					}
 				);
 				updateData.prices = prices;
