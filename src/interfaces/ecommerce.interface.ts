@@ -42,6 +42,7 @@ export interface IEcommerceConfig {
 	};
 	brands: string[],
 	categories: string[],
+	clothingFits?: string[],
 	shippingConfig?: {
 		freeShippingThreshold: number;
 	}
@@ -105,6 +106,7 @@ export interface IEcommerceConfigPublic {
 	};
 	brands: string[];
 	categories: string[];
+	clothingFits?: string[];
 	shippingConfig?: {
 		freeShippingThreshold: number;
 	};

@@ -16,8 +16,8 @@ const ClothingProductSchema = new Schema({
 	},
 	fit: {
 		type: String,
-		enum: Object.values(ClothingFit),
-		default: ClothingFit.Regular
+		required: false,
+		trim: true
 	},
 	material: {
 		type: String,

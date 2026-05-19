@@ -95,7 +95,7 @@ export const CreateProductSchema = z.object({
 
 		// Clothing-specific (opcionales)
 		gender: z.enum(genderValues).optional(),
-		fit: z.enum(fitValues).optional(),
+		fit: z.string().optional(),
 		material: z.string().optional(),
 		sizeType: z.enum(sizeTypeValues).optional(),
 		composition: jsonString.pipe(z.array(z.object({
@@ -164,7 +164,7 @@ export const UpdateProductSchema = z.object({
 
 		// Clothing-specific
 		gender: z.enum(genderValues).optional(),
-		fit: z.enum(fitValues).optional(),
+		fit: z.string().optional(),
 		material: z.string().optional(),
 		sizeType: z.enum(sizeTypeValues).optional(),
 		composition: jsonString.pipe(z.array(z.object({

@@ -101,6 +101,11 @@ const EcommerceSchema = new Schema(
 			required: false,
 			default: []
 		}],
+		clothingFits: [{
+			type: String,
+			required: false,
+			default: ['Regular', 'Slim', 'Oversized', 'Relaxed', 'Boxy', 'Straight', 'Tapered', 'Baggy']
+		}],
 		shippingConfig: {
 			freeShippingThreshold: { type: Number, default: 50000 }
 		},

@@ -81,7 +81,7 @@ export interface ITechProduct extends IProduct {
 export interface IClothingProduct extends IProduct {
 	productType: ProductType.CLOTHING;
 	gender: ClothingGender;
-	fit: ClothingFit;
+	fit?: string;
 	material: string;
 	composition?: { material: string; percentage: number }[];
 	sizeType: ClothingSizeType;
