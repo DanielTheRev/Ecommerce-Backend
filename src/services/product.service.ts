@@ -773,7 +773,7 @@ export class ProductService {
 			if (updateData.tags) updateData.tags = JSON.parse(updateData.tags as string);
 			if (updateData.careInstructions) updateData.careInstructions = JSON.parse(updateData.careInstructions as string);
 			if (updateData.composition) updateData.composition = JSON.parse(updateData.composition as string);
-			if (updateData.season) updateData.season = JSON.parse(updateData.season as string);
+			if (updateData.season) updateData.season = updateData.season as string;
 			// Parsear SEO si viene como JSON string
 			if (updateData.seo) updateData.seo = JSON.parse(updateData.seo as unknown as string);
 
