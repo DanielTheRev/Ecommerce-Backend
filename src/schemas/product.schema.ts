@@ -16,6 +16,23 @@ const jsonString = z.string().transform((str, ctx) => {
 	}
 });
 
+// Size Guide Schemas
+const SizeGuideRowSchema = z.object({
+	size: z.string().min(1, 'El talle es requerido'),
+	values: z.array(z.string()).min(1, 'Se requiere al menos un valor de medida')
+});
+
+const SizeGuideZodSchema = z.object({
+	headers: z.array(z.string().min(1)).min(2, 'Se requieren al menos 2 encabezados (talle + una medida)'),
+	rows: z.array(SizeGuideRowSchema).min(1, 'Se requiere al menos una fila'),
+	tolerance: z.string().optional()
+}).refine(data => {
+	const expectedValues = data.headers.length - 1; // first header is for the size column
+	return data.rows.every(row => row.values.length === expectedValues);
+}, {
+	message: 'La cantidad de valores en cada fila debe coincidir con la cantidad de encabezados (sin contar el talle)'
+});
+
 // Spec Schema
 const SpecSchema = z.object({
 	key: z.string().min(1, 'Key is required'),
@@ -102,6 +119,7 @@ export const CreateProductSchema = z.object({
 			material: z.string().min(1),
 			percentage: z.number().min(0).max(100)
 		}))).optional(),
+		sizeGuide: jsonString.pipe(SizeGuideZodSchema).optional(),
 		careInstructions: jsonString.pipe(z.array(z.string())).optional(),
 
 		// SEO (og_image llega como archivo separado, no se valida aquí)
@@ -171,6 +189,7 @@ export const UpdateProductSchema = z.object({
 			material: z.string().min(1),
 			percentage: z.number().min(0).max(100)
 		}))).optional(),
+		sizeGuide: jsonString.pipe(SizeGuideZodSchema.nullable()).optional(),
 		careInstructions: jsonString.pipe(z.array(z.string())).optional(),
 		season: z.string().optional(),
 

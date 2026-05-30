@@ -2,6 +2,7 @@ import { Schema } from 'mongoose';
 import { Product } from '../Product.model';
 import { ClothingFit, ClothingGender, ClothingSizeType } from '@/interfaces/product.interface';
 import { ClothingVariantSchema } from '../schemas/clothingVariant.schema';
+import { SizeGuideSchema } from '../schemas/sizeGuide.schema';
 
 const CompositionSchema = new Schema({
 	material: { type: String, required: true },
@@ -28,6 +29,10 @@ const ClothingProductSchema = new Schema({
 		type: String,
 		enum: Object.values(ClothingSizeType),
 		default: ClothingSizeType.Ropa
+	},
+	sizeGuide: {
+		type: SizeGuideSchema,
+		required: false
 	},
 	careInstructions: [{ type: String }],
 	season: {

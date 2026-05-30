@@ -1,7 +1,7 @@
 import { TenantModels } from '@/config/modelRegistry';
 import { AppError } from '@/errors/app.error';
 import { EcommercePaymentProviders } from '@/interfaces/ecommerce.interface';
-import { IProduct, IProductCreateDTO, IProductUpdateDTO, ProductType } from '@/interfaces/product.interface';
+import { IProduct, IProductCreateDTO, IProductUpdateDTO, ISizeGuide, ProductType } from '@/interfaces/product.interface';
 import { paginate } from '@/utils/pagination.util';
 import createDOMPurify from 'dompurify';
 import { JSDOM } from 'jsdom';
@@ -529,6 +529,7 @@ export class ProductService {
 				if (data.material) baseData.material = data.material;
 				if (data.composition) baseData.composition = data.composition;
 				if (data.sizeType) baseData.sizeType = data.sizeType;
+				if (data.sizeGuide) baseData.sizeGuide = typeof data.sizeGuide === 'string' ? JSON.parse(data.sizeGuide) : data.sizeGuide;
 				if (data.careInstructions) baseData.careInstructions = data.careInstructions;
 				if (data.season) baseData.season = data.season;
 			}
@@ -739,6 +740,9 @@ export class ProductService {
 					return v;
 				});
 
+				/* Sizes Guide */
+				if(updateData.sizeGuide) updateData.sizeGuide = JSON.parse(updateData.sizeGuide as string) as ISizeGuide;
+
 				// ── Auto-generar SKUs para variantes NUEVAS ──
 				const existingVariants = processedVariants.filter((v: any) => v._id);
 				const newVariants = processedVariants.filter((v: any) => !v._id);
@@ -773,6 +777,7 @@ export class ProductService {
 			if (updateData.tags) updateData.tags = JSON.parse(updateData.tags as string);
 			if (updateData.careInstructions) updateData.careInstructions = JSON.parse(updateData.careInstructions as string);
 			if (updateData.composition) updateData.composition = JSON.parse(updateData.composition as string);
+			if (updateData.sizeGuide) updateData.sizeGuide = typeof updateData.sizeGuide === 'string' ? JSON.parse(updateData.sizeGuide) : updateData.sizeGuide;
 			if (updateData.season) updateData.season = updateData.season as string;
 			// Parsear SEO si viene como JSON string
 			if (updateData.seo) updateData.seo = JSON.parse(updateData.seo as unknown as string);
@@ -816,10 +821,19 @@ export class ProductService {
 
 			console.log(`Aplicando update sobre el modelo estricto: ${TargetModel.modelName}`);
 
+			// Construir la operación de update
+			const updateOp: any = { $set: updateData };
+
+			// Si sizeGuide es null, lo removemos del documento con $unset
+			if ((updateData as any).sizeGuide === null) {
+				delete (updateData as any).sizeGuide;
+				updateOp.$unset = { sizeGuide: '' };
+			}
+
 			// 2. Ejecutamos la actualización sobre el TargetModel en vez de models.Product
 			const updatedProduct = await TargetModel.findByIdAndUpdate(
 				id,
-				{ $set: updateData },
+				updateOp,
 				{
 					new: true,
 					runValidators: true,

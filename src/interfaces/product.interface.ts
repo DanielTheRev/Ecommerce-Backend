@@ -85,9 +85,23 @@ export interface IClothingProduct extends IProduct {
 	material: string;
 	composition?: { material: string; percentage: number }[];
 	sizeType: ClothingSizeType;
+	sizeGuide?: ISizeGuide;
 	careInstructions?: string[];
 	season?: string;
 	variants: IClothingVariant[];
+}
+
+// ============ SIZE GUIDE ============
+
+export interface ISizeGuideRow {
+	size: string;
+	values: string[];
+}
+
+export interface ISizeGuide {
+	headers: string[];
+	rows: ISizeGuideRow[];
+	tolerance?: string;
 }
 
 // ============ SUB-INTERFACES ============
@@ -177,6 +191,7 @@ export interface IProductCreateDTO {
 	material?: string;
 	composition?: string | { material: string; percentage: number }[];
 	sizeType?: string;
+	sizeGuide?: string | ISizeGuide;
 	careInstructions?: string | string[];
 	seo?: Partial<IProductSeo>;
 	season?: string;
