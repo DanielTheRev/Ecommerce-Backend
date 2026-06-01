@@ -1,6 +1,7 @@
 import { IShippingInfo } from '@/interfaces/order.interface';
 import { ShippingType } from '@/interfaces/shippingMethods.interface';
 import mongoose, { Schema } from 'mongoose';
+import { shippingAddressSchema } from './shippingAddress.schema';
 
 export const shippingInfoSchema = new Schema<IShippingInfo>({
   type: {
@@ -18,12 +19,12 @@ export const shippingInfoSchema = new Schema<IShippingInfo>({
       trim: true
     }
   },
-  // shippingAddress: {
-  // 	type: shippingAddressSchema,
-  // 	required: function () {
-  // 		return this.type === ShippingType.HOME_DELIVERY;
-  // 	}
-  // },
+  shippingAddress: {
+    type: shippingAddressSchema,
+    required: function () {
+      return this.type === ShippingType.HOME_DELIVERY;
+    }
+  },
   shippedAt: { type: Date },
   deliveredAt: { type: Date },
   cost: {

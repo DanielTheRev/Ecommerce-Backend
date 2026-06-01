@@ -5,7 +5,7 @@ import { Product } from '../models/Product.model';
 import { TechProduct } from '../models/discriminators/TechProduct.discriminator';
 import { ClothingProduct } from '../models/discriminators/ClothingProduct.discriminator';
 import { getDolar } from '@/services/dolar.service';
-import { PaymentService } from '@/services/Payment.service';
+import { FinancialsService } from '@/services/Financials.service';
 import { EcommercePaymentProviders } from '@/interfaces/ecommerce.interface';
 import slugify from 'slugify';
 
@@ -307,7 +307,7 @@ const seedDatabase = async (): Promise<void> => {
 		// Insert Tech products
 		for (const item of techData) {
 			try {
-				const prices = await PaymentService.CalculatePrices(EcommercePaymentProviders.UALA, item.price, venta);
+				const prices = await FinancialsService.CalculatePrices({ paymentProvider: EcommercePaymentProviders.UALA, cost_price: item.price, dolar: venta });
 				await TechProduct.create({
 					slug: genSlug(item.brand, item.model),
 					brand: item.brand, model: item.model, category: item.category,
@@ -325,7 +325,7 @@ const seedDatabase = async (): Promise<void> => {
 		let clothCreated = 0;
 		for (const item of clothingData) {
 			try {
-				const prices = await PaymentService.CalculatePrices(EcommercePaymentProviders.UALA, item.price, venta);
+				const prices = await FinancialsService.CalculatePrices({ paymentProvider: EcommercePaymentProviders.UALA, cost_price: item.price, dolar: venta });
 				await ClothingProduct.create({
 					slug: genSlug(item.brand, item.model),
 					brand: item.brand, model: item.model, category: item.category,

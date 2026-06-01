@@ -247,6 +247,7 @@ export class OrderService {
 					shippingInfo: {
 						type: shippingMethod.type,
 						pickupPoint: data.shippingMethod.pickupPoint,
+						shippingAddress: data.shippingMethod.address,
 						cost: appliedShippingCost
 					},
 					paymentInfo: {

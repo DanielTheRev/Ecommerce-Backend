@@ -21,7 +21,17 @@ export const CreateOrderSchema = z.object({
 				_id: z.string().optional(),
 				name: z.string().optional(),
 				address: z.string().optional()
-			}).optional(),
+			}).optional().nullable(),
+			address: z.object({
+				recipientName: z.string().min(1, 'El nombre del destinatario es requerido'),
+				street: z.string().min(1, 'La calle es requerida'),
+				number: z.string().min(1, 'El número es requerido'),
+				apartment: z.string().optional().nullable().or(z.literal('')),
+				city: z.string().min(1, 'La ciudad es requerida'),
+				state: z.string().min(1, 'La provincia es requerida'),
+				zipCode: z.string().min(1, 'El código postal es requerido'),
+				phone: z.string().min(1, 'El teléfono es requerido')
+			}).optional().nullable()
 		}),
 
 		paymentMethod: z.object({
@@ -32,7 +42,7 @@ export const CreateOrderSchema = z.object({
 		formPayerData: z.object({
 			firstName: z.string(),
 			lastName: z.string(),
-			email: z.email(),
+			email: z.string().email(),
 			identificationType: z.string().min(1).optional(),
 			identificationNumber: z.string().min(1).optional()
 		}),
@@ -43,7 +53,7 @@ export const CreateOrderSchema = z.object({
 			installments: z.number().int().positive().optional(),
 			type: z.string(),
 			payer: z.object({
-				email: z.email(),
+				email: z.string().email(),
 				first_name: z.string().optional(),
 				last_name: z.string().optional()
 			}).optional(),
@@ -53,7 +63,18 @@ export const CreateOrderSchema = z.object({
 			}).optional()
 		}).optional()
 	})
-});
+}).refine(
+	(data) => {
+		if (data.body.shippingMethod.type === ShippingType.HOME_DELIVERY) {
+			return !!data.body.shippingMethod.address;
+		}
+		return true;
+	},
+	{
+		message: 'La dirección de envío es requerida para envíos a domicilio',
+		path: ['body', 'shippingMethod', 'address']
+	}
+);
 
 export const UpdatePaymentStatusSchema = z.object({
 	body: z.object({

@@ -12,8 +12,9 @@ export interface CreateOrderDTO {
 	shippingMethod: {
 		_id: string;
 		type: ShippingType;
-		pickupPoint: IPickupPoint;
+		pickupPoint?: IPickupPoint;
 		cost: number;
+		address?: IShippingAddress;
 	};
 	paymentMethod: {
 		_id: string;
@@ -141,14 +142,16 @@ export interface IProductSnapshot {
 }
 
 // Interface for shipping address
-// export interface IShippingAddress {
-// 	street: string;
-// 	city: string;
-// 	state: string;
-// 	postalCode: string;
-// 	country: string;
-// 	phone?: string;
-// }
+export interface IShippingAddress {
+	recipientName: string;
+	street: string;
+	number: string;
+	apartment?: string;
+	city: string;
+	state: string;
+	zipCode: string;
+	phone: string;
+}
 
 
 
@@ -159,7 +162,7 @@ export interface IShippingInfo {
 		name: string;
 		address: string;
 	};
-	// shippingAddress?: IShippingAddress;
+	shippingAddress?: IShippingAddress;
 	cost: number;
 	shippedAt: Date;
 	deliveredAt: Date;

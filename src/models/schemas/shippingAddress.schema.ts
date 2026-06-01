@@ -1,34 +1,46 @@
 import mongoose, { Schema } from 'mongoose';
 
-export const shippingAddressSchema = new Schema({
-  street: {
-    type: String,
-    required: true,
-    trim: true
+export const shippingAddressSchema = new Schema(
+  {
+    recipientName: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    street: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    number: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    apartment: {
+      type: String,
+      trim: true
+    },
+    city: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    state: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    zipCode: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    phone: {
+      type: String,
+      required: true,
+      trim: true
+    }
   },
-  city: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  state: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  postalCode: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  country: {
-    type: String,
-    required: true,
-    trim: true,
-    default: 'Argentina'
-  },
-  phone: {
-    type: String,
-    trim: true
-  }
-});
+  { _id: false }
+);
