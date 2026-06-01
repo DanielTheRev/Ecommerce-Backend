@@ -40,10 +40,14 @@ export class ProductService {
 
 	// ============ READ METHODS ============
 
-	static async getAllProducts(models: TenantModels, productType?: string): Promise<IProduct[]> {
+	static async getAllProducts(models: TenantModels, productType?: string, isActive: boolean = true): Promise<IProduct[]> {
 		try {
 			const Model = this.getModel(models, productType);
-			const products = (await Model.find().lean()) as unknown as IProduct[];
+			const query: any = {};
+			if (isActive) {
+				query.isActive = true;
+			}
+			const products = (await Model.find(query).lean()) as unknown as IProduct[];
 			return products;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
@@ -110,6 +114,14 @@ export class ProductService {
 			for (const item of items) {
 				const product = products.find(p => p._id.toString() === item._id.toString());
 				if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
+
+				if (product.isActive === false) {
+					throw new AppError(
+						`Product ${product.brand} ${product.model} is inactive`,
+						`El producto ${product.brand} ${product.model} está inactivo`,
+						400
+					);
+				}
 
 				const variant = product.variants?.find((v: any) => v.sku === item.sku && v.isActive !== false) as any;
 				if (!variant) {
@@ -226,7 +238,7 @@ export class ProductService {
 	static async getAllProductSlugs(models: TenantModels): Promise<{ slug: string }[]> {
 		try {
 			// Explicitly exclude _id and the discriminator key (productType)
-			const products = await models.Product.find({}).select('slug -_id -productType').lean() as unknown as { slug: string }[];
+			const products = await models.Product.find({ isActive: true }).select('slug -_id -productType').lean() as unknown as { slug: string }[];
 			return products;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
@@ -237,7 +249,7 @@ export class ProductService {
 	static async getPaginatedProducts(models: TenantModels, page: number = 1, limit: number = 20, productType?: string, category?: string) {
 		try {
 			const Model = this.getModel(models, productType);
-			const query: any = {};
+			const query: any = { isActive: true };
 			if (category) {
 				query.category = category;
 			}
@@ -294,7 +306,7 @@ export class ProductService {
 
 	static async getProductBySlug(models: TenantModels, slug: string): Promise<IProduct> {
 		try {
-			const product = (await models.Product.findOne({ slug }).lean()) as unknown as IProduct;
+			const product = (await models.Product.findOne({ slug, isActive: true }).lean()) as unknown as IProduct;
 			if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
 			return product;
 		} catch (error) {
@@ -307,6 +319,7 @@ export class ProductService {
 		try {
 			const Model = this.getModel(models, productType);
 			const query = {
+				isActive: true,
 				$or: [
 					{ brand: { $regex: queryText, $options: 'i' } },
 					{ model: { $regex: queryText, $options: 'i' } }

@@ -12,6 +12,7 @@ export interface IPricingStrategy {
 export interface IEcommerceConfig {
 	key: string;
 	name?: string;
+	logo?: string;
 	/** @deprecated Usar profit1Pay / profitInstallments. Se mantiene como fallback. */
 	profit: number;
 	/** Margen global para contado / transferencia / débito / 1 pago */
@@ -93,6 +94,7 @@ export enum EcommercePaymentProviders {
 }
 
 export interface IEcommerceConfigPublic {
+	logo?: string;
 	contact: {
 		email: string;
 		phone: string;

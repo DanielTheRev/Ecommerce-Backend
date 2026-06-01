@@ -12,13 +12,16 @@ export class FavoritesService {
 		const favorites = await models.Favorite.find({ user: userId })
 			.populate({
 				path: 'product',
+				match: { isActive: true },
 				select: 'brand model images prices discount slug productType isActive isFeatured category'
 			})
 			.sort({ createdAt: -1 })
 			.lean()
 			.exec();
 
-		return favorites.map(fav => ({
+		const activeFavorites = favorites.filter((fav: any) => fav.product !== null);
+
+		return activeFavorites.map(fav => ({
 			...fav,
 			_id: fav._id.toString()
 		})) as unknown as IFavorite[];
@@ -29,10 +32,10 @@ export class FavoritesService {
 	 * Es idempotente: si ya existe, devuelve el favorito existente sin lanzar error.
 	 */
 	static async addFavorite(models: TenantModels, userId: string, productId: string): Promise<IFavorite> {
-		// Verificar que el producto existe
-		const product = await models.Product.findById(productId).lean().exec();
+		// Verificar que el producto existe y está activo
+		const product = await models.Product.findOne({ _id: productId, isActive: true }).lean().exec();
 		if (!product) {
-			throw new AppError('Product not found', 'El producto no existe', 404);
+			throw new AppError('Product not found or inactive', 'El producto no existe o está inactivo', 404);
 		}
 
 		// findOneAndUpdate con upsert para evitar duplicados de forma atómica
@@ -43,6 +46,7 @@ export class FavoritesService {
 		)
 			.populate({
 				path: 'product',
+				match: { isActive: true },
 				select: 'brand model images prices discount slug productType isActive isFeatured category'
 			})
 			.lean()
@@ -69,6 +73,10 @@ export class FavoritesService {
 	 * Chequea si un producto es favorito del usuario.
 	 */
 	static async isFavorite(models: TenantModels, userId: string, productId: string): Promise<boolean> {
+		// Verificar que el producto existe y está activo
+		const product = await models.Product.findOne({ _id: productId, isActive: true }).lean().exec();
+		if (!product) return false;
+
 		const exists = await models.Favorite.exists({ user: userId, product: productId });
 		return !!exists;
 	}
@@ -180,7 +188,8 @@ export class FavoritesService {
 			const success = await ResendService.sendBackInStockEmail(
 				user.email,
 				user.name || 'Cliente',
-				productData
+				productData,
+				models
 			);
 
 			if (success) {

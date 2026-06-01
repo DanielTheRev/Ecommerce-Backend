@@ -7,6 +7,10 @@ export const createPaymentSchema = z.object({
 		name: z.string(),
 		description: z.string().optional(),
 		isActive: z.boolean().optional().default(true),
+		alias: z.string().optional(),
+		cbuCvu: z.string().optional(),
+		bankName: z.string().optional(),
+		titular: z.string().optional(),
 	})
 });
 
@@ -16,5 +20,9 @@ export const updatePaymentSchema = z.object({
 		name: z.string().optional(),
 		description: z.string().optional(),
 		isActive: z.boolean().optional(),
+		alias: z.string().optional(),
+		cbuCvu: z.string().optional(),
+		bankName: z.string().optional(),
+		titular: z.string().optional(),
 	})
 });

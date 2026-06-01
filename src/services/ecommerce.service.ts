@@ -73,6 +73,7 @@ export class EcommerceService {
 			}
 
 			const data: IEcommerceConfigPublic = {
+				logo: publicConfig.logo || '',
 				contact: publicConfig.contact!,
 				social: publicConfig.social!,
 				brands: publicConfig.brands,

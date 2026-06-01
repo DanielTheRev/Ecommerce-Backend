@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { EcommerceConfigController } from '@/controllers/EcommerceConfig.controller';
 import { protect, adminOnly } from '@/middleware/auth';
+import multer from 'multer';
 
+const upload = multer();
 const router: Router = Router();
 
 router.get(
@@ -18,6 +20,7 @@ router.get('/mercadopago-methods', EcommerceConfigController.getMercadoPagoMetho
 router.get('/', EcommerceConfigController.getConfig);
 router.post('/', EcommerceConfigController.createConfig);
 router.put('/', EcommerceConfigController.updateConfig);
+router.patch('/logo', upload.single('logo'), EcommerceConfigController.updateLogo);
 router.post('/recalculate-prices', EcommerceConfigController.triggerRecalculation);
 router.delete('/', EcommerceConfigController.deleteConfig);
 

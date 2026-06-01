@@ -7,8 +7,22 @@ export class ShopTheLookService {
 	static async getActiveLooks(models: TenantModels): Promise<IShopTheLookDocument[]> {
 		try {
 			const looks = await models.ShopTheLook.find()
-				.populate('looks.hotspots.product')
-				.lean();
+				.populate({
+					path: 'looks.hotspots.product',
+					match: { isActive: true }
+				})
+				.lean() as any[];
+
+			looks.forEach((look: any) => {
+				if (look.looks) {
+					look.looks.forEach((l: any) => {
+						if (l.hotspots) {
+							l.hotspots = l.hotspots.filter((h: any) => h.product !== null);
+						}
+					});
+				}
+			});
+
 			return looks as unknown as IShopTheLookDocument[];
 		} catch (error) {
 			throw new AppError('Error fetching Shop The Look items', 'Error al obtener las campañas', 500);
@@ -18,11 +32,23 @@ export class ShopTheLookService {
 	static async getLookById(models: TenantModels, lookId: string): Promise<IShopTheLookDocument> {
 		try {
 			const look = await models.ShopTheLook.findById(lookId)
-				.populate('looks.hotspots.product')
-				.lean();
+				.populate({
+					path: 'looks.hotspots.product',
+					match: { isActive: true }
+				})
+				.lean() as any;
 			if (!look) {
 				throw new AppError('Look not found', 'Campaña no encontrada', 404);
 			}
+
+			if (look.looks) {
+				look.looks.forEach((l: any) => {
+					if (l.hotspots) {
+						l.hotspots = l.hotspots.filter((h: any) => h.product !== null);
+					}
+				});
+			}
+
 			return look as unknown as IShopTheLookDocument;
 		} catch (error) {
 			if (error instanceof AppError) throw error;

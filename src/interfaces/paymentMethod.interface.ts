@@ -14,6 +14,10 @@ export interface IPaymentMethod {
 	name: string;
 	description?: string;
 	isActive: boolean;
+	alias?: string;
+	cbuCvu?: string;
+	bankName?: string;
+	titular?: string;
 	createdAt: Date;
 	updatedAt: Date;
 }

@@ -21,6 +21,22 @@ const paymentMethodSchema = new Schema<IPaymentMethod>(
 		isActive: {
 			type: Boolean,
 			default: true
+		},
+		alias: {
+			type: String,
+			trim: true
+		},
+		cbuCvu: {
+			type: String,
+			trim: true
+		},
+		bankName: {
+			type: String,
+			trim: true
+		},
+		titular: {
+			type: String,
+			trim: true
 		}
 	},
 	{

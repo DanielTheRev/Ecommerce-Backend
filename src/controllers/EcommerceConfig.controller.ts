@@ -2,6 +2,7 @@ import { NextFunction, Response } from 'express';
 import { Auth0MercadoPago, AuthRequest } from '@/middleware/auth';
 import { EcommerceService } from '@/services/ecommerce.service';
 import { MercadoPagoService } from '@/services/mercadopago.service';
+import { AppError } from '@/errors/app.error';
 
 export class EcommerceConfigController {
 
@@ -112,6 +113,35 @@ export class EcommerceConfigController {
 				message: 'Configuración actualizada exitosamente',
 				data: updatedConfig,
 				shouldRecalculate
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// PATCH /api/Ecommerce/config/logo - Actualizar logotipo
+	static async updateLogo(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			if (!req.file) {
+				throw new AppError('Logo file is required', 'El archivo del logo es requerido', 400);
+			}
+
+			const { ImageService } = await import('@/services/images.service');
+			const tenantSlug = req.tenant?.slug || 'global';
+			const uploadedLogo = await ImageService.UploadImage(req.file, 'logo', `${tenantSlug}/config`);
+
+			const userId = req.user ? (req.user._id as string).toString() : undefined;
+
+			const { config: updatedConfig } = await EcommerceService.updateConfig(
+				req.models!,
+				{ logo: uploadedLogo.secure_url } as any,
+				userId
+			);
+
+			res.status(200).json({
+				success: true,
+				message: 'Logotipo actualizado exitosamente',
+				logo: updatedConfig.logo
 			});
 		} catch (error) {
 			next(error);

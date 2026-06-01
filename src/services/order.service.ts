@@ -253,12 +253,12 @@ export class OrderService {
 						method: paymentMethod.type,
 						amount: finalCost
 					},
-					buyerData: user ? {
+					buyerData: (user && !(data.isThirdPartyPayer && data.formPayerData)) ? {
 						firstName: user.name.split(' ')[0],
 						lastName: user.name.split(' ')[1],
 						email: user.email,
-						identificationType: '',
-						identificationNumber: ''
+						identificationType: data.formPayerData.identificationType || '',
+						identificationNumber: data.formPayerData.identificationNumber || ''
 					} : data.formPayerData,
 					total: finalCost,
 					orderNumber: this.generateOrderNumber(),
@@ -288,10 +288,27 @@ export class OrderService {
 					provider: 'manual',
 					name: paymentMethod.name || 'Manual',
 					instructions: paymentMethod.description || 'Pendiente de confirmación manual',
-					status: 'waiting_confirmation'
+					status: 'waiting_confirmation',
+					alias: (paymentMethod as any).alias,
+					cbuCvu: (paymentMethod as any).cbuCvu,
+					bankName: (paymentMethod as any).bankName,
+					titular: (paymentMethod as any).titular
 				};
 				newOrder.paymentInfo.status = PaymentStatus.PENDING;
 				await newOrder.save();
+
+				// Disparar envío de correo automático para transferencias bancarias o alias
+				if (
+					paymentMethod.type === PaymentType.BANK_TRANSFER ||
+					paymentMethod.type === PaymentType.ALIAS_TRANSFER
+				) {
+					ResendService.sendTransferEmail({
+						order: newOrder.toObject() as unknown as IOrder,
+						isThirdParty: !!data.isThirdPartyPayer,
+						models
+					})
+						.catch(err => console.error('Error enviando email de transferencia:', err));
+				}
 			}
 
 			const safeOrder = this.buildSafeOrder(newOrder);
@@ -639,7 +656,7 @@ export class OrderService {
 			const orderUpdated = await order.save();
 
 			if (data.status === PaymentStatus.APPROVED) {
-				await ResendService.sendPaymentReceivedEmail(orderUpdated.toObject() as unknown as IOrder);
+				await ResendService.sendPaymentReceivedEmail(orderUpdated.toObject() as unknown as IOrder, models);
 			}
 
 			return orderUpdated;
@@ -704,9 +721,9 @@ export class OrderService {
 
 			if (oldStatus !== order.status) {
 				if (order.status === OrderStatus.SHIPPED) {
-					await ResendService.sendOrderShippedEmail(orderUpdated.toObject() as unknown as IOrder);
+					await ResendService.sendOrderShippedEmail(orderUpdated.toObject() as unknown as IOrder, models);
 				} else if (order.status === OrderStatus.DELIVERED) {
-					await ResendService.sendOrderDeliveredEmail(orderUpdated.toObject() as unknown as IOrder);
+					await ResendService.sendOrderDeliveredEmail(orderUpdated.toObject() as unknown as IOrder, models);
 				}
 			}
 

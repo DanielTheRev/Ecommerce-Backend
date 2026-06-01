@@ -30,8 +30,8 @@ export const CreateOrderSchema = z.object({
 		}),
 
 		formPayerData: z.object({
-			firstName: z.string().min(1),
-			lastName: z.string().min(1),
+			firstName: z.string(),
+			lastName: z.string(),
 			email: z.email(),
 			identificationType: z.string().min(1).optional(),
 			identificationNumber: z.string().min(1).optional()

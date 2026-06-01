@@ -20,6 +20,7 @@ export interface CreateOrderDTO {
 		type: PaymentType;
 	};
 	formPayerData: IFormPayerData,
+	isThirdPartyPayer?: boolean; // Para diferenciar entre comprador y pagador en casos de terceros
 	mercadopagoData?: {
 		token?: string;
 		payment_method_id: string;
@@ -282,6 +283,10 @@ export interface ManualPaymentExtras {
 	name: string;
 	instructions: string;
 	status: 'waiting_confirmation';
+	alias?: string;
+	cbuCvu?: string;
+	bankName?: string;
+	titular?: string;
 }
 
 export type CreateOrderExtras = MercadoPagoExtras | UalaExtras | ManualPaymentExtras;

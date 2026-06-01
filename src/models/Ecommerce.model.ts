@@ -4,6 +4,7 @@ const EcommerceSchema = new Schema(
 	{
 		key: { type: String, default: 'global_config' },
 		name: { type: String, required: false, default: 'Mi Tienda' },
+		logo: { type: String, required: false, default: '' },
 		// Configuración de Ganancias
 		profit: {
 			type: Number,
