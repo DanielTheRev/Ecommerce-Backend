@@ -2,6 +2,7 @@ import { NotificationSeverity, NotificationType } from '@/interfaces/notificatio
 import {
 	CreateOrderDTO,
 	PayOrderDTO,
+	PaymentStatus,
 	updatePaymentStatusDTO,
 	updateShippingStatusDTO
 } from '@/interfaces/order.interface';
@@ -79,23 +80,49 @@ export const mercadopagoWebhook = async (req: AuthRequest, res: Response) => {
 				const internalOrderId = mpOrder.external_reference;
 
 				if (internalOrderId) {
-					// Buscamos si hay pagos aprobados en esta orden
-					console.log('mpOrder');
-					console.log(JSON.stringify(mpOrder));
-					// const approvedPayment = mpOrder.transactions?.payments?.find((p: any) => p.status === 'approved');
-					const approvedPayment = mpOrder.status_detail === 'accredited' && mpOrder.status === 'processed';
+					console.log('mpOrder received via webhook:', JSON.stringify(mpOrder));
+					const latestPayment = mpOrder.transactions?.payments?.[0];
 
-					if (approvedPayment) {
-						const order = await OrderService.confirmMercadoPagoPayment(req.models!, internalOrderId, mpOrder.transactions.payments[0]);
-						console.log(`✅ Pago de MercadoPago procesado: ${mpOrder.id} para la orden: ${internalOrderId}`);
+					if (latestPayment) {
+						const order = await OrderService.confirmMercadoPagoPayment(req.models!, internalOrderId, latestPayment);
+						console.log(`✅ Pago de MercadoPago procesado por webhook: ${mpOrder.id} (Estado: ${latestPayment.status}) para la orden: ${internalOrderId}`);
 
 						if (req.tenant) {
 							socketManager.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'payment');
+							
+							// Notificar al cliente si está autenticado
+							if (order.user) {
+								const userId = (order.user as any)._id?.toString() || (order.user as any).toString();
+								
+								let clientNotificationType = NotificationType.ORDER_STATUS_CHANGED;
+								let clientNotificationTitle = 'Actualización de Pago';
+								let clientNotificationMessage = `El estado de tu pago es: ${order.paymentInfo.status}`;
+								let severity = NotificationSeverity.INFO;
+
+								if (order.paymentInfo.status === PaymentStatus.APPROVED) {
+									clientNotificationType = NotificationType.PAYMENT_SUCCESS;
+									clientNotificationTitle = 'Pago Aprobado';
+									clientNotificationMessage = `Tu pago de $${order.total} fue aprobado correctamente.`;
+									severity = NotificationSeverity.SUCCESS;
+								} else if (order.paymentInfo.status === PaymentStatus.REJECTED) {
+									clientNotificationType = NotificationType.PAYMENT_FAILED;
+									clientNotificationTitle = 'Pago Rechazado';
+									clientNotificationMessage = `Tu pago no pudo ser procesado. Podés intentar nuevamente.`;
+									severity = NotificationSeverity.ERROR;
+								}
+
+								socketManager.notifyClient(userId, {
+									type: clientNotificationType,
+									title: clientNotificationTitle,
+									message: clientNotificationMessage,
+									severity,
+									link: `/orders/${order._id}`,
+									data: order
+								});
+							}
 						}
-
-
 					} else {
-						console.log(`ℹ️ Orden de MP ${mpOrderId} recibida, pero sin pagos aprobados aún.`);
+						console.log(`ℹ️ Orden de MP ${mpOrderId} recibida, pero sin transacciones de pago asociadas aún.`);
 					}
 				}
 			}
@@ -111,6 +138,37 @@ export const mercadopagoWebhook = async (req: AuthRequest, res: Response) => {
 
 				if (req.tenant) {
 					socketManager.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'payment');
+					
+					// Notificar al cliente si está autenticado
+					if (order.user) {
+						const userId = (order.user as any)._id?.toString() || (order.user as any).toString();
+						
+						let clientNotificationType = NotificationType.ORDER_STATUS_CHANGED;
+						let clientNotificationTitle = 'Actualización de Pago';
+						let clientNotificationMessage = `El estado de tu pago es: ${order.paymentInfo.status}`;
+						let severity = NotificationSeverity.INFO;
+
+						if (order.paymentInfo.status === PaymentStatus.APPROVED) {
+							clientNotificationType = NotificationType.PAYMENT_SUCCESS;
+							clientNotificationTitle = 'Pago Aprobado';
+							clientNotificationMessage = `Tu pago de $${order.total} fue aprobado correctamente.`;
+							severity = NotificationSeverity.SUCCESS;
+						} else if (order.paymentInfo.status === PaymentStatus.REJECTED) {
+							clientNotificationType = NotificationType.PAYMENT_FAILED;
+							clientNotificationTitle = 'Pago Rechazado';
+							clientNotificationMessage = `Tu pago no pudo ser procesado. Podés intentar nuevamente.`;
+							severity = NotificationSeverity.ERROR;
+						}
+
+						socketManager.notifyClient(userId, {
+							type: clientNotificationType,
+							title: clientNotificationTitle,
+							message: clientNotificationMessage,
+							severity,
+							link: `/orders/${order._id}`,
+							data: order
+						});
+					}
 				}
 			}
 		}

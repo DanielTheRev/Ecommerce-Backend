@@ -161,6 +161,82 @@ export class ResendService {
 		}
 	}
 
+	static async sendPaymentInProcessEmail(order: IOrder, models: TenantModels) {
+		try {
+			const resend = new Resend(this.#apikey);
+			const logoUrl = await this.getLogoUrl(models);
+
+			const { clientEmail, clientFullName } = await ResendService.resolveClient(order, models);
+
+			const itemsHtml = this.buildItemsHtml(order);
+
+			const emailHtml = `
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #111;">
+          
+          <div style="text-align: center; padding-bottom: 20px;">
+            <img src="${logoUrl}" alt="Vura Logo" width="120" style="display: block; margin: 0 auto;" />
+            <h1 style="font-size: 24px; font-weight: normal; margin: 20px 0 5px 0;">¡Tu pago está en proceso!</h1>
+            <p style="font-size: 14px; color: #757575; margin: 0;">Pedido número #${order.orderNumber}</p>
+          </div>
+
+          <p style="font-size: 16px; margin-bottom: 30px;">
+            Hola ${clientFullName}, Mercado Pago nos informó que tu pago se encuentra en proceso o revisión.
+          </p>
+          <p style="font-size: 15px; line-height: 1.6; margin-bottom: 30px;">
+            No te preocupes, tus productos ya están reservados. Te enviaremos otro correo tan pronto como Mercado Pago nos confirme la acreditación del pago.
+          </p>
+
+          <h2 style="font-size: 18px; font-weight: normal; border-bottom: 2px solid #111; padding-bottom: 10px; margin-bottom: 0;">Detalle de tu reserva:</h2>
+          <p style="font-size: 14px; color: #757575; margin-top: 5px; margin-bottom: 20px;">
+            ${order.items.length} ${order.items.length === 1 ? 'producto' : 'productos'}
+          </p>
+
+          <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; margin-bottom: 30px;">
+            ${itemsHtml}
+          </table>
+
+          <div style="background-color: #f9f9f9; padding: 20px; border-radius: 4px;">
+            <p style="font-size: 14px; color: #757575; margin: 0 0 5px 0;">Envío:</p>
+            <p style="font-size: 14px; font-weight: bold; margin: 0 0 10px 0;">
+              Tipo: ${order.shippingInfo.type}<br/>
+              ${
+						order.shippingInfo.type === ShippingType.PICKUP
+							? `${order.shippingInfo.pickupPoint?.address}<br/>
+                   ${order.shippingInfo.pickupPoint?.name}`
+							: `Dirección a coordinar`
+					}
+            </p>
+
+            <p style="font-size: 14px; color: #757575; margin: 15px 0 5px 0;">Monto total:</p>
+            <p style="font-size: 14px; font-weight: bold; margin: 0;">
+              Total a pagar: ${order.total.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}
+            </p>
+          </div>
+
+          <div style="text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #eeeeee;">
+            <a href="https://vura.com.ar" style="font-size: 16px; font-weight: bold; color: #111; text-decoration: none;">Vura.com.ar</a>
+            <p style="font-size: 12px; color: #757575; margin-top: 10px;">
+              Si tenés dudas con respecto a tu pedido, simplemente respondé a este correo.
+            </p>
+          </div>
+        </div>
+      `;
+
+			const { data, error } = await resend.emails.send({
+				from: 'Vura <ordenes@vura.com.ar>',
+				to: clientEmail,
+				subject: `Vura - Tu pago para el pedido #${order.orderNumber} está en proceso`,
+				html: emailHtml
+			});
+
+			if (error) throw error;
+			console.log('✅ Payment in process email sent:', data);
+		} catch (error: any) {
+			console.error('❌ Failed to send payment in process email:', error);
+		}
+	}
+
+
 	static async sendTransferEmail(data: {
 		order: IOrder;
 		isThirdParty: boolean;

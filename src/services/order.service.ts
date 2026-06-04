@@ -484,7 +484,62 @@ export class OrderService {
 				);
 			}
 
+			// Map status/details
+			let paymentStatus: PaymentStatus = PaymentStatus.PENDING;
+			let orderStatus: OrderStatus = OrderStatus.PENDING_PAYMENT;
+			let note = '';
+
+			const status = String(result.status || '').toLowerCase();
+			const statusDetail = String(result.status_detail || '').toLowerCase();
+
+			if (status === 'approved' || status === 'processed' || statusDetail === 'accredited') {
+				paymentStatus = PaymentStatus.APPROVED;
+				orderStatus = OrderStatus.PROCESSING_SHIPPING;
+				note = 'Pago acreditado automáticamente por pasarela';
+			} else if (
+				status === 'in_process' || 
+				status === 'processing' || 
+				status === 'in_review' || 
+				status === 'pending' ||
+				statusDetail === 'in_process' ||
+				statusDetail === 'pending_review_manual' ||
+				statusDetail === 'in_review' ||
+				statusDetail === 'waiting_payment' ||
+				statusDetail === 'waiting_capture' ||
+				statusDetail === 'waiting_transfer' ||
+				statusDetail === 'pending_challenge'
+			) {
+				paymentStatus = PaymentStatus.PENDING;
+				orderStatus = OrderStatus.PENDING_PAYMENT;
+				note = `Pago en proceso/revisión: ${result.status} (${result.status_detail})`;
+			} else if (
+				status === 'rejected' ||
+				status === 'cancelled' ||
+				status === 'refunded' ||
+				status === 'charged_back' ||
+				status === 'failed' ||
+				status === 'expired'
+			) {
+				paymentStatus = PaymentStatus.REJECTED;
+				orderStatus = OrderStatus.PAYMENT_FAILED;
+				note = `Pago rechazado/fallido: ${result.status} (${result.status_detail})`;
+			} else {
+				paymentStatus = PaymentStatus.PENDING;
+				orderStatus = OrderStatus.PENDING_PAYMENT;
+				note = `Estado de pago desconocido recibido: ${result.status} (${result.status_detail})`;
+			}
+
+			if (status === 'cancelled' || status === 'expired' || statusDetail === 'expired' || statusDetail === 'cancelled') {
+				paymentStatus = PaymentStatus.CANCELLED;
+				orderStatus = OrderStatus.CANCELLED;
+			}
+
+			const oldPaymentStatus = order.paymentInfo.status;
+			const isFirstPaymentUpdate = !order.paymentInfo.transactionId || order.paymentInfo.transactionId.startsWith('TX-');
+
 			// Pago procesado por MP — actualizar la orden
+			order.paymentInfo.status = paymentStatus;
+			order.status = orderStatus;
 			order.paymentInfo.transactionId = String(result.id);
 			order.paymentInfo.mercadopagoData = {
 				items: result.items!,
@@ -495,17 +550,14 @@ export class OrderService {
 				transactions: result.transactions!
 			};
 
-			// Si el pago es exitoso inmediatamente
-			if (result.status === 'processed' || result.status === 'approved') {
-				order.paymentInfo.status = PaymentStatus.APPROVED;
-				order.status = OrderStatus.PROCESSING_SHIPPING;
-				order.paymentInfo.paymentDate = new Date();
-				order.history.push({
-					status: OrderStatus.PROCESSING_SHIPPING,
-					timestamp: new Date(),
-					note: 'Pago acreditado automáticamente'
-				});
+			order.history.push({
+				status: orderStatus,
+				timestamp: new Date(),
+				note
+			});
 
+			if (paymentStatus === PaymentStatus.APPROVED) {
+				order.paymentInfo.paymentDate = new Date();
 				// Usar las ganancias pre-calculadas por producto (respeta márgenes custom)
 				const mpInstallments = mercadopagoData.installments || 1;
 				order.earnings = paymentService.getEarnings(mpInstallments);
@@ -521,6 +573,13 @@ export class OrderService {
 			};
 
 			await order.save();
+
+			// Trigger emails
+			if (order.paymentInfo.status === PaymentStatus.APPROVED && oldPaymentStatus !== PaymentStatus.APPROVED) {
+				await ResendService.sendOrderConfirmationEmail(order.toObject() as unknown as IOrder, models);
+			} else if (order.paymentInfo.status === PaymentStatus.PENDING && isFirstPaymentUpdate) {
+				await ResendService.sendPaymentInProcessEmail(order.toObject() as unknown as IOrder, models);
+			}
 
 			const safeOrder = this.buildSafeOrder(order);
 
@@ -792,12 +851,11 @@ export class OrderService {
 		}
 	}
 
-	static async confirmMercadoPagoPayment(models: TenantModels, orderId: string, payment: PaymentElement) {
+	static async confirmMercadoPagoPayment(models: TenantModels, orderId: string, paymentOrId: PaymentElement | string) {
 		try {
 			const config = await EcommerceService.getConfig(models);
 			const mpConfig = config.paymentGateways.mercadopago;
 
-			// const mpPayment = await MercadoPagoService.getPaymentStatus(mpConfig.accessToken, paymentId);
 			const order = await models.Order.findById(orderId)
 				.select(ADMIN_PRICE_SELECT)
 				.populate([
@@ -806,19 +864,109 @@ export class OrderService {
 
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
 
+			let payment: any;
+			if (typeof paymentOrId === 'string') {
+				payment = await MercadoPagoService.getPaymentStatus(mpConfig.accessToken, paymentOrId);
+			} else {
+				payment = paymentOrId;
+			}
+
+			if (!payment) throw new AppError('Payment details not found', 'Detalles de pago no encontrados', 404);
+
+			// Map status/details
+			let paymentStatus: PaymentStatus = PaymentStatus.PENDING;
+			let orderStatus: OrderStatus = OrderStatus.PENDING_PAYMENT;
+			let note = '';
+
+			const status = String(payment.status || '').toLowerCase();
+			const statusDetail = String(payment.status_detail || '').toLowerCase();
+
+			if (status === 'approved' || status === 'processed' || statusDetail === 'accredited') {
+				paymentStatus = PaymentStatus.APPROVED;
+				orderStatus = OrderStatus.PROCESSING_SHIPPING;
+				note = 'Pago acreditado automáticamente por webhook';
+			} else if (
+				status === 'in_process' || 
+				status === 'processing' || 
+				status === 'in_review' || 
+				status === 'pending' ||
+				statusDetail === 'in_process' ||
+				statusDetail === 'pending_review_manual' ||
+				statusDetail === 'in_review' ||
+				statusDetail === 'waiting_payment' ||
+				statusDetail === 'waiting_capture' ||
+				statusDetail === 'waiting_transfer' ||
+				statusDetail === 'pending_challenge'
+			) {
+				paymentStatus = PaymentStatus.PENDING;
+				orderStatus = OrderStatus.PENDING_PAYMENT;
+				note = `Pago en proceso/revisión: ${payment.status} (${payment.status_detail})`;
+			} else if (
+				status === 'rejected' ||
+				status === 'cancelled' ||
+				status === 'refunded' ||
+				status === 'charged_back' ||
+				status === 'failed' ||
+				status === 'expired'
+			) {
+				paymentStatus = PaymentStatus.REJECTED;
+				orderStatus = OrderStatus.PAYMENT_FAILED;
+				note = `Pago rechazado/fallido: ${payment.status} (${payment.status_detail})`;
+			} else {
+				paymentStatus = PaymentStatus.PENDING;
+				orderStatus = OrderStatus.PENDING_PAYMENT;
+				note = `Estado de pago desconocido recibido: ${payment.status} (${payment.status_detail})`;
+			}
+
+			if (status === 'cancelled' || status === 'expired' || statusDetail === 'expired' || statusDetail === 'cancelled') {
+				paymentStatus = PaymentStatus.CANCELLED;
+				orderStatus = OrderStatus.CANCELLED;
+			}
+
+			const oldPaymentStatus = order.paymentInfo.status;
+			const isFirstPaymentUpdate = !order.paymentInfo.transactionId || order.paymentInfo.transactionId.startsWith('TX-');
+
 			// Actualizar estado del pago
-			order.paymentInfo.status = payment.status_detail === 'accredited'
-				? PaymentStatus.APPROVED
-				: PaymentStatus.REJECTED;
+			order.paymentInfo.status = paymentStatus;
+			order.status = orderStatus;
+			order.paymentInfo.transactionId = String(payment.id);
+
+			order.history.push({
+				status: orderStatus,
+				timestamp: new Date(),
+				note
+			});
+
+			if (!order.paymentInfo.mercadopagoData) {
+				order.paymentInfo.mercadopagoData = {
+					items: [],
+					status: payment.status,
+					status_detail: payment.status_detail,
+					total_amount: String(payment.transaction_amount || payment.amount || order.total),
+					total_paid_amount: String(payment.transaction_amount || payment.amount || order.total),
+					transactions: { payments: [payment] } as any
+				};
+			} else {
+				order.paymentInfo.mercadopagoData.status = payment.status;
+				order.paymentInfo.mercadopagoData.status_detail = payment.status_detail;
+				if (!order.paymentInfo.mercadopagoData.transactions) {
+					order.paymentInfo.mercadopagoData.transactions = { payments: [] } as any;
+				}
+				if (!order.paymentInfo.mercadopagoData.transactions.payments) {
+					order.paymentInfo.mercadopagoData.transactions.payments = [];
+				}
+				// Evitar duplicados
+				const exists = order.paymentInfo.mercadopagoData.transactions.payments.some((p: any) => String(p.id) === String(payment.id));
+				if (!exists) {
+					order.paymentInfo.mercadopagoData.transactions.payments.push(payment);
+				}
+			}
 
 			if (order.paymentInfo.status === PaymentStatus.APPROVED) {
 				order.paymentInfo.paymentDate = new Date();
-				order.paymentInfo.transactionId = payment.id; // Guardamos el ID del pago real
-				order.paymentInfo.mercadopagoData?.transactions?.payments?.push(payment); // Guardamos la info del pago
 
 				// Calcular ganancias dinámicas basadas en cuotas si MP nos da el dato
-				// Para tickets, installments suele ser 0 o 1, PaymentService.getEarnings(0) usará la ganancia de ticket
-				const installments = payment.payment_method.installments;
+				const installments = payment.payment_method?.installments || 1;
 
 				const itemsForPaymentService = order.items.map(item => ({
 					data: item.productSnapshot as any,
@@ -835,6 +983,14 @@ export class OrderService {
 			}
 
 			await order.save();
+
+			// Trigger emails
+			if (order.paymentInfo.status === PaymentStatus.APPROVED && oldPaymentStatus !== PaymentStatus.APPROVED) {
+				await ResendService.sendOrderConfirmationEmail(order.toObject() as unknown as IOrder, models);
+			} else if (order.paymentInfo.status === PaymentStatus.PENDING && isFirstPaymentUpdate) {
+				await ResendService.sendPaymentInProcessEmail(order.toObject() as unknown as IOrder, models);
+			}
+
 			return order;
 		} catch (error) {
 			console.error('Error in confirmMercadoPagoPayment:', error);
