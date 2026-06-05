@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ARGENTINA_PROVINCE_NAMES } from '@/utils/provinces';
 
 export const createAddressSchema = z.object({
 	body: z.object({
@@ -8,7 +9,10 @@ export const createAddressSchema = z.object({
 		number: z.string().min(1, 'El número es requerido'),
 		apartment: z.string().optional(),
 		city: z.string().min(1, 'La ciudad es requerida'),
-		state: z.string().min(1, 'La provincia/estado es requerido'),
+		state: z.string().min(1, 'La provincia/estado es requerido').refine(
+			(val) => ARGENTINA_PROVINCE_NAMES.includes(val),
+			{ message: 'La provincia ingresada no es válida' }
+		),
 		zipCode: z.string().min(1, 'El código postal es requerido'),
 		phone: z.string().min(1, 'El teléfono es requerido'),
 		isDefault: z.boolean().optional()

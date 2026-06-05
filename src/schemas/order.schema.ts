@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { PaymentType } from '@/interfaces/paymentMethod.interface';
 import { ShippingType } from '@/interfaces/shippingMethods.interface';
 import { OrderStatus, PaymentStatus } from '@/interfaces/order.interface';
+import { ARGENTINA_PROVINCE_NAMES } from '@/utils/provinces';
 
 const CartItemSchema = z.object({
 	_id: z.string().min(1),
@@ -28,7 +29,10 @@ export const CreateOrderSchema = z.object({
 				number: z.string().min(1, 'El número es requerido'),
 				apartment: z.string().optional().nullable().or(z.literal('')),
 				city: z.string().min(1, 'La ciudad es requerida'),
-				state: z.string().min(1, 'La provincia es requerida'),
+				state: z.string().min(1, 'La provincia es requerida').refine(
+					(val) => ARGENTINA_PROVINCE_NAMES.includes(val),
+					{ message: 'La provincia ingresada no es válida' }
+				),
 				zipCode: z.string().min(1, 'El código postal es requerido'),
 				phone: z.string().min(1, 'El teléfono es requerido')
 			}).optional().nullable()

@@ -33,6 +33,7 @@ import { TenantModels } from '@/config/modelRegistry';
 import { PaymentElement } from '@/interfaces/mp_payment.interface';
 import { ResendService } from './resend.service';
 import { IVariant } from '@/interfaces/variant.interface';
+import { isEligibleForFreeShipping } from '@/utils/provinces';
 
 
 // Campos sensibles de precios en el snapshot de la orden — solo visibles para admins
@@ -196,7 +197,14 @@ export class OrderService {
 			const config = await EcommerceService.getConfig(models);
 			const threshold = config.shippingConfig?.freeShippingThreshold ?? 50000;
 			const subtotalBase = processedOrderItems.reduce((acc, item) => acc + (item.data.prices.efectivo_transferencia * item.quantity), 0);
-			const appliedShippingCost = subtotalBase >= threshold ? 0 : shippingMethod.cost;
+			
+			let isEligible = true;
+			if (shippingMethod.type === ShippingType.HOME_DELIVERY) {
+				const state = data.shippingMethod.address?.state;
+				isEligible = isEligibleForFreeShipping(state || '');
+			}
+
+			const appliedShippingCost = (isEligible && subtotalBase >= threshold) ? 0 : shippingMethod.cost;
 
 			/* creating payment service instance */
 			const paymentService = new PaymentService(
