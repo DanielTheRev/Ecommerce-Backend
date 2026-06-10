@@ -4,7 +4,7 @@ import { PaymentType } from './paymentMethod.interface';
 import { IPickupPoint, ShippingType } from './shippingMethods.interface';
 import { Item, TransactionsResponse } from 'mercadopago/dist/clients/order/commonTypes';
 import { EcommercePaymentProviders } from './ecommerce.interface';
-import { IProductPrices } from './product.interface';
+import { IProductPrices, IProductFinance } from './product.interface';
 import { IProvider } from './provider.interface';
 
 export interface CreateOrderDTO {
@@ -129,6 +129,10 @@ export interface IOrderItem {
 	};
 	quantity: number;
 	price: number;
+	costPriceSnapshot?: {
+		inUSD: number;
+		inARS: number;
+	};
 }
 
 export interface IProductSnapshot {
@@ -137,7 +141,8 @@ export interface IProductSnapshot {
 	model: string;
 	image?: string;
 	slug?: string;
-	prices: IProductPrices;
+	price: IProductPrices;
+	finance?: IProductFinance;
 	providerSnapshot: IProvider;
 }
 
@@ -211,6 +216,9 @@ export interface IOrder {
 	shippingCost: number;
 	total: number;
 	earnings: number;
+	totalOppositeCurrency?: number;
+	earningsOppositeCurrency?: number;
+	exchangeRateSnapshot?: number;
 	orderNumber: string;
 	notes?: string;
 	createdAt: Date;

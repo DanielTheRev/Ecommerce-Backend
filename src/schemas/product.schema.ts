@@ -90,7 +90,8 @@ export const CreateProductSchema = z.object({
 		category: z.string(),
 		shortDescription: z.string().min(1, 'Short description is required'),
 		largeDescription: z.string().min(1, 'Large description is required'),
-		price: z.string().or(z.number()).transform(v => Number(v)).refine(v => v > 0, 'Price must be positive'),
+		price: z.string().or(z.number()).transform(v => Number(v)).optional(),
+		providerCost: z.string().or(z.number()).transform(v => Number(v)).optional(),
 		customProfitMargin: z.string().or(z.number()).transform(v => v === '' ? undefined : Number(v)).optional(),
 		customProfitMargin1Pay: z.string().or(z.number()).transform(v => v === '' ? undefined : Number(v)).optional(),
 		customProfitMarginInstallments: z.string().or(z.number()).transform(v => v === '' ? undefined : Number(v)).optional(),
@@ -128,6 +129,15 @@ export const CreateProductSchema = z.object({
 			metaTitle: z.string().optional(),
 		})).optional(),
 	}).superRefine((data, ctx) => {
+		const cost = data.providerCost ?? data.price;
+		if (cost === undefined || cost <= 0 || isNaN(cost)) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['providerCost'],
+				message: 'El costo del proveedor (providerCost) es requerido y debe ser mayor a 0'
+			});
+		}
+
 		if (data.productType === 'ClothingProduct' && Array.isArray(data.variants)) {
 			data.variants.forEach((v: any, i: number) => {
 				if (!v.size) ctx.addIssue({
@@ -160,6 +170,7 @@ export const UpdateProductSchema = z.object({
 		shortDescription: z.string().optional(),
 		largeDescription: z.string().optional(),
 		price: z.string().or(z.number()).transform(v => Number(v)).optional(),
+		providerCost: z.string().or(z.number()).transform(v => Number(v)).optional(),
 		customProfitMargin: z.string().or(z.number()).transform(v => v === '' ? undefined : Number(v)).optional(),
 		customProfitMargin1Pay: z.string().or(z.number()).transform(v => v === '' ? undefined : Number(v)).optional(),
 		customProfitMarginInstallments: z.string().or(z.number()).transform(v => v === '' ? undefined : Number(v)).optional(),
@@ -204,6 +215,21 @@ export const UpdateProductSchema = z.object({
 		isActive: z.string().or(z.boolean()).transform(v => v === 'true' || v === true).optional(),
 		isFeatured: z.string().or(z.boolean()).transform(v => v === 'true' || v === true).optional(),
 	}).superRefine((data, ctx) => {
+		if (data.providerCost !== undefined && (data.providerCost <= 0 || isNaN(data.providerCost))) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['providerCost'],
+				message: 'El costo del proveedor (providerCost) debe ser mayor a 0'
+			});
+		}
+		if (data.price !== undefined && (data.price <= 0 || isNaN(data.price))) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['price'],
+				message: 'El precio debe ser mayor a 0'
+			});
+		}
+
 		if (data.productType === 'ClothingProduct' && Array.isArray(data.variants)) {
 			data.variants.forEach((v: any, i: number) => {
 				if (!v.size) ctx.addIssue({

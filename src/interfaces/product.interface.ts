@@ -35,8 +35,6 @@ export enum ClothingSizeType {
 	Unico = 'Talle Único'
 }
 
-
-
 // ============ BASE PRODUCT ============
 
 export interface IProduct {
@@ -49,7 +47,8 @@ export interface IProduct {
 	largeDescription: string;
 	brand: string;
 	model: string;
-	prices: IProductPrices;
+	price: IProductPrices;
+	finance: IProductFinance;
 	discount: number;
 	rating: number | null;
 	reviews: number | null;
@@ -63,7 +62,6 @@ export interface IProduct {
 	isFeatured: boolean;
 	seo: IProductSeo;
 }
-
 
 // ============ TYPE-SPECIFIC PRODUCTS ============
 
@@ -118,33 +116,81 @@ export interface IProductSpec {
 	value: string;
 }
 
-export interface IProductPrices {
-	// ── Campos sensibles — select:false en schema (solo admins) ──────────
-	costPrice: {
+// export interface IProductPrices {
+// 	// ── Campos sensibles — select:false en schema (solo admins) ──────────
+// 	costPrice: {
+// 		inUSD: number;
+// 		inARS: number;
+// 	};
+// 	dolarPrice: number;
+// 	profitMargin: number;
+// 	profitMargin1Pay: number;
+// 	profitMarginInstallments: number;
+// 	baseCommission: number;
+// 	cft6Cuotas: number;
+// 	/** Override del método de cálculo por producto ('markup' | 'margin'). Si undefined, usa el global. */
+// 	customPricingMethod?: PricingMethod;
+// 	earnings: {
+// 		cash_transfer: number;
+// 		card_1_installments: number;
+// 		card_3_installments: number;
+// 		card_6_installments: number;
+// 		ticket: number;
+// 	};
+// 	// ── Campos públicos — siempre presentes ───────────────────────────────
+// 	efectivo_transferencia: number;
+// 	tarjeta_credito_debito: number;
+// 	cuotas: {
+// 		cuotas_3_si: number;
+// 		cuotas_6_si: number;
+// 	};
+// }
+
+export interface ICostConcept {
+	concept: string;
+	value: number;
+	/** * 'fixed': Monto fijo (Ej: $5.000 de envío)
+	 * 'percent_over_provider': Porcentaje sobre el costo del proveedor (Ej: 25% de reposición)
+	 */
+	type: 'fixed' | 'percent_over_provider';
+}
+
+export interface IProductFinance {
+	exchangeRateSnapshot: number; // El valor del dólar al momento de cotizar
+	mpCommissionSnapshot: {
+		base: number; // Tu baseCommission
+		cft3Cuotas: number; // El costo financiero total con IVA 3
+		cft6Cuotas: number; // El costo financiero total con IVA 6
+	};
+	providerCost: {
 		inUSD: number;
 		inARS: number;
 	};
-	dolarPrice: number;
-	profitMargin: number;
-	profitMargin1Pay: number;
-	profitMarginInstallments: number;
-	baseCommission: number;
-	cft6Cuotas: number;
+	additionalCosts: ICostConcept[];
 	/** Override del método de cálculo por producto ('markup' | 'margin'). Si undefined, usa el global. */
-	customPricingMethod?: PricingMethod;
-	earnings: {
-		cash_transfer: number;
-		card_1_installments: number;
-		card_3_installments: number;
-		card_6_installments: number;
-		ticket: number;
+	pricingStrategy: {
+		method: PricingMethod;
+		targetProfit: number;
 	};
-	// ── Campos públicos — siempre presentes ───────────────────────────────
-	efectivo_transferencia: number;
-	tarjeta_credito_debito: number;
-	cuotas: {
-		cuotas_3_si: number;
-		cuotas_6_si: number;
+	calculatedProfits: {
+		transfer: number;
+		card_ticket1Pay: number;
+		card3Installments: number;
+		card6Installments: number;
+	};
+	maxSafeDiscount?: number;
+}
+
+export interface IProductPrices {
+	listPrice: number; // El precio máster en el peor escenario (según maxInstallments configurado)
+	card_ticket1PayPrice: number; // 🚀 Agregado: Precio para Débito / Crédito 1 pago
+	cashTransferPrice: number; // El precio final con descuento por transferencia
+	discountPercentageTransfer: number;
+	installments: {
+		threePaymentsAmount: number;
+		sixPaymentsAmount: number;
+		hasThreeInstallmentsSeamless: boolean; // 🚀 Agregado: Control para 3 cuotas
+		hasSixInstallmentsSeamless: boolean;
 	};
 }
 
@@ -152,11 +198,10 @@ export interface IProductSeo {
 	metaTitle: string;
 	metaDescription: string;
 	metaImage: {
-		url: string,
-		public_id: string
-	}
+		url: string;
+		public_id: string;
+	};
 }
-
 
 // ============ DTOs ============
 
@@ -167,11 +212,13 @@ export interface IProductCreateDTO {
 	model: string;
 	shortDescription: string;
 	largeDescription: string;
-	price: number;
+	price?: number;
+	providerCost?: number;
+	useCustomProfit?: boolean;
 	customProfitMargin?: number;
-	customProfitMargin1Pay?: number;
-	customProfitMarginInstallments?: number;
-	customPricingMethod?: PricingMethod;
+	pricingMethodChoice?: PricingMethod;
+	additionalCosts?: ICostConcept[] | string;
+	discountPercentageTransfer?: number;
 	category: string;
 	features: string | string[];
 	specifications: string | IProductSpec[];

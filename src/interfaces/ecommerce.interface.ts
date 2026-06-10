@@ -23,7 +23,7 @@ export interface IEcommerceConfig {
 	taxes: {
 		iva: number;
 	};
-	pricingStrategy?: IPricingStrategy;
+	pricingStrategy: IPricingStrategy;
 	paymentGateways: IEcommercePaymentGateway;
 	callbackURLs: {
 		success: string;

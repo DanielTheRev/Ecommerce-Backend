@@ -1,7 +1,8 @@
 import mongoose, { Schema } from 'mongoose';
 import { IProductDocument } from '../interfaces/product.interface';
 import { CostPriceSchema } from './schemas/costPrice.schema';
-import { EarningsSchema } from './schemas/earning.schema';
+import { CalculatedProfitsSchema } from './schemas/earning.schema';
+import { CostConceptSchema } from './schemas/costConcept.schema';
 
 const BaseProductSchema = new Schema(
 	{
@@ -32,65 +33,42 @@ const BaseProductSchema = new Schema(
 			trim: true,
 		},
 		slug: { type: String, unique: true },
-		prices: {
-			costPrice: {
-				type: CostPriceSchema,
-				required: true,
-				select: false
-			},
-			dolarPrice: {
-				type: Number,
-				required: true,
-				select: false
-			},
-			profitMargin: {
-				type: Number,
-				default: 1.30,
-				select: false
-			},
-			profitMargin1Pay: {
-				type: Number,
-				required: false,
-				select: false
-			},
-			profitMarginInstallments: {
-				type: Number,
-				required: false,
-				select: false
-			},
-			baseCommission: {
-				type: Number,
-				default: 4.9,
-				select: false
-			},
-			cft6Cuotas: {
-				type: Number,
-				default: 18.9,
-				select: false
-			},
-			customPricingMethod: {
-				type: String,
-				enum: ['markup', 'margin'],
-				select: false
-			},
-			efectivo_transferencia: {
-				type: Number,
-				required: true,
-				default: 0
-			},
-			tarjeta_credito_debito: {
-				type: Number,
-				required: true,
-				default: 0
-			},
-			cuotas: {
-				cuotas_3_si: { type: Number, required: true, default: 0 },
-				cuotas_6_si: { type: Number, required: true, default: 0 }
-			},
-			earnings: {
-				type: EarningsSchema,
-				select: false
+		price: {
+			listPrice: { type: Number, required: true, default: 0 },
+			card_ticket1PayPrice: { type: Number, required: true, default: 0 },
+			cashTransferPrice: { type: Number, required: true, default: 0 },
+			discountPercentageTransfer: { type: Number, required: true, default: 0 },
+			installments: {
+				threePaymentsAmount: { type: Number, required: true, default: 0 },
+				sixPaymentsAmount: { type: Number, required: true, default: 0 },
+				hasThreeInstallmentsSeamless: { type: Boolean, required: true, default: false },
+				hasSixInstallmentsSeamless: { type: Boolean, required: true, default: false }
 			}
+		},
+		finance: {
+			type: new Schema({
+				exchangeRateSnapshot: { type: Number, required: true },
+				mpCommissionSnapshot: {
+					base: { type: Number, required: true },
+					cft3Cuotas: { type: Number, required: true },
+					cft6Cuotas: { type: Number, required: true }
+				},
+				providerCost: {
+					type: CostPriceSchema,
+					required: true
+				},
+				additionalCosts: [CostConceptSchema],
+				pricingStrategy: {
+					method: { type: String, enum: ['markup', 'margin'], required: true },
+					targetProfit: { type: Number, required: true }
+				},
+				calculatedProfits: {
+					type: CalculatedProfitsSchema,
+					required: true
+				}
+			}, { _id: false }),
+			required: true,
+			select: false
 		},
 		discount: {
 			type: Number,

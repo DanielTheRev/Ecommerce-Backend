@@ -3,7 +3,7 @@ import { IProductCreateDTO, IProductSpec, ProductType } from '@/interfaces/produ
 import { IClothingVariant, ITechVariant } from '@/interfaces/variant.interface';
 import { AuthRequest } from '@/middleware/auth';
 import { getDolar } from '@/services/dolar.service';
-import { FinancialsService } from '@/services/Financials.service';
+import { FinanceService } from '@/services/finance.service';
 import { ProductService } from '@/services/product.service';
 import { NextFunction, Response } from 'express';
 
@@ -16,9 +16,19 @@ export class ProductController {
 			const productType = req.query.type as string | undefined;
 			const q = req.query.q as string | undefined;
 			const category = req.query.category as string | undefined;
-			const isActive = req.query.isActive !== undefined ? req.query.isActive === 'true' : undefined;
+			const isActive =
+				req.query.isActive !== undefined ? req.query.isActive === 'true' : undefined;
 			const providerId = req.query.provider as string | undefined;
-			const result = await ProductService.getPaginatedProductsWCompletePrices(req.models!, page, limit, productType, q, category, isActive, providerId);
+			const result = await ProductService.getPaginatedProductsWCompletePrices(
+				req.models!,
+				page,
+				limit,
+				productType,
+				q,
+				category,
+				isActive,
+				providerId
+			);
 			res.status(200).json(result);
 		} catch (error) {
 			next(error);
@@ -37,7 +47,11 @@ export class ProductController {
 	}
 
 	// GET /api/products/all - Obtener todos los productos sin Paginación
-	static async getAllProductWOPagination(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+	static async getAllProductWOPagination(
+		req: AuthRequest,
+		res: Response,
+		next: NextFunction
+	): Promise<void> {
 		try {
 			const productType = req.query.type as string | undefined;
 			const products = await ProductService.getAllProducts(req.models!, productType);
@@ -65,7 +79,13 @@ export class ProductController {
 			const productType = req.query.type as string | undefined;
 			const category = req.query.category as string | undefined;
 
-			const result = await ProductService.getPaginatedProducts(req.models!, page, limit, productType, category);
+			const result = await ProductService.getPaginatedProducts(
+				req.models!,
+				page,
+				limit,
+				productType,
+				category
+			);
 
 			res.status(200).json(result);
 		} catch (error) {
@@ -74,7 +94,11 @@ export class ProductController {
 	}
 
 	// GET /api/products/:slug - Obtener un producto por slug
-	static async getProductBySlug(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+	static async getProductBySlug(
+		req: AuthRequest,
+		res: Response,
+		next: NextFunction
+	): Promise<void> {
 		try {
 			const { slug } = req.params;
 			const product = await ProductService.getProductBySlug(req.models!, slug);
@@ -112,13 +136,53 @@ export class ProductController {
 
 			// Clothing-specific: parsear arrays si vienen
 			if (data.composition) data.composition = JSON.parse(data.composition as string);
-			if (data.careInstructions) data.careInstructions = JSON.parse(data.careInstructions as string);
+			if (data.careInstructions)
+				data.careInstructions = JSON.parse(data.careInstructions as string);
 
 			// SEO: parsear el JSON string (og_image llega como archivo separado)
 			if (data.seo) data.seo = JSON.parse(data.seo as unknown as string);
 
-			const newProduct = await ProductService.createProduct(req.models!, data, imageFiles, ogImageFile, req.tenant?.slug);
+			const newProduct = await ProductService.createProduct(
+				req.models!,
+				data,
+				imageFiles,
+				ogImageFile,
+				req.tenant?.slug
+			);
 			res.status(201).json(newProduct);
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// POST /api/products/finance/calculate - Calcular precios antes de guardar (endpoint separado para que el frontend pueda mostrar precios dinámicamente al completar el formulario)
+	static async calculatePrices(
+		req: AuthRequest,
+		res: Response,
+		next: NextFunction
+	): Promise<void> {
+		try {
+			const {
+				providerCost,
+				additionalCosts,
+				useCustomProfit,
+				customProfitMargin,
+				pricingMethodChoice,
+				calculate
+			} = req.body;
+			const { venta } = await getDolar();
+			if (calculate === 'list_price') {
+				const response = await FinanceService.CalculateListPrice({
+					dolar: venta,
+					providerCost,
+					additionalCosts,
+					models: req.models!,
+					useCustomProfit,
+					customProfitMargin,
+					pricingMethodChoice,
+				});
+				res.status(200).json(response);
+			}
 		} catch (error) {
 			next(error);
 		}
@@ -134,7 +198,14 @@ export class ProductController {
 			const imageFiles = uploadedFiles?.images ?? [];
 			const ogImageFile = uploadedFiles?.seoImage?.[0] ?? null;
 
-			const updatedProduct = await ProductService.updateProductById(req.models!, id, data, imageFiles, ogImageFile, req.tenant?.slug);
+			const updatedProduct = await ProductService.updateProductById(
+				req.models!,
+				id,
+				data,
+				imageFiles,
+				ogImageFile,
+				req.tenant?.slug
+			);
 			res.status(200).json(updatedProduct);
 		} catch (error) {
 			next(error);
@@ -142,7 +213,11 @@ export class ProductController {
 	}
 
 	// PATCH /api/products/bulk-status - Actualizar estado de varios productos
-	static async bulkUpdateStatus(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+	static async bulkUpdateStatus(
+		req: AuthRequest,
+		res: Response,
+		next: NextFunction
+	): Promise<void> {
 		try {
 			const { ids, isActive } = req.body;
 			if (!Array.isArray(ids)) {
@@ -178,20 +253,36 @@ export class ProductController {
 	// GET /api/products/search - Buscar productos
 	static async searchProducts(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
-			const { q, minPrice, maxPrice, minRating, suggestions, category, brand, gender, tags, featured } = req.query;
+			const {
+				q,
+				minPrice,
+				maxPrice,
+				minRating,
+				suggestions,
+				category,
+				brand,
+				gender,
+				tags,
+				featured
+			} = req.query;
 			const productType = req.query.type as string | undefined;
 
 			// if suggestions is true, return only brand and model matches without pagination
 			if (suggestions) {
-				const products = await ProductService.getSearchSuggestions(req.models!, q as string, 10, productType);
+				const products = await ProductService.getSearchSuggestions(
+					req.models!,
+					q as string,
+					10,
+					productType
+				);
 				res.status(200).json(products);
 				return;
 			}
 
 			const page = parseInt(req.query.page as string) || 1;
 			const limit = parseInt(req.query.limit as string) || 10;
-			const sortBy = req.query.sortBy as string | undefined || 'createdAt';
-			const sortOrder = req.query.sortOrder as string | undefined || 'asc';
+			const sortBy = (req.query.sortBy as string | undefined) || 'createdAt';
+			const sortOrder = (req.query.sortOrder as string | undefined) || 'asc';
 			const result = await ProductService.searchProducts({
 				models: req.models!,
 				filters: {
@@ -210,9 +301,7 @@ export class ProductController {
 				page: page,
 				limit: limit,
 				productType: productType
-			})
-
-
+			});
 
 			res.status(200).json({
 				success: true,
@@ -238,20 +327,27 @@ export class ProductController {
 	// POST /api/products/calculate-prices - Calcular precios antes de guardar
 	static async calculatePrice(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
-			const { costPrice, customProfitMargin, customProfitMargin1Pay, customProfitMarginInstallments, customPricingMethod } = req.body;
+			const {
+				costPrice,
+				additionalCosts,
+				discountPercentageTransfer,
+				useCustomProfit,
+				customProfitMargin,
+				pricingMethodChoice,
+			} = req.body;
 			const { venta } = await getDolar();
-			const prices = await FinancialsService.CalculatePrices({
-				paymentProvider: EcommercePaymentProviders.MERCADOPAGO,
-				cost_price: costPrice,
+			const result = await FinanceService.CalculatePrices({
+				providerCost: costPrice,
+				additionalCosts: additionalCosts || [],
+				discountPercentageTransfer: discountPercentageTransfer || 0,
 				dolar: venta,
 				models: req.models!,
+				useCustomProfit,
 				customProfitMargin,
-				customProfitMargin1Pay,
-				customProfitMarginInstallments,
-				customPricingMethod
+				pricingMethodChoice,
 			});
 
-			res.status(200).json(prices);
+			res.status(200).json(result);
 		} catch (error) {
 			next(error);
 		}

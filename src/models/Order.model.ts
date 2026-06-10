@@ -91,6 +91,18 @@ const orderSchema = new Schema<IOrder, IOrderModel>(
 			required: true,
 			default: 0
 		},
+		totalOppositeCurrency: {
+			type: Number,
+			required: false
+		},
+		earningsOppositeCurrency: {
+			type: Number,
+			required: false
+		},
+		exchangeRateSnapshot: {
+			type: Number,
+			required: false
+		},
 		orderNumber: {
 			type: String,
 			unique: true,

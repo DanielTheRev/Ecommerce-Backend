@@ -14,6 +14,7 @@ const multerConfig = multer().fields([
 	{ name: 'seoImage', maxCount: 1 }
 ]);
 // Rutas protegidas (solo administradores)
+router.post('/finance/calculate', protect, adminOnly, ProductController.calculatePrices); // Calculadora de precios con financiamiento
 router.get('/admin/list', protect, adminOnly, ProductController.getProducts); // products con precios completos
 router.post('/calculate-prices', protect, adminOnly, validateSchema(PriceCalculatorSchema), ProductController.calculatePrice); // Calculadora de precios
 router.get('/complete/:id', protect, adminOnly, ProductController.getProductWCompletePrices); // product con precios completos

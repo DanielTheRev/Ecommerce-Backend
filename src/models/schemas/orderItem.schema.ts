@@ -19,30 +19,21 @@ export const orderItemSchema = new Schema<IOrderItem>({
 			type: providerSchema,
 			...ADMIN_ONLY
 		},
-		// Precios al momento de la compra — captura el estado exacto en el instante de la venta
-		prices: {
-			// ── Campos PÚBLICOS (cliente los puede ver) ─────────────────────
-			efectivo_transferencia: { type: Number },
-			tarjeta_credito_debito: { type: Number },
-			cuotas: {
-				cuotas_3_si: { type: Number },
-				cuotas_6_si: { type: Number }
-			},
-			// ── Campos SENSIBLES (solo admin) — select: false ──────────────
-			costPrice: {
-				inUSD: { type: Number, ...ADMIN_ONLY },
-				inARS: { type: Number, ...ADMIN_ONLY }
-			},
-			dolarPrice: { type: Number, ...ADMIN_ONLY },
-			profitMargin: { type: Number, ...ADMIN_ONLY },
-			baseCommission: { type: Number, ...ADMIN_ONLY },
-			cft6Cuotas: { type: Number, ...ADMIN_ONLY },
-			earnings: {
-				cash_transfer: { type: Number, ...ADMIN_ONLY },
-				card_3_installments: { type: Number, ...ADMIN_ONLY },
-				card_6_installments: { type: Number, ...ADMIN_ONLY },
-				ticket: { type: Number, ...ADMIN_ONLY }
+		price: {
+			listPrice: { type: Number },
+			card_ticket1PayPrice: { type: Number },
+			cashTransferPrice: { type: Number },
+			discountPercentageTransfer: { type: Number },
+			installments: {
+				threePaymentsAmount: { type: Number },
+				sixPaymentsAmount: { type: Number },
+				hasThreeInstallmentsSeamless: { type: Boolean },
+				hasSixInstallmentsSeamless: { type: Boolean }
 			}
+		},
+		finance: {
+			type: Schema.Types.Mixed,
+			...ADMIN_ONLY
 		}
 	},
 	variantSnapshot: {
@@ -58,6 +49,10 @@ export const orderItemSchema = new Schema<IOrderItem>({
 		type: Number,
 		required: true,
 		min: 0
+	},
+	costPriceSnapshot: {
+		inUSD: { type: Number, select: false },
+		inARS: { type: Number, select: false }
 	}
 });
 

@@ -34,23 +34,12 @@ import { PaymentElement } from '@/interfaces/mp_payment.interface';
 import { ResendService } from './resend.service';
 import { IVariant } from '@/interfaces/variant.interface';
 import { isEligibleForFreeShipping } from '@/utils/provinces';
+import { getDolar } from './dolar.service';
 
 
 // Campos sensibles de precios en el snapshot de la orden — solo visibles para admins
 // Espejo de select:false declarado en orderItem.schema.ts
-export const ADMIN_PRICE_SELECT = [
-	'+items.productSnapshot.providerSnapshot',
-	'+items.productSnapshot.prices.costPrice.inUSD',
-	'+items.productSnapshot.prices.costPrice.inARS',
-	'+items.productSnapshot.prices.dolarPrice',
-	'+items.productSnapshot.prices.profitMargin',
-	'+items.productSnapshot.prices.baseCommission',
-	'+items.productSnapshot.prices.cft6Cuotas',
-	'+items.productSnapshot.prices.earnings.cash_transfer',
-	'+items.productSnapshot.prices.earnings.card_3_installments',
-	'+items.productSnapshot.prices.earnings.card_6_installments',
-	'+items.productSnapshot.prices.earnings.ticket'
-].join(' ');
+export const ADMIN_PRICE_SELECT = '+items.productSnapshot.providerSnapshot +items.productSnapshot.finance';
 
 export class OrderService {
 	private static generateOrderNumber(): string {
@@ -196,7 +185,7 @@ export class OrderService {
 			/* calculate free shipping logic */
 			const config = await EcommerceService.getConfig(models);
 			const threshold = config.shippingConfig?.freeShippingThreshold ?? 50000;
-			const subtotalBase = processedOrderItems.reduce((acc, item) => acc + (item.data.prices.efectivo_transferencia * item.quantity), 0);
+			const subtotalBase = processedOrderItems.reduce((acc, item) => acc + ((item.data.price?.cashTransferPrice || 0) * item.quantity), 0);
 			
 			let isEligible = true;
 			if (shippingMethod.type === ShippingType.HOME_DELIVERY) {
@@ -219,32 +208,45 @@ export class OrderService {
 			const status = OrderStatus.PENDING_PAYMENT;
 
 			const orderItems = processedOrderItems.map((item) => {
-				let unitPrice = item.data.prices.efectivo_transferencia;
+				let unitPrice = item.data.price?.cashTransferPrice || 0;
 				switch (paymentMethod.type) {
 					case PaymentType.CARD:
 						if (installments !== undefined && installments === 1) {
-							unitPrice = item.data.prices.efectivo_transferencia;
+							unitPrice = item.data.price?.card_ticket1PayPrice || 0;
 						} else {
-							unitPrice = item.data.prices.tarjeta_credito_debito;
+							unitPrice = item.data.price?.listPrice || 0;
 						}
 						break;
 					case PaymentType.TICKET:
-						unitPrice = item.data.prices.tarjeta_credito_debito;
+						unitPrice = item.data.price?.card_ticket1PayPrice || 0;
 						break;
 					case PaymentType.CASH:
 					case PaymentType.BANK_TRANSFER:
 					case PaymentType.ALIAS_TRANSFER:
 					default:
-						unitPrice = item.data.prices.efectivo_transferencia;
+						unitPrice = item.data.price?.cashTransferPrice || 0;
 						break;
 				}
 				return {
 					productSnapshot: item.productSnapshot as IProductSnapshot,
 					variantSnapshot: item.variantSnapshot as IVariant,
 					quantity: item.quantity as number,
-					price: unitPrice as number
+					price: unitPrice as number,
+					costPriceSnapshot: {
+						inUSD: item.data.finance?.providerCost?.inUSD || 0,
+						inARS: item.data.finance?.providerCost?.inARS || 0
+					}
 				};
 			});
+
+			const { venta: dolarVenta } = await getDolar();
+			const isARS = config.costCurrency === 'ARS';
+
+			const totalOppositeCurrency = isARS ? finalCost / dolarVenta : finalCost * dolarVenta;
+			const earningsVal = PaymentService.theOrderIsPreferredPayment(paymentMethod.type)
+				? paymentService.getEarnings()
+				: 0;
+			const earningsOppositeCurrency = isARS ? earningsVal / dolarVenta : earningsVal * dolarVenta;
 
 			/* creating order in DB — SIN intentar cobro */
 			const newOrder = await (await models.Order.create(
@@ -270,15 +272,16 @@ export class OrderService {
 						identificationNumber: data.formPayerData.identificationNumber || ''
 					} : data.formPayerData,
 					total: finalCost,
+					totalOppositeCurrency,
+					earnings: earningsVal,
+					earningsOppositeCurrency,
+					exchangeRateSnapshot: dolarVenta,
 					orderNumber: this.generateOrderNumber(),
 					history: [{
 						status: status,
 						timestamp: new Date(),
 						note: 'Orden creada con éxito'
-					}],
-					earnings: PaymentService.theOrderIsPreferredPayment(paymentMethod.type)
-						? paymentService.getEarnings()
-						: 0
+					}]
 				}
 			))
 				.populate([
@@ -448,8 +451,8 @@ export class OrderService {
 			const orderUser = order.user as any; // puede ser populated o null
 
 			const payerEmail = orderUser?.email || buyerData?.email;
-			const payerFirstName = orderUser?.name?.split(' ')[0] || buyerData?.firstName || 'Cliente';
-			const payerLastName = orderUser?.name?.split(' ').slice(1).join(' ') || buyerData?.lastName || 'Ecommerce';
+			const payerFirstName = orderUser?.name?.split(' ')[0] || buyerData?.firstName;
+			const payerLastName = orderUser?.name?.split(' ').slice(1).join(' ') || buyerData?.lastName;
 
 			const { result, error } = await paymentService.withMercadoPago({
 				orderID: order.id,
@@ -568,7 +571,12 @@ export class OrderService {
 				order.paymentInfo.paymentDate = new Date();
 				// Usar las ganancias pre-calculadas por producto (respeta márgenes custom)
 				const mpInstallments = mercadopagoData.installments || 1;
-				order.earnings = paymentService.getEarnings(mpInstallments);
+				const earningsVal = paymentService.getEarnings(mpInstallments);
+				order.earnings = earningsVal;
+
+				const dolarVenta = order.exchangeRateSnapshot || (await getDolar()).venta;
+				const isARS = config.costCurrency === 'ARS';
+				order.earningsOppositeCurrency = isARS ? earningsVal / dolarVenta : earningsVal * dolarVenta;
 			}
 
 			extras = {
@@ -611,14 +619,8 @@ export class OrderService {
 				productSnapshot: {
 					...item.productSnapshot,
 					providerSnapshot: null,
-					prices: {
-						efectivo_transferencia: item.productSnapshot.prices.efectivo_transferencia,
-						tarjeta_credito_debito: item.productSnapshot.prices.tarjeta_credito_debito,
-						cuotas: {
-							cuotas_3_si: item.productSnapshot.prices.cuotas.cuotas_3_si,
-							cuotas_6_si: item.productSnapshot.prices.cuotas.cuotas_6_si
-						}
-					}
+					finance: null,
+					price: item.productSnapshot.price
 				}
 			}))
 		} as unknown as IOrder;
@@ -1240,8 +1242,11 @@ export class OrderService {
 			userId?: string;
 			notes?: string;
 		}
-	): Promise<IOrderDocument> {
+	) {
 		try {
+			const config = await EcommerceService.getConfig(models);
+			const isARS = config.costCurrency === 'ARS';
+
 			// 1. Obtener los productos seleccionados
 			const itemsData = (await ProductService.getProductsByIds(models, data.items.map(i => i._id)))
 				.map(product => {
@@ -1270,9 +1275,11 @@ export class OrderService {
 				const variant = item.data.variants?.find((v: any) => v.sku === item.variantSku) as any;
 
 				// precio base (efectivo/transferencia es lo más común para mostrador)
-				const price = item.data.prices?.efectivo_transferencia || 0;
+				const price = item.data.price?.cashTransferPrice || 0;
 				// costo del producto para calcular la ganancia
-				const costPrice = Number(item.data.prices?.costPrice) || 0;
+				const costPrice = isARS 
+					? (item.data.finance?.providerCost?.inARS || 0) 
+					: (item.data.finance?.providerCost?.inUSD || 0);
 
 				totalCost += (price * item.quantity);
 				totalEarnings += ((price - costPrice) * item.quantity);
@@ -1284,12 +1291,7 @@ export class OrderService {
 						model: item.data.model,
 						image: item.data.images?.[0]?.url || '',
 						slug: item.data.slug || '',
-						// Snapshot de precios — necesario para cálculo de ganancias post-pago
-						prices: {
-							efectivo_transferencia: item.data.prices?.efectivo_transferencia,
-							tarjeta_credito_debito: item.data.prices?.tarjeta_credito_debito,
-							earnings: item.data.prices?.earnings
-						}
+						price: item.data.price
 					},
 					variantSnapshot: {
 						sku: variant?.sku || item.variantSku,
@@ -1299,6 +1301,10 @@ export class OrderService {
 					},
 					quantity: item.quantity,
 					price,
+					costPriceSnapshot: {
+						inUSD: item.data.finance?.providerCost?.inUSD || 0,
+						inARS: item.data.finance?.providerCost?.inARS || 0
+					}
 				};
 			});
 
@@ -1310,6 +1316,10 @@ export class OrderService {
 
 			// 5. Descontar stock
 			await ProductService.reduceVariantStock(models, variantItems);
+
+			const { venta: dolarVenta } = await getDolar();
+			const totalOppositeCurrency = isARS ? totalCost / dolarVenta : totalCost * dolarVenta;
+			const earningsOppositeCurrency = isARS ? totalEarnings / dolarVenta : totalEarnings * dolarVenta;
 
 			// 7. Crear el Order record
 			const newOrder = await models.Order.create({
@@ -1330,14 +1340,17 @@ export class OrderService {
 				},
 				splitPayments: data.splitPayments,
 				total: totalCost,
+				totalOppositeCurrency,
+				earnings: totalEarnings,
+				earningsOppositeCurrency,
+				exchangeRateSnapshot: dolarVenta,
 				orderNumber: this.generateOrderNumber(),
 				notes: data.notes,
 				history: [{
 					status: OrderStatus.DELIVERED,
 					timestamp: new Date(),
 					note: 'Venta presencial en local'
-				}],
-				earnings: totalEarnings
+				}]
 			});
 
 			// Reload the order from the database to enforce the select: false schema rules
@@ -1549,8 +1562,8 @@ export class OrderService {
 				for (const item of (order.items as any[])) {
 					const snapshot = item.productSnapshot;
 					const costPriceValue = currency === 'USD'
-						? (snapshot?.prices?.costPrice?.inUSD ?? 0)
-						: (snapshot?.prices?.costPrice?.inARS ?? 0);
+						? (item.costPriceSnapshot?.inUSD ?? snapshot?.prices?.costPrice?.inUSD ?? 0)
+						: (item.costPriceSnapshot?.inARS ?? snapshot?.prices?.costPrice?.inARS ?? 0);
 
 					totalCostPrice += costPriceValue * item.quantity;
 

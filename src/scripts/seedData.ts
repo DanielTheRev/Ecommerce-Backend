@@ -5,7 +5,7 @@ import { Product } from '../models/Product.model';
 import { TechProduct } from '../models/discriminators/TechProduct.discriminator';
 import { ClothingProduct } from '../models/discriminators/ClothingProduct.discriminator';
 import { getDolar } from '@/services/dolar.service';
-import { FinancialsService } from '@/services/Financials.service';
+import { FinanceService } from '@/services/finance.service';
 import { EcommercePaymentProviders } from '@/interfaces/ecommerce.interface';
 import slugify from 'slugify';
 
@@ -307,13 +307,13 @@ const seedDatabase = async (): Promise<void> => {
 		// Insert Tech products
 		for (const item of techData) {
 			try {
-				const prices = await FinancialsService.CalculatePrices({ paymentProvider: EcommercePaymentProviders.UALA, cost_price: item.price, dolar: venta });
+				const { price, finance } = await FinanceService.CalculatePrices({ providerCost: item.price, dolar: venta });
 				await TechProduct.create({
 					slug: genSlug(item.brand, item.model),
 					brand: item.brand, model: item.model, category: item.category,
 					shortDescription: item.shortDescription, largeDescription: item.largeDescription,
 					features: item.features, specifications: item.specifications,
-					prices, discount: 0, images: [],
+					price, finance, discount: 0, images: [],
 					variants: item.variants, storage: item.storage || [],
 					ram: item.ram, processor: item.processor, os: item.os, screenSize: item.screenSize,
 				});
@@ -325,13 +325,13 @@ const seedDatabase = async (): Promise<void> => {
 		let clothCreated = 0;
 		for (const item of clothingData) {
 			try {
-				const prices = await FinancialsService.CalculatePrices({ paymentProvider: EcommercePaymentProviders.UALA, cost_price: item.price, dolar: venta });
+				const { price, finance } = await FinanceService.CalculatePrices({ providerCost: item.price, dolar: venta });
 				await ClothingProduct.create({
 					slug: genSlug(item.brand, item.model),
 					brand: item.brand, model: item.model, category: item.category,
 					shortDescription: item.shortDescription, largeDescription: item.largeDescription,
 					features: item.features, specifications: item.specifications,
-					prices, discount: 0, images: [],
+					price, finance, discount: 0, images: [],
 					variants: item.variants,
 					gender: item.gender, fit: item.fit, material: item.material,
 					sizeType: item.sizeType, composition: item.composition, season: item.season,

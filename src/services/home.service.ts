@@ -7,6 +7,7 @@ import { AppError } from '@/errors/app.error';
 import { TenantModels } from '@/config/modelRegistry';
 import { BentoService } from './bento.service';
 import { ShopTheLookService } from './shopTheLook.service';
+import { EcommerceService } from './ecommerce.service';
 
 export class HomeService {
 	private static readonly offers: IHomeOffer[] = [
@@ -99,6 +100,24 @@ export class HomeService {
 		const bentoConfig = await BentoService.getBentoConfig(models);
 		const ShopTheLooks = await ShopTheLookService.getActiveLooks(models);
 
+		const config = await EcommerceService.getConfig(models);
+		const maxInstallments = config?.paymentGateways?.mercadopago?.maxInstallments ?? 1;
+		const absorbInstallments = config?.pricingStrategy?.absorbInstallments ?? true;
+		
+		let installmentsText = 'Sin cuotas sin interés';
+		if (absorbInstallments) {
+			installmentsText = maxInstallments >= 6 ? '6 cuotas sin interés' : (maxInstallments >= 3 ? '3 cuotas sin interés' : 'Cuotas sin interés');
+		}
+
+		const dynamicOffers = [
+			{
+				...this.offers[0],
+				description: installmentsText
+			},
+			this.offers[1],
+			this.offers[2]
+		];
+
 		// Últimos productos subidos
 		const news = (await ProductService.searchProducts({
 			models,
@@ -121,7 +140,7 @@ export class HomeService {
 
 		return {
 			heroSlides,
-			offers: this.offers,
+			offers: dynamicOffers,
 			productByBrand,
 			bentoConfig,
 			shopTheLook: ShopTheLooks,

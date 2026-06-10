@@ -141,26 +141,43 @@ export class PaymentService {
 
 	getFinalCost() {
 		if (this.isPreferredPaymentType) {
-			return this.CalculatePricesWithOutCard() + this.shippingCost;
+			return this.CalculatePricesWithTransfer() + this.shippingCost;
 		}
 		if (this.installments === 1) {
-			return this.CalculatePricesWithOutCard() + this.shippingCost;
+			return this.CalculatePricesWithCard1Pay() + this.shippingCost;
 		}
-		return this.CalculatePriceWithCard() + this.shippingCost;
+		return this.CalculatePriceWithCardList() + this.shippingCost;
+	}
+
+	CalculatePricesWithTransfer() {
+		return this.itemsFromCart.reduce(
+			(total, item) => total + (item.data.price?.cashTransferPrice || 0) * item.quantity,
+			0
+		);
+	}
+
+	CalculatePricesWithCard1Pay() {
+		return this.itemsFromCart.reduce(
+			(total, item) => total + (item.data.price?.card_ticket1PayPrice || 0) * item.quantity,
+			0
+		);
+	}
+
+	CalculatePriceWithCardList() {
+		return this.itemsFromCart.reduce(
+			(total, item) => total + (item.data.price?.listPrice || 0) * item.quantity,
+			0
+		);
 	}
 
 	CalculatePricesWithOutCard() {
-		return this.itemsFromCart.reduce(
-			(total, item) => total + item.data.prices.efectivo_transferencia * item.quantity,
-			0
-		);
+		// Mantener para retrocompatibilidad
+		return this.CalculatePricesWithTransfer();
 	}
 
 	CalculatePriceWithCard() {
-		return this.itemsFromCart.reduce(
-			(total, item) => total + item.data.prices.tarjeta_credito_debito * item.quantity,
-			0
-		);
+		// Mantener para retrocompatibilidad
+		return this.CalculatePriceWithCardList();
 	}
 
 	getDescriptionQuantity() {
@@ -170,19 +187,18 @@ export class PaymentService {
 
 	getEarnings(installments: number = 1): number {
 		return this.itemsFromCart.reduce((total, item) => {
-			const earnings = item.data.prices.earnings;
+			const calculatedProfits = item.data.finance?.calculatedProfits;
 			let earningPerUnit = 0;
 
 			if (this.isPreferredPaymentType) {
-				earningPerUnit = earnings?.cash_transfer || 0;
+				earningPerUnit = calculatedProfits?.transfer || 0;
 			} else {
-				// Determinamos el tipo de ganancia basado en el tipo de pago actual si está disponible
-				if (installments === 0) { // Convención para tickets o pagos únicos
-					earningPerUnit = earnings?.ticket || 0;
+				if (installments === 1) {
+					earningPerUnit = calculatedProfits?.card_ticket1Pay || 0;
 				} else if (installments <= 3) {
-					earningPerUnit = earnings?.card_3_installments || 0;
+					earningPerUnit = calculatedProfits?.card3Installments || 0;
 				} else {
-					earningPerUnit = earnings?.card_6_installments || 0;
+					earningPerUnit = calculatedProfits?.card6Installments || 0;
 				}
 			}
 			return total + (earningPerUnit * item.quantity);

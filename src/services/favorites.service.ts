@@ -13,7 +13,7 @@ export class FavoritesService {
 			.populate({
 				path: 'product',
 				match: { isActive: true },
-				select: 'brand model images prices discount slug productType isActive isFeatured category'
+				select: 'brand model images price discount slug productType isActive isFeatured category'
 			})
 			.sort({ createdAt: -1 })
 			.lean()
@@ -47,7 +47,7 @@ export class FavoritesService {
 			.populate({
 				path: 'product',
 				match: { isActive: true },
-				select: 'brand model images prices discount slug productType isActive isFeatured category'
+				select: 'brand model images price discount slug productType isActive isFeatured category'
 			})
 			.lean()
 			.exec();
@@ -123,8 +123,8 @@ export class FavoritesService {
 						model: 1,
 						slug: 1,
 						images: 1,
-						'prices.efectivo_transferencia': 1,
-						'prices.tarjeta_credito_debito': 1,
+						'price.cashTransferPrice': 1,
+						'price.card_ticket1PayPrice': 1,
 						isActive: 1,
 						category: 1
 					},
@@ -148,7 +148,7 @@ export class FavoritesService {
 	static async notifyBackInStock(models: TenantModels, productId: string): Promise<{ sentCount: number; failedCount: number }> {
 		// 1. Buscar el producto
 		const product = await models.Product.findById(productId)
-			.select('brand model slug images prices.efectivo_transferencia')
+			.select('brand model slug images price.cashTransferPrice')
 			.lean()
 			.exec();
 
@@ -175,7 +175,7 @@ export class FavoritesService {
 			model: (product as any).model,
 			slug: (product as any).slug,
 			images: (product as any).images,
-			prices: { efectivo_transferencia: (product as any).prices?.efectivo_transferencia || 0 }
+			prices: { efectivo_transferencia: (product as any).price?.cashTransferPrice || 0 }
 		};
 
 		for (const fav of favorites) {

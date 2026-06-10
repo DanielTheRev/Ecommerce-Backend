@@ -10,7 +10,7 @@ import slugify from 'slugify';
 import { getDolar } from './dolar.service';
 import { ImageService } from './images.service';
 import { PaymentService } from './Payment.service';
-import { FinancialsService } from './Financials.service';
+import { FinanceService } from './finance.service';
 import { SkuService } from './sku.service';
 import { EcommerceService } from './ecommerce.service';
 
@@ -60,7 +60,7 @@ export class ProductService {
 		try {
 			const Model = this.getModel(models, productType);
 			const product = await Model.findById(id)
-				.select('+provider  +prices.costPrice +prices.earnings +prices.customPricingMethod +prices.dolarPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.profitMargin1Pay +prices.profitMarginInstallments')
+				.select('+provider +finance')
 				.populate('provider')
 				.lean() as unknown as IProduct;
 			return product;
@@ -89,7 +89,7 @@ export class ProductService {
 			const productIds = items.map(i => i._id);
 			const products = (await models.Product.find({
 				_id: { $in: productIds }
-			}).select('+provider +prices.costPrice +prices.dolarPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.earnings')
+			}).select('+provider +finance')
 				.populate('provider')
 				.lean()) as unknown as IProduct[];
 			if (products.length === 0)
@@ -178,7 +178,8 @@ export class ProductService {
 						model: product.model,
 						image: variant.imageReference?.url || product.images?.[0]?.url || '',
 						slug: product.slug || '',
-						prices: product.prices,
+						price: product.price,
+						finance: product.finance,
 						providerSnapshot: product.provider,
 					},
 					variantSnapshot,
@@ -211,7 +212,7 @@ export class ProductService {
 		try {
 			const products = (await models.Product.find({
 				_id: { $in: ids }
-			}).select('+prices.costPrice +prices.dolarPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.earnings')
+			}).select('+finance')
 				.lean()) as unknown as IProduct[];
 			if (products.length === 0)
 				throw new AppError(
@@ -256,7 +257,7 @@ export class ProductService {
 			const result = await paginate(Model, query, {
 				page,
 				limit,
-				sort: { 'prices.efectivo_transferencia': -1 }
+				sort: { 'price.cashTransferPrice': -1 }
 			});
 			return result;
 		} catch (error) {
@@ -292,7 +293,7 @@ export class ProductService {
 				page,
 				limit,
 				sort: { 'createdAt': -1 },
-				select: '+provider +prices.costPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.earnings',
+				select: '+provider +finance',
 				populate: {
 					path: 'provider',
 				}
@@ -326,7 +327,7 @@ export class ProductService {
 				]
 			};
 			const products = await Model.find(query)
-				.sort({ 'prices.efectivo_transferencia': -1 })
+				.sort({ 'price.cashTransferPrice': -1 })
 				.limit(limit)
 				.lean() as unknown as IProduct[];
 			return products;
@@ -391,9 +392,9 @@ export class ProductService {
 			}
 
 			if (filters.minPrice || filters.maxPrice) {
-				query['prices.efectivo_transferencia'] = {};
-				if (filters.minPrice) query['prices.efectivo_transferencia'].$gte = filters.minPrice;
-				if (filters.maxPrice) query['prices.efectivo_transferencia'].$lte = filters.maxPrice;
+				query['price.cashTransferPrice'] = {};
+				if (filters.minPrice) query['price.cashTransferPrice'].$gte = filters.minPrice;
+				if (filters.maxPrice) query['price.cashTransferPrice'].$lte = filters.maxPrice;
 			}
 
 			if (filters.minRating) {
@@ -421,8 +422,8 @@ export class ProductService {
 			}
 
 			const sortField = filters.sortBy === 'createdAt' ? 'createdAt' :
-				filters.sortBy === 'price' ? 'prices.efectivo_transferencia' :
-					'prices.efectivo_transferencia';
+				filters.sortBy === 'price' ? 'price.cashTransferPrice' :
+					'price.cashTransferPrice';
 			const sortDirection = filters.sortOrder === 'desc' ? 1 : -1;
 			const result = await paginate(Model, query, {
 				page,
@@ -443,16 +444,24 @@ export class ProductService {
 			const slug = this.generateSlug(data.brand, data.model);
 			const { venta } = await getDolar();
 
-			const prices = await FinancialsService.CalculatePrices(
+			const additionalCosts = typeof data.additionalCosts === 'string'
+				? JSON.parse(data.additionalCosts)
+				: data.additionalCosts;
+
+			const discountPercentageTransfer = data.discountPercentageTransfer !== undefined
+				? Number(data.discountPercentageTransfer)
+				: undefined;
+
+			const { price, finance } = await FinanceService.CalculatePrices(
 				{
-					paymentProvider: EcommercePaymentProviders.MERCADOPAGO,
-					cost_price: data.price,
+					providerCost: data.providerCost !== undefined ? data.providerCost : data.price!,
+					additionalCosts: additionalCosts || [],
+					discountPercentageTransfer,
 					dolar: venta,
 					models,
+					useCustomProfit: data.useCustomProfit,
 					customProfitMargin: data.customProfitMargin,
-					customProfitMargin1Pay: data.customProfitMargin1Pay,
-					customProfitMarginInstallments: data.customProfitMarginInstallments,
-					customPricingMethod: data.customPricingMethod
+					pricingMethodChoice: data.pricingMethodChoice,
 				}
 			);
 
@@ -517,8 +526,9 @@ export class ProductService {
 				model: data.model,
 				category: data.category,
 				features: data.features,
-				customProfitMargin: data.customProfitMargin !== undefined ? data.customProfitMargin : undefined,
-				prices,
+
+				price,
+				finance,
 				images,
 				specifications: data.specifications,
 				variants: data.variants || [],
@@ -568,7 +578,7 @@ export class ProductService {
 			console.log('🔄 Iniciando recalculo masivo de precios...');
 			// Obtenemos todos los productos. Necesitamos los campos del precio base.
 			const products = await models.Product.find({})
-				.select('+prices.costPrice +prices.profitMargin1Pay +prices.profitMarginInstallments')
+				.select('+finance')
 				.lean() as unknown as IProduct[];
 
 			if (!products || products.length === 0) {
@@ -581,28 +591,62 @@ export class ProductService {
 			const bulkOps = [];
 
 			for (const product of products) {
-				if (!product.prices || !product.prices.costPrice) continue;
+				// Buscar costo del proveedor anterior
+				let baseCost = 0;
+				let additionalCosts: any[] = [];
+				let customProfitMargin = undefined;
+				let pricingMethodChoice: any = undefined;
+				let discountPercentageTransfer: number | undefined = undefined;
 
-				// Definir el costo base a usar según la nueva configuración
-				const baseCost = isARS ? product.prices.costPrice.inARS : product.prices.costPrice.inUSD;
+				const rawProduct = product as any;
+				const oldPrices = rawProduct.prices || rawProduct.price;
+
+				if (product.finance?.providerCost) {
+					baseCost = isARS ? product.finance.providerCost.inARS : product.finance.providerCost.inUSD;
+					additionalCosts = product.finance.additionalCosts || [];
+					customProfitMargin = product.finance.pricingStrategy?.targetProfit;
+					pricingMethodChoice = product.finance.pricingStrategy?.method;
+					discountPercentageTransfer = product.price?.discountPercentageTransfer;
+				} else if (oldPrices) {
+					// Fallback a campos viejos de prices/price
+					baseCost = isARS 
+						? (oldPrices.costPrice?.inARS || oldPrices.providerCost?.inARS || 0) 
+						: (oldPrices.costPrice?.inUSD || oldPrices.providerCost?.inUSD || 0);
+
+					// Si el costo sigue siendo 0, tal vez el precio base era directo
+					if (baseCost === 0 && typeof oldPrices === 'number') {
+						baseCost = oldPrices;
+					}
+					pricingMethodChoice = oldPrices.customPricingMethod;
+					customProfitMargin = oldPrices.profitMargin;
+				}
+
+				if (!baseCost) {
+					// Si de plano no tiene costo base, omitimos para evitar divisiones por cero
+					continue;
+				}
 
 				// Recalcular los precios usando la nueva configuración inyectada
-				const calculatedPrices = await FinancialsService.CalculatePrices({
-					paymentProvider: EcommercePaymentProviders.MERCADOPAGO, // Por defecto MP
-					cost_price: baseCost,
+				const { price: calculatedPrice, finance: calculatedFinance } = await FinanceService.CalculatePrices({
+					providerCost: baseCost,
+					additionalCosts,
+					discountPercentageTransfer,
 					dolar: dolarVenta,
 					models,
-					config, // Pasamos la configuración para evitar Múltiples queries
-					customProfitMargin1Pay: product.prices.profitMargin1Pay,
-					customProfitMarginInstallments: product.prices.profitMarginInstallments,
-					customPricingMethod: product.prices.customPricingMethod
+					config, // Pasamos la configuración para evitar múltiples queries
+					useCustomProfit: customProfitMargin !== undefined,
+					customProfitMargin,
+					pricingMethodChoice,
 				});
 
-				// Preparar la operación de actualización para MongoDB
+				// Preparar la operación de actualización para MongoDB (incluye el borrado del campo viejo prices)
 				bulkOps.push({
 					updateOne: {
 						filter: { _id: product._id },
-						update: { $set: { prices: calculatedPrices } }
+						update: { 
+							$set: { price: calculatedPrice, finance: calculatedFinance },
+							$unset: { prices: "" }
+						}
 					}
 				});
 			}
@@ -629,7 +673,7 @@ export class ProductService {
 			// Es necesario como fallback cuando el admin solo cambia customProfitMargin
 			// sin enviar un price nuevo — evita calcular con costPrice undefined.
 			const product = await models.Product.findById(id)
-				.select('+provider +prices.costPrice +prices.dolarPrice +prices.profitMargin +prices.baseCommission +prices.cft6Cuotas +prices.profitMargin1Pay +prices.profitMarginInstallments')
+				.select('+provider +finance')
 				.populate('provider')
 				.lean() as unknown as IProduct;
 
@@ -697,35 +741,54 @@ export class ProductService {
 				updateData.slug = this.generateSlug(newBrand, newModel);
 			}
 
-			if (updateData.price || updateData.customProfitMargin1Pay !== undefined || updateData.customProfitMarginInstallments !== undefined) {
+			if (
+				updateData.providerCost !== undefined ||
+				updateData.price !== undefined || 
+				updateData.useCustomProfit !== undefined ||
+				updateData.customProfitMargin !== undefined || 
+				updateData.pricingMethodChoice !== undefined ||
+				updateData.additionalCosts !== undefined ||
+				updateData.discountPercentageTransfer !== undefined
+			) {
 				const { venta } = await getDolar();
-				const currentCustomProfitMargin = updateData.customProfitMargin !== undefined ? updateData.customProfitMargin : product.prices.profitMargin;
-				const currentProfitMargin1Pay = updateData.customProfitMargin1Pay !== undefined ? updateData.customProfitMargin1Pay : product.prices.profitMargin1Pay;
-				const currentProfitMarginInstallments = updateData.customProfitMarginInstallments !== undefined ? updateData.customProfitMarginInstallments : product.prices.profitMarginInstallments;
+				const currentCustomProfitMargin = updateData.customProfitMargin !== undefined ? updateData.customProfitMargin : product.finance?.pricingStrategy?.targetProfit;
 
-				// Attempt to get the current base price. If updateData.price is provided, use it.
+				// Attempt to get the current base price. If updateData.providerCost or updateData.price is provided, use it.
 				// Otherwise try temporary product.price. As a final fallback, safely cast the stored base price cost
 				const config = await EcommerceService.getConfig(models);
 				const isARS = config.costCurrency === 'ARS';
-				const currentPrice = updateData.price !== undefined
-					? updateData.price
-					: (isARS ? product.prices.costPrice.inARS : product.prices.costPrice.inUSD);
+				const currentPrice = updateData.providerCost !== undefined
+					? updateData.providerCost
+					: (updateData.price !== undefined
+						? updateData.price
+						: (isARS ? product.finance?.providerCost?.inARS : product.finance?.providerCost?.inUSD));
 
-				const prices = await FinancialsService.CalculatePrices(
+				const newAdditionalCosts = updateData.additionalCosts !== undefined
+					? (typeof updateData.additionalCosts === 'string' ? JSON.parse(updateData.additionalCosts) : updateData.additionalCosts)
+					: (product.finance?.additionalCosts || []);
+
+				const newDiscountPercentageTransfer = updateData.discountPercentageTransfer !== undefined
+					? Number(updateData.discountPercentageTransfer)
+					: product.price?.discountPercentageTransfer;
+
+				const { price, finance } = await FinanceService.CalculatePrices(
 					{
-						paymentProvider: EcommercePaymentProviders.MERCADOPAGO,
-						cost_price: currentPrice as number,
+						providerCost: currentPrice as number,
+						additionalCosts: newAdditionalCosts,
+						discountPercentageTransfer: newDiscountPercentageTransfer,
 						dolar: venta,
 						models,
+						useCustomProfit: updateData.useCustomProfit ?? (product.finance?.pricingStrategy?.targetProfit !== undefined),
 						customProfitMargin: currentCustomProfitMargin,
-						customProfitMargin1Pay: currentProfitMargin1Pay,
-						customProfitMarginInstallments: currentProfitMarginInstallments,
-						customPricingMethod: updateData.customPricingMethod ?? product.prices.customPricingMethod
+						pricingMethodChoice: updateData.pricingMethodChoice ?? product.finance?.pricingStrategy?.method,
 					}
 				);
-				updateData.prices = prices;
-				if (updateData.customProfitMargin1Pay) updateData.prices.profitMargin1Pay = Number(updateData.customProfitMargin1Pay);
-				if (updateData.customProfitMarginInstallments) updateData.prices.profitMarginInstallments = Number(updateData.customProfitMarginInstallments);
+				(updateData as any).price = price;
+				(updateData as any).finance = finance;
+				delete (updateData as any).prices;
+				delete (updateData as any).providerCost;
+				delete updateData.additionalCosts;
+				delete updateData.discountPercentageTransfer;
 			};
 			if (updateData.specifications) updateData.specifications = JSON.parse(updateData.specifications as string);
 			if (updateData.storage) updateData.storage = JSON.parse(updateData.storage as string);

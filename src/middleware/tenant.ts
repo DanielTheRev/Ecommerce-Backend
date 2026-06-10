@@ -55,11 +55,9 @@ export const resolveTenant = async (
 		let tenant: ITenant | null = null;
 
 		if (tenantSlug) {
-			console.log(`Resolviendo tenant por slug: ${tenantSlug}`);
 			tenant = await connectionManager.getTenantBySlug(tenantSlug);
 		} else {
 			// Estrategia 2: Resolver por dominio/hostname
-			console.log('Resolviendo tenant por hostname');
 			const hostname = req.hostname;
 			if (hostname && hostname !== 'localhost') {
 				tenant = await connectionManager.getTenantByDomain(hostname);
