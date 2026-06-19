@@ -20,7 +20,7 @@ export interface CreateOrderDTO {
 		_id: string;
 		type: PaymentType;
 	};
-	formPayerData: IFormPayerData,
+	formPayerData?: IFormPayerData,
 	isThirdPartyPayer?: boolean; // Para diferenciar entre comprador y pagador en casos de terceros
 	mercadopagoData?: {
 		token?: string;
@@ -114,6 +114,7 @@ export enum PaymentStatus {
 
 // Interface for order items
 export interface IOrderItem {
+	_id?: string; // Auto-generado por Mongoose
 	// Snapshot del producto al momento de la compra (con _id para stock ops)
 	productSnapshot: IProductSnapshot;
 	// Snapshot de la variante al momento de la compra
@@ -143,11 +144,12 @@ export interface IProductSnapshot {
 	slug?: string;
 	price: IProductPrices;
 	finance?: IProductFinance;
-	providerSnapshot: IProvider;
+	providerSnapshot?: IProvider;
 }
 
 // Interface for shipping address
 export interface IShippingAddress {
+	_id?: string; // Auto-generado por Mongoose
 	recipientName: string;
 	street: string;
 	number: string;
@@ -162,6 +164,7 @@ export interface IShippingAddress {
 
 // Interface for shipping information
 export interface IShippingInfo {
+	_id?: string; // Auto-generado por Mongoose
 	type: ShippingType;
 	pickupPoint?: {
 		name: string;
@@ -169,12 +172,14 @@ export interface IShippingInfo {
 	};
 	shippingAddress?: IShippingAddress;
 	cost: number;
+	freeShippingApplied?: boolean;
 	shippedAt: Date;
 	deliveredAt: Date;
 }
 
 // Interface para información de pago
 export interface IPaymentInfo {
+	_id?: string; // Auto-generado por Mongoose
 	method: PaymentType;
 	status: PaymentStatus;
 	transactionId?: string;
@@ -199,6 +204,18 @@ export interface ISplitPayment {
 	transactionId?: string;
 }
 
+export interface IOrderFinance {
+	_id?: string; // Auto-generado por Mongoose
+	total: number;
+	baseCost: number;
+	earnings: number;
+	totalOppositeCurrency?: number;
+	earningsOppositeCurrency?: number;
+	exchangeRateSnapshot?: number;
+	installments: number;
+	paymentGatewayFee?: number;
+}
+
 // Interface principal de la orden
 export interface IOrder {
 	_id: string; // Used when lean()
@@ -213,14 +230,10 @@ export interface IOrder {
 	paymentInfo: IPaymentInfo;
 	splitPayments?: ISplitPayment[]; // Para ventas combinadas (Ej. Mitad efectivo, mitad débito)
 	status: OrderStatus;
-	shippingCost: number;
-	total: number;
-	earnings: number;
-	totalOppositeCurrency?: number;
-	earningsOppositeCurrency?: number;
-	exchangeRateSnapshot?: number;
+	finance: IOrderFinance;
 	orderNumber: string;
 	notes?: string;
+	isThirdPartyPayer?: boolean;
 	createdAt: Date;
 	updatedAt: Date;
 }

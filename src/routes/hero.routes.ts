@@ -2,8 +2,10 @@ import { Router } from 'express';
 import { HeroController } from '../controllers/hero.controller';
 import multer from 'multer';
 const multerConfig = multer().fields([
-  { name: 'imageDesktop', maxCount: 1 },
-  { name: 'imageMobile', maxCount: 1 }
+  { name: 'imageDesktop1', maxCount: 1 },
+  { name: 'imageDesktop2', maxCount: 1 },
+  { name: 'imageMobile1', maxCount: 1 },
+  { name: 'imageMobile2', maxCount: 1 }
 ])
 
 

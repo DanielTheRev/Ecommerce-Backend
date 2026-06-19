@@ -3,8 +3,10 @@ import { IProduct } from "./product.interface";
 
 export interface IHeroSlideDocument extends Document {
   title: string;
-  imageDesktop: string;
-  imageMobile: string;
+  imageDesktop1: string;
+  imageDesktop2?: string;
+  imageMobile1: string;
+  imageMobile2?: string;
   sub_title: string, // "FW / 2026" (String)
   description: string, // "Prendas diseñadas para perdurar..." (String)
   ctaText: string, // "Comprar Colección" (String)
@@ -17,8 +19,10 @@ export interface IHeroSlideDocument extends Document {
 export interface IHeroSlide {
   _id: ObjectId;
   title: string;
-  imageDesktop: IHeroImage;
-  imageMobile: IHeroImage;
+  imageDesktop1: IHeroImage;
+  imageDesktop2?: IHeroImage;
+  imageMobile1: IHeroImage;
+  imageMobile2?: IHeroImage;
   sub_title: string, // "FW / 2026" (String)
   description: string, // "Prendas diseñadas para perdurar..." (String)
   ctaText: string, // "Comprar Colección" (String)
@@ -28,10 +32,12 @@ export interface IHeroSlide {
   featuredProducts: IProduct[]
 }
 
-export interface IHeroCreateDTO extends Omit<IHeroSlide, '_id' | 'imageDesktop' | 'imageMobile' | 'featuredProducts'> {
+export interface IHeroCreateDTO extends Omit<IHeroSlide, '_id' | 'imageDesktop1' | 'imageDesktop2' | 'imageMobile1' | 'imageMobile2' | 'featuredProducts'> {
   featuredProducts: string;
-  imageDesktop: string;
-  imageMobile: string;
+  imageDesktop1: string;
+  imageDesktop2?: string;
+  imageMobile1: string;
+  imageMobile2?: string;
   imageFiles: { [fieldname: string]: Express.Multer.File[] },
 }
 

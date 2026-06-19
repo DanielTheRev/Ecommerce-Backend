@@ -134,7 +134,7 @@ export class ResendService {
 
             <p style="font-size: 14px; color: #757575; margin: 15px 0 5px 0;">Medio de pago:</p>
             <p style="font-size: 14px; font-weight: bold; margin: 0;">
-              Total pagado: ${order.total.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}
+              Total pagado: ${order.finance.total.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}
             </p>
           </div>
 
@@ -209,7 +209,7 @@ export class ResendService {
 
             <p style="font-size: 14px; color: #757575; margin: 15px 0 5px 0;">Monto total:</p>
             <p style="font-size: 14px; font-weight: bold; margin: 0;">
-              Total a pagar: ${order.total.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}
+              Total a pagar: ${order.finance.total.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}
             </p>
           </div>
 
@@ -330,7 +330,7 @@ export class ResendService {
               <tr style="border-top: 1px solid #e2e8f0;">
                 <td style="color: #0f172a; font-weight: bold; padding-top: 10px; font-size: 15px;">Total a transferir:</td>
                 <td style="color: #111; font-weight: bold; padding-top: 10px; font-size: 16px;">
-                  ${order.total.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}
+                  ${order.finance.total.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}
                 </td>
               </tr>
             </table>
@@ -409,7 +409,7 @@ export class ResendService {
           <div style="background-color: #eef2ff; border: 1px solid #c7d2fe; padding: 20px; border-radius: 4px; margin-bottom: 30px;">
             <p style="font-size: 14px; margin: 0 0 10px 0;"><strong>Punto de retiro:</strong> ${pickupName}</p>
             <p style="font-size: 14px; margin: 0 0 10px 0;"><strong>Dirección:</strong> ${pickupAddress}</p>
-            <p style="font-size: 14px; margin: 0;"><strong>Total a abonar en efectivo:</strong> ${order.total.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</p>
+            <p style="font-size: 14px; margin: 0;"><strong>Total a abonar en efectivo:</strong> ${order.finance.total.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</p>
           </div>
 
           <h2 style="font-size: 18px; font-weight: normal; border-bottom: 2px solid #111; padding-bottom: 10px; margin-bottom: 0;">Tu Pedido:</h2>

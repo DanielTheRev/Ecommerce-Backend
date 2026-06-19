@@ -94,15 +94,16 @@ export class ReceiptService {
 
 				// === TOTALES ===
 				doc.font('Helvetica-Bold').fontSize(12);
-				if (order.shippingCost > 0) {
-					doc.text('Subtotal:', { continued: true });
-					doc.text((order.total - order.shippingCost).toLocaleString('es-AR', { style: 'currency', currency: 'ARS' }), { align: 'right' });
-					doc.text('Costo Envío:', { continued: true });
-					doc.text(order.shippingCost.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' }), { align: 'right' });
+				const shippingCost = order.shippingInfo?.cost || 0;
+				if (shippingCost > 0) {
+					doc.text('Subtotal:', { align: 'right' });
+					doc.text((order.finance.total - shippingCost).toLocaleString('es-AR', { style: 'currency', currency: 'ARS' }), { align: 'right' });
+					doc.text('Envío:', { align: 'right' });
+					doc.text(shippingCost.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' }), { align: 'right' });
 				}
 				
 				doc.text('TOTAL:', { continued: true });
-				doc.text(order.total.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' }), { align: 'right' });
+				doc.text(order.finance.total.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' }), { align: 'right' });
 				
 				doc.moveDown(0.5);
 				doc.font('Helvetica').fontSize(10);
@@ -116,7 +117,7 @@ export class ReceiptService {
 					});
 				} else {
 					doc.text(`- ${order.paymentInfo.method}: `, { continued: true });
-					doc.text(order.total.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' }), { align: 'right' });
+					doc.text(order.finance.total.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' }), { align: 'right' });
 				}
 
 				if (order.paymentInfo.status !== PaymentStatus.APPROVED) {

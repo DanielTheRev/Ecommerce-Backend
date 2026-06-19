@@ -31,6 +31,10 @@ export const shippingInfoSchema = new Schema<IShippingInfo>({
     type: Number,
     required: true,
     min: 0
+  },
+  freeShippingApplied: {
+    type: Boolean,
+    default: false
   }
 });
 

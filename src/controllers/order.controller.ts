@@ -102,7 +102,7 @@ export const mercadopagoWebhook = async (req: AuthRequest, res: Response) => {
 								if (order.paymentInfo.status === PaymentStatus.APPROVED) {
 									clientNotificationType = NotificationType.PAYMENT_SUCCESS;
 									clientNotificationTitle = 'Pago Aprobado';
-									clientNotificationMessage = `Tu pago de $${order.total} fue aprobado correctamente.`;
+									clientNotificationMessage = `Tu pago de $${order.finance.total} fue aprobado correctamente.`;
 									severity = NotificationSeverity.SUCCESS;
 								} else if (order.paymentInfo.status === PaymentStatus.REJECTED) {
 									clientNotificationType = NotificationType.PAYMENT_FAILED;
@@ -151,7 +151,7 @@ export const mercadopagoWebhook = async (req: AuthRequest, res: Response) => {
 						if (order.paymentInfo.status === PaymentStatus.APPROVED) {
 							clientNotificationType = NotificationType.PAYMENT_SUCCESS;
 							clientNotificationTitle = 'Pago Aprobado';
-							clientNotificationMessage = `Tu pago de $${order.total} fue aprobado correctamente.`;
+							clientNotificationMessage = `Tu pago de $${order.finance.total} fue aprobado correctamente.`;
 							severity = NotificationSeverity.SUCCESS;
 						} else if (order.paymentInfo.status === PaymentStatus.REJECTED) {
 							clientNotificationType = NotificationType.PAYMENT_FAILED;
@@ -343,7 +343,7 @@ export const updatePaymentStatus = async (req: AuthRequest, res: Response, next:
 			socketManager.notifyClient(order.user._id.toString(), {
 				type: NotificationType.PAYMENT_SUCCESS,
 				title: 'Pago Aprobado',
-				message: `Tu pago de $${order.total} fue procesado correctamente.`,
+				message: `Tu pago de $${order.finance.total} fue procesado correctamente.`,
 				severity: NotificationSeverity.SUCCESS,
 				link: `/orders/${order._id}`,
 				data: order

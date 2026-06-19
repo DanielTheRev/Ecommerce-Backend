@@ -13,6 +13,7 @@ import { paymentInfoSchema } from './schemas/paymentInfo.schema';
 import { shippingInfoSchema } from './schemas/shippingInfo.schema';
 import { splitPaymentSchema } from './schemas/splitPayment.schema';
 import { statusEntrySchema } from './schemas/statusEntry.schema';
+import { orderFinanceSchema } from './schemas/orderFinance.schema';
 
 
 // Schema principal de la orden
@@ -75,33 +76,9 @@ const orderSchema = new Schema<IOrder, IOrderModel>(
 			enum: Object.values(OrderStatus),
 			default: OrderStatus.PENDING_PAYMENT
 		},
-		shippingCost: {
-			type: Number,
-			required: true,
-			min: 0,
-			default: 0
-		},
-		total: {
-			type: Number,
-			required: true,
-			min: 0
-		},
-		earnings: {
-			type: Number,
-			required: true,
-			default: 0
-		},
-		totalOppositeCurrency: {
-			type: Number,
-			required: false
-		},
-		earningsOppositeCurrency: {
-			type: Number,
-			required: false
-		},
-		exchangeRateSnapshot: {
-			type: Number,
-			required: false
+		finance: {
+			type: orderFinanceSchema,
+			required: true
 		},
 		orderNumber: {
 			type: String,
@@ -112,6 +89,10 @@ const orderSchema = new Schema<IOrder, IOrderModel>(
 			type: String,
 			trim: true,
 			maxlength: 500
+		},
+		isThirdPartyPayer: {
+			type: Boolean,
+			default: false
 		}
 	},
 	{

@@ -39,7 +39,7 @@ import { getDolar } from './dolar.service';
 
 // Campos sensibles de precios en el snapshot de la orden — solo visibles para admins
 // Espejo de select:false declarado en orderItem.schema.ts
-export const ADMIN_PRICE_SELECT = '+items.productSnapshot.providerSnapshot +items.productSnapshot.finance';
+export const ADMIN_PRICE_SELECT = '+finance.baseCost +finance.earnings +finance.earningsOppositeCurrency +items.productSnapshot.providerSnapshot +items.productSnapshot.finance';
 
 export class OrderService {
 	private static generateOrderNumber(): string {
@@ -242,6 +242,8 @@ export class OrderService {
 			const { venta: dolarVenta } = await getDolar();
 			const isARS = config.costCurrency === 'ARS';
 
+			const baseCost = orderItems.reduce((acc, item) => acc + (isARS ? item.costPriceSnapshot.inARS : item.costPriceSnapshot.inUSD) * item.quantity, 0);
+
 			const totalOppositeCurrency = isARS ? finalCost / dolarVenta : finalCost * dolarVenta;
 			const earningsVal = PaymentService.theOrderIsPreferredPayment(paymentMethod.type)
 				? paymentService.getEarnings()
@@ -258,7 +260,8 @@ export class OrderService {
 						type: shippingMethod.type,
 						pickupPoint: data.shippingMethod.pickupPoint,
 						shippingAddress: data.shippingMethod.address,
-						cost: appliedShippingCost
+						cost: appliedShippingCost,
+						freeShippingApplied: isEligible && subtotalBase >= threshold && shippingMethod.cost > 0
 					},
 					paymentInfo: {
 						method: paymentMethod.type,
@@ -266,17 +269,22 @@ export class OrderService {
 					},
 					buyerData: (user && !(data.isThirdPartyPayer && data.formPayerData)) ? {
 						firstName: user.name.split(' ')[0],
-						lastName: user.name.split(' ')[1],
+						lastName: user.name.split(' ')[1] || '',
 						email: user.email,
-						identificationType: data.formPayerData.identificationType || '',
-						identificationNumber: data.formPayerData.identificationNumber || ''
+						identificationType: data.formPayerData?.identificationType || '',
+						identificationNumber: data.formPayerData?.identificationNumber || ''
 					} : data.formPayerData,
-					total: finalCost,
-					totalOppositeCurrency,
-					earnings: earningsVal,
-					earningsOppositeCurrency,
-					exchangeRateSnapshot: dolarVenta,
+					finance: {
+						total: finalCost,
+						baseCost,
+						earnings: earningsVal,
+						totalOppositeCurrency,
+						earningsOppositeCurrency,
+						exchangeRateSnapshot: dolarVenta,
+						installments: installments || 1
+					},
 					orderNumber: this.generateOrderNumber(),
+					isThirdPartyPayer: data.isThirdPartyPayer || false,
 					history: [{
 						status: status,
 						timestamp: new Date(),
@@ -444,7 +452,7 @@ export class OrderService {
 				installments
 			);
 
-			const finalCost = order.total; // Usamos el total ya calculado en createOrder
+			const finalCost = order.finance.total; // Usamos el total ya calculado en createOrder
 
 			// Armar datos del payer desde los datos ya guardados en la orden
 			const buyerData = order.buyerData;
@@ -453,6 +461,22 @@ export class OrderService {
 			const payerEmail = orderUser?.email || buyerData?.email;
 			const payerFirstName = orderUser?.name?.split(' ')[0] || buyerData?.firstName;
 			const payerLastName = orderUser?.name?.split(' ').slice(1).join(' ') || buyerData?.lastName;
+
+			const mpItems = order.items.map((item) => ({
+				title: `${item.productSnapshot.brand} ${item.productSnapshot.model}`,
+				quantity: item.quantity,
+				unit_price: item.price.toString(),
+				picture_url: item.variantSnapshot?.imageReference?.url || ''
+			}));
+
+			if (order.shippingInfo.cost > 0) {
+				mpItems.push({
+					title: 'Costo de Envío',
+					quantity: 1,
+					unit_price: order.shippingInfo.cost.toString(),
+					picture_url: ''
+				});
+			}
 
 			const { result, error } = await paymentService.withMercadoPago({
 				orderID: order.id,
@@ -467,12 +491,7 @@ export class OrderService {
 				mercadoPagoData: mercadopagoData,
 				tenantSlug,
 				baseUrl,
-				items: order.items.map((item) => ({
-					title: `${item.productSnapshot.brand} ${item.productSnapshot.model}`,
-					quantity: item.quantity,
-					unit_price: item.price.toString(),
-					picture_url: item.variantSnapshot?.imageReference?.url || ''
-				}))
+				items: mpItems
 			});
 
 			let extras: CreateOrderExtras | undefined;
@@ -572,11 +591,25 @@ export class OrderService {
 				// Usar las ganancias pre-calculadas por producto (respeta márgenes custom)
 				const mpInstallments = mercadopagoData.installments || 1;
 				const earningsVal = paymentService.getEarnings(mpInstallments);
-				order.earnings = earningsVal;
+				order.finance.earnings = earningsVal;
+				order.finance.installments = mpInstallments;
 
-				const dolarVenta = order.exchangeRateSnapshot || (await getDolar()).venta;
+				// Calcular comisión de Mercado Pago
+				const rawBaseComm = config.paymentGateways.mercadopago.baseCommission;
+				const rawCFT3 = config.paymentGateways.mercadopago.cft3cuotas;
+				const rawCFT6 = config.paymentGateways.mercadopago.cft6Cuotas;
+				const ivaFactor = 1 + Number(config.taxes.iva) / 100;
+				let tasa = Number(rawBaseComm) / 100;
+				if (mpInstallments > 3) {
+					tasa = (Number(rawBaseComm) + Number(rawCFT6)) / 100;
+				} else if (mpInstallments > 1) {
+					tasa = (Number(rawBaseComm) + Number(rawCFT3)) / 100;
+				}
+				order.finance.paymentGatewayFee = order.finance.total * (tasa * ivaFactor);
+
+				const dolarVenta = order.finance.exchangeRateSnapshot || (await getDolar()).venta;
 				const isARS = config.costCurrency === 'ARS';
-				order.earningsOppositeCurrency = isARS ? earningsVal / dolarVenta : earningsVal * dolarVenta;
+				order.finance.earningsOppositeCurrency = isARS ? earningsVal / dolarVenta : earningsVal * dolarVenta;
 			}
 
 			extras = {
@@ -611,15 +644,28 @@ export class OrderService {
 	 * Helper: construye un objeto de orden sin datos sensibles para enviar al frontend.
 	 */
 	private static buildSafeOrder(order: IOrderDocument): IOrder {
+		const orderObj = order.toObject();
 		return {
-			...order.toObject(),
-			items: order.toObject().items.map((item: any) =>
+			...orderObj,
+			finance: orderObj.finance ? {
+				total: orderObj.finance.total,
+				totalOppositeCurrency: orderObj.finance.totalOppositeCurrency,
+				exchangeRateSnapshot: orderObj.finance.exchangeRateSnapshot,
+				installments: orderObj.finance.installments,
+				paymentGatewayFee: orderObj.finance.paymentGatewayFee,
+				// Omit sensitive data
+				baseCost: 0,
+				earnings: 0,
+				earningsOppositeCurrency: 0
+			} : undefined,
+			items: orderObj.items.map((item: any) =>
 			({
 				...item,
+				costPriceSnapshot: undefined,
 				productSnapshot: {
 					...item.productSnapshot,
-					providerSnapshot: null,
-					finance: null,
+					providerSnapshot: undefined,
+					finance: undefined,
 					price: item.productSnapshot.price
 				}
 			}))
@@ -723,6 +769,19 @@ export class OrderService {
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
 			order.paymentInfo.status = data.status;
 			order.status = data.status === PaymentStatus.APPROVED ? OrderStatus.PROCESSING_SHIPPING : OrderStatus.PENDING_PAYMENT;
+			let note = `Pago actualizado a ${data.status}`;
+			if (data.status === PaymentStatus.APPROVED) {
+				note = 'Pago recibido';
+			} else if (data.status === PaymentStatus.REJECTED) {
+				note = 'Pago rechazado';
+			}
+
+			order.history.push({
+				status: order.status,
+				timestamp: new Date(),
+				note: note
+			});
+
 			const orderUpdated = await order.save();
 
 			if (data.status === PaymentStatus.APPROVED) {
@@ -841,7 +900,8 @@ export class OrderService {
 							order.shippingInfo.cost
 						);
 
-						order.earnings = paymentService.getEarnings(installments);
+						order.finance.earnings = paymentService.getEarnings(installments);
+						order.finance.installments = installments;
 					}
 				}
 				order.paymentInfo.paymentDate = new Date();
@@ -952,8 +1012,8 @@ export class OrderService {
 					items: [],
 					status: payment.status,
 					status_detail: payment.status_detail,
-					total_amount: String(payment.transaction_amount || payment.amount || order.total),
-					total_paid_amount: String(payment.transaction_amount || payment.amount || order.total),
+					total_amount: String(payment.transaction_amount || payment.amount || order.finance.total),
+					total_paid_amount: String(payment.transaction_amount || payment.amount || order.finance.total),
 					transactions: { payments: [payment] } as any
 				};
 			} else {
@@ -989,7 +1049,20 @@ export class OrderService {
 					order.shippingInfo.cost
 				);
 
-				order.earnings = paymentService.getEarnings(installments);
+				order.finance.earnings = paymentService.getEarnings(installments);
+				order.finance.installments = installments;
+
+				const rawBaseComm = config.paymentGateways.mercadopago.baseCommission;
+				const rawCFT3 = config.paymentGateways.mercadopago.cft3cuotas;
+				const rawCFT6 = config.paymentGateways.mercadopago.cft6Cuotas;
+				const ivaFactor = 1 + Number(config.taxes.iva) / 100;
+				let tasa = Number(rawBaseComm) / 100;
+				if (installments > 3) {
+					tasa = (Number(rawBaseComm) + Number(rawCFT6)) / 100;
+				} else if (installments > 1) {
+					tasa = (Number(rawBaseComm) + Number(rawCFT3)) / 100;
+				}
+				order.finance.paymentGatewayFee = order.finance.total * (tasa * ivaFactor);
 			}
 
 			await order.save();
@@ -1400,10 +1473,10 @@ export class OrderService {
 			let onlineSalesCount = 0;
 
 			dailyOrders.forEach(order => {
-				totalRevenue += order.total;
-				// cast earnings manually to avoid sum TS error
-				totalEarnings += Number(order.earnings) || 0;
-
+				totalRevenue += order.finance.total;
+				if (order.status !== OrderStatus.CANCELLED && order.paymentInfo.status !== PaymentStatus.REJECTED) {
+					totalEarnings += Number(order.finance.earnings) || 0;
+				}
 				if (order.saleType === SaleType.LOCAL) localSalesCount++;
 				else onlineSalesCount++;
 
@@ -1414,7 +1487,7 @@ export class OrderService {
 					});
 				} else {
 					const method = order.paymentInfo?.method || 'unknown';
-					incomeByMethod[method] = (incomeByMethod[method] || 0) + order.total;
+					incomeByMethod[method] = (incomeByMethod[method] || 0) + order.finance.total;
 				}
 			});
 
@@ -1535,14 +1608,14 @@ export class OrderService {
 			const revenueByMethod: Record<string, number> = {};
 
 			// ── Daily breakdown (para el chart) ────────────────────────────────────
-			const breakdownMap = new Map<string, { revenue: number; earnings: number; count: number }>();
+			const breakdownMap = new Map<string, { revenue: number; earnings: number; ordersCount: number }>();
 
 			// ── Sales con detalle de comprador y proveedor ──────────────────────────
 			const salesWithDetails: any[] = [];
 
 			for (const order of approvedOrders) {
-				totalRevenue += order.total;
-				totalEarnings += Number(order.earnings) || 0;
+				totalRevenue += order.finance.total;
+				totalEarnings += Number(order.finance.earnings) || 0;
 
 				if (order.saleType === SaleType.LOCAL) localSalesCount++;
 				else onlineSalesCount++;
@@ -1554,7 +1627,7 @@ export class OrderService {
 					});
 				} else {
 					const method = order.paymentInfo?.method || 'unknown';
-					revenueByMethod[method] = (revenueByMethod[method] || 0) + order.total;
+					revenueByMethod[method] = (revenueByMethod[method] || 0) + order.finance.total;
 				}
 
 				// Costo de proveedor por item (deuda al proveedor)
@@ -1591,8 +1664,8 @@ export class OrderService {
 					orderNumber: order.orderNumber,
 					createdAt: (order as any).createdAt,
 					saleType: order.saleType,
-					total: order.total,
-					earnings: Number(order.earnings) || 0,
+					total: order.finance.total,
+					earnings: Number(order.finance.earnings) || 0,
 					paymentMethod: order.paymentInfo?.method,
 					buyer,
 					items: itemsWithDetail
@@ -1600,11 +1673,11 @@ export class OrderService {
 
 				// Daily breakdown
 				const dayKey = new Date((order as any).createdAt).toISOString().split('T')[0];
-				const existing = breakdownMap.get(dayKey) || { revenue: 0, earnings: 0, count: 0 };
+				const existing = breakdownMap.get(dayKey) || { revenue: 0, earnings: 0, ordersCount: 0 };
 				breakdownMap.set(dayKey, {
-					revenue: existing.revenue + order.total,
-					earnings: existing.earnings + (Number(order.earnings) || 0),
-					count: existing.count + 1
+					revenue: existing.revenue + order.finance.total,
+					earnings: existing.earnings + (Number(order.finance.earnings) || 0),
+					ordersCount: existing.ordersCount + 1
 				});
 			}
 

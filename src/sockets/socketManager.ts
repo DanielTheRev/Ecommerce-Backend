@@ -135,7 +135,7 @@ class SocketManager {
 		const notification: CreateAdminNotificationDto = {
 			type: NotificationType.NEW_ORDER,
 			title: 'Nueva Orden Recibida',
-			message: `Orden #${order.orderNumber || order._id} creada por valor de $${order.total}`,
+			message: `Orden #${order.orderNumber || order._id} creada por valor de $${order.finance.total}`,
 			severity: NotificationSeverity.INFO,
 			data: order,
 			actionUrl: `/home/client-orders`

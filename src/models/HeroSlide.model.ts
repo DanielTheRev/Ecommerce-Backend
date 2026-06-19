@@ -9,13 +9,21 @@ const HeroSlideSchema = new Schema<IHeroSlide>(
     description: { type: String, required: true }, // "Prendas diseñadas para perdurar..." (String)
     ctaText: { type: String, required: true }, // "Comprar Colección" (String)
     ctaLink: { type: String, required: true }, // /products?collection=autumn-2026 o /collections/essentials (String)
-    imageDesktop: {
+    imageDesktop1: {
       url: { type: String, required: true },
       public_id: { type: String, required: true }
     },
-    imageMobile: {
+    imageDesktop2: {
+      url: { type: String, required: false },
+      public_id: { type: String, required: false }
+    },
+    imageMobile1: {
       url: { type: String, required: true },
       public_id: { type: String, required: true }
+    },
+    imageMobile2: {
+      url: { type: String, required: false },
+      public_id: { type: String, required: false }
     },
     featuredProducts: [
       {
