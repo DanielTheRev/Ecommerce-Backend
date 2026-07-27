@@ -62,12 +62,13 @@ export class FinanceService {
 
 		const mpConfig = EcommerceConfig.paymentGateways.mercadopago;
 
-		const isCustomProfit = typeof useCustomProfit === 'string'
-			? useCustomProfit === 'true'
-			: Boolean(useCustomProfit);
+		const hasValidCustomMargin = customProfitMargin !== undefined && customProfitMargin !== null && !isNaN(Number(customProfitMargin));
+		const isCustomProfit = useCustomProfit !== undefined
+			? (typeof useCustomProfit === 'string' ? useCustomProfit === 'true' : Boolean(useCustomProfit))
+			: hasValidCustomMargin;
 
 		const profitMargin =
-			isCustomProfit && customProfitMargin !== undefined
+			isCustomProfit && hasValidCustomMargin
 				? Number(customProfitMargin)
 				: Number(EcommerceConfig.profit);
 
@@ -321,8 +322,10 @@ export class FinanceService {
 				config: data.config,
 				providerCost: Number(data.providerCost),
 				additionalCosts: data.additionalCosts || [],
-				useCustomProfit: typeof data.useCustomProfit === 'string' ? data.useCustomProfit === 'true' : Boolean(data.useCustomProfit),
-				customProfitMargin: data.customProfitMargin !== undefined ? Number(data.customProfitMargin) : undefined,
+				useCustomProfit: data.useCustomProfit !== undefined
+					? (typeof data.useCustomProfit === 'string' ? data.useCustomProfit === 'true' : Boolean(data.useCustomProfit))
+					: (data.customProfitMargin !== undefined && data.customProfitMargin !== null && !isNaN(Number(data.customProfitMargin))),
+				customProfitMargin: data.customProfitMargin !== undefined && data.customProfitMargin !== null && !isNaN(Number(data.customProfitMargin)) ? Number(data.customProfitMargin) : undefined,
 				pricingMethodChoice: data.pricingMethodChoice,
 				dolar: Number(data.dolar),
 			});

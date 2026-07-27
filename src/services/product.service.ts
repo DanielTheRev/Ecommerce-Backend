@@ -459,8 +459,8 @@ export class ProductService {
 					discountPercentageTransfer,
 					dolar: venta,
 					models,
-					useCustomProfit: data.useCustomProfit,
-					customProfitMargin: data.customProfitMargin,
+					useCustomProfit: data.useCustomProfit ?? (data.customProfitMargin !== undefined && data.customProfitMargin !== null && !isNaN(Number(data.customProfitMargin))),
+					customProfitMargin: data.customProfitMargin !== undefined && data.customProfitMargin !== null && !isNaN(Number(data.customProfitMargin)) ? Number(data.customProfitMargin) : undefined,
 					pricingMethodChoice: data.pricingMethodChoice,
 				}
 			);
