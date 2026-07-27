@@ -161,6 +161,31 @@ export class EcommerceConfigController {
 		}
 	}
 
+	// GET /api/Ecommerce/config/recommendations - Obtener configuración de recomendaciones (admin)
+	static async getRecommendationsConfig(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const data = await EcommerceService.getRecommendationsConfig(req.models!);
+			res.status(200).json(data);
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// PUT /api/Ecommerce/config/recommendations - Actualizar configuración de recomendaciones (admin)
+	static async updateRecommendationsConfig(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { limit, rules } = req.body;
+			const data = await EcommerceService.updateRecommendationsConfig(req.models!, { limit, rules });
+			res.status(200).json({
+				success: true,
+				message: 'Configuración de recomendaciones actualizada exitosamente',
+				data
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
+
 	// DELETE /api/Ecommerce/config - Resetear/Eliminar configuración
 	static async deleteConfig(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {

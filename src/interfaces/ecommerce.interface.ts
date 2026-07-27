@@ -9,6 +9,11 @@ export interface IPricingStrategy {
 	absorbInstallments: boolean;
 }
 
+export interface IRecommendationConfig {
+	limit: number;
+	rules: Record<string, string[]>;
+}
+
 export interface IEcommerceConfig {
 	key: string;
 	name?: string;
@@ -46,7 +51,8 @@ export interface IEcommerceConfig {
 	clothingFits?: string[],
 	shippingConfig?: {
 		freeShippingThreshold: number;
-	}
+	};
+	recommendationConfig?: IRecommendationConfig;
 }
 
 export interface IEcommercePaymentGateway {

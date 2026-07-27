@@ -110,6 +110,10 @@ const EcommerceSchema = new Schema(
 		shippingConfig: {
 			freeShippingThreshold: { type: Number, default: 50000 }
 		},
+		recommendationConfig: {
+			limit: { type: Number, default: 8, min: 1, max: 24 },
+			rules: { type: Schema.Types.Mixed, default: {} }
+		},
 		// Metadata para el CMS
 		lastModifiedBy: { type: Schema.Types.ObjectId, ref: 'User', required: false }
 	},

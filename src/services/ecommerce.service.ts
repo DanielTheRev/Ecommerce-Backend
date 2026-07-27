@@ -363,4 +363,92 @@ export class EcommerceService {
 		}
 	};
 
+	static getRecommendationsConfig = async (models: TenantModels) => {
+		try {
+			const config = await this.getConfig(models);
+			const activeProductCategories = (await models.Product.distinct('category', { isActive: true })) as string[];
+			const storeConfigCategories = config.categories || [];
+
+			const availableCategories = Array.from(new Set([...storeConfigCategories, ...activeProductCategories]))
+				.filter(c => c && typeof c === 'string' && c.trim() !== '');
+
+			const savedRules = config.recommendationConfig?.rules || {};
+			const resolvedRules: Record<string, string[]> = {};
+
+			availableCategories.forEach((cat) => {
+				if (savedRules[cat] && Array.isArray(savedRules[cat])) {
+					resolvedRules[cat] = savedRules[cat].filter((t) => availableCategories.includes(t));
+				} else {
+					const norm = cat.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+					const def = DEFAULT_RECOMMENDATION_RULES[norm] || [];
+					resolvedRules[cat] = def.filter((t) => availableCategories.includes(t));
+				}
+			});
+
+			return {
+				limit: config.recommendationConfig?.limit || 8,
+				rules: resolvedRules,
+				defaultRules: DEFAULT_RECOMMENDATION_RULES,
+				availableCategories
+			};
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError(
+				'Failed to fetch recommendations config',
+				'Error al obtener la configuración de recomendaciones',
+				500
+			);
+		}
+	};
+
+	static updateRecommendationsConfig = async (
+		models: TenantModels,
+		data: { limit?: number; rules?: Record<string, string[]> }
+	) => {
+		try {
+			const updatePayload: any = {};
+			if (data.limit !== undefined) {
+				updatePayload['recommendationConfig.limit'] = Number(data.limit);
+			}
+			if (data.rules !== undefined) {
+				updatePayload['recommendationConfig.rules'] = data.rules;
+			}
+
+			const updatedConfig = await models.EcommerceConfig.findOneAndUpdate(
+				{ key: 'global_config' },
+				{ $set: updatePayload },
+				{ new: true, upsert: true }
+			).lean() as unknown as IEcommerceConfig;
+
+			return {
+				limit: updatedConfig.recommendationConfig?.limit || 8,
+				rules: updatedConfig.recommendationConfig?.rules || {}
+			};
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError(
+				'Failed to update recommendations config',
+				'Error al actualizar la configuración de recomendaciones',
+				500
+			);
+		}
+	};
+
 }
+
+export const DEFAULT_RECOMMENDATION_RULES: Record<string, string[]> = {
+	buzos: ['Remeras', 'Pantalones', 'Sacos', 'Buzos'],
+	buzo: ['Remeras', 'Pantalones', 'Sacos', 'Buzos'],
+	remeras: ['Buzos', 'Pantalones', 'Sacos', 'Remeras'],
+	remera: ['Buzos', 'Pantalones', 'Sacos', 'Remeras'],
+	pantalones: ['Remeras', 'Buzos', 'Camperas', 'Pantalones'],
+	pantalon: ['Remeras', 'Buzos', 'Camperas', 'Pantalones'],
+	sacos: ['Remeras', 'Pantalones', 'Buzos', 'Sacos'],
+	saco: ['Remeras', 'Pantalones', 'Buzos', 'Sacos'],
+	camperas: ['Buzos', 'Remeras', 'Pantalones', 'Camperas'],
+	campera: ['Buzos', 'Remeras', 'Pantalones', 'Camperas'],
+	shorts: ['Remeras', 'Zapatillas', 'Shorts'],
+	short: ['Remeras', 'Zapatillas', 'Shorts'],
+	zapatillas: ['Pantalones', 'Remeras', 'Shorts', 'Zapatillas'],
+	zapatilla: ['Pantalones', 'Remeras', 'Shorts', 'Zapatillas']
+};

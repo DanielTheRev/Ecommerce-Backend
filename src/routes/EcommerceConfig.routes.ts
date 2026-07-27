@@ -17,6 +17,8 @@ router.get('/public', EcommerceConfigController.getPublicConfig);
 router.use(protect, adminOnly);
 
 router.get('/mercadopago-methods', EcommerceConfigController.getMercadoPagoMethods);
+router.get('/recommendations', EcommerceConfigController.getRecommendationsConfig);
+router.put('/recommendations', EcommerceConfigController.updateRecommendationsConfig);
 router.get('/', EcommerceConfigController.getConfig);
 router.post('/', EcommerceConfigController.createConfig);
 router.put('/', EcommerceConfigController.updateConfig);

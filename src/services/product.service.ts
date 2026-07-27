@@ -1,7 +1,7 @@
 import { TenantModels } from '@/config/modelRegistry';
 import { AppError } from '@/errors/app.error';
 import { EcommercePaymentProviders } from '@/interfaces/ecommerce.interface';
-import { IProduct, IProductCreateDTO, IProductUpdateDTO, ISizeGuide, ProductType } from '@/interfaces/product.interface';
+import { ClothingGender, IProduct, IProductCreateDTO, IProductUpdateDTO, ISizeGuide, ProductType } from '@/interfaces/product.interface';
 import { paginate } from '@/utils/pagination.util';
 import createDOMPurify from 'dompurify';
 import { JSDOM } from 'jsdom';
@@ -12,7 +12,7 @@ import { ImageService } from './images.service';
 import { PaymentService } from './Payment.service';
 import { FinanceService } from './finance.service';
 import { SkuService } from './sku.service';
-import { EcommerceService } from './ecommerce.service';
+import { EcommerceService, DEFAULT_RECOMMENDATION_RULES } from './ecommerce.service';
 
 
 export class ProductService {
@@ -313,6 +313,125 @@ export class ProductService {
 		} catch (error) {
 			if (error instanceof AppError) throw error;
 			throw new AppError('Failed to fetch product by slug', 'Error al obtener el producto', 500);
+		}
+	}
+
+	static async getRecommendationsForProduct(
+		models: TenantModels,
+		slug: string,
+		limitOverride?: number
+	): Promise<IProduct[]> {
+		try {
+			// 1. Obtener producto origen
+			const sourceProduct = (await models.Product.findOne({ slug, isActive: true }).lean()) as unknown as IProduct;
+			if (!sourceProduct) {
+				throw new AppError('Product not found', 'Producto no encontrado', 404);
+			}
+
+			// 2. Obtener configuración del e-commerce
+			const config = await EcommerceService.getConfig(models).catch(() => null);
+			const recommendationConfig = config?.recommendationConfig;
+			const limit = limitOverride || recommendationConfig?.limit || 8;
+			const customRules = recommendationConfig?.rules || {};
+
+			// 3. Determinar categorías objetivo
+			let targetCategories: string[] = [];
+
+			if (customRules[sourceProduct.category] && Array.isArray(customRules[sourceProduct.category]) && customRules[sourceProduct.category].length > 0) {
+				targetCategories = customRules[sourceProduct.category];
+			} else {
+				const normalizedCatKey = sourceProduct.category
+					.toLowerCase()
+					.trim()
+					.normalize('NFD')
+					.replace(/[\u0300-\u036f]/g, '');
+
+				if (DEFAULT_RECOMMENDATION_RULES[normalizedCatKey]) {
+					targetCategories = DEFAULT_RECOMMENDATION_RULES[normalizedCatKey];
+				} else {
+					const matchedKey = Object.keys(DEFAULT_RECOMMENDATION_RULES).find(key => normalizedCatKey.includes(key));
+					if (matchedKey) {
+						targetCategories = DEFAULT_RECOMMENDATION_RULES[matchedKey];
+					} else {
+						const allCategories = (await models.Product.distinct('category', { isActive: true })) as string[];
+						targetCategories = allCategories.filter((c: string) => c !== sourceProduct.category);
+						targetCategories.push(sourceProduct.category);
+					}
+				}
+			}
+
+			// 4. Construir filtro por Género (para indumentaria)
+			const genderFilter: any = {};
+			const rawSource = sourceProduct as any;
+			if (sourceProduct.productType === ProductType.CLOTHING && rawSource.gender) {
+				if (rawSource.gender !== ClothingGender.Unisex) {
+					genderFilter.gender = { $in: [rawSource.gender, ClothingGender.Unisex] };
+				}
+			}
+
+			const excludeIds = [sourceProduct._id.toString()];
+			const recommendations: IProduct[] = [];
+			const selectedIdsSet = new Set<string>(excludeIds);
+
+			// 5. Intercalar productos entre las categorías objetivo para máxima variedad
+			for (const cat of targetCategories) {
+				if (recommendations.length >= limit) break;
+
+				const remainingLimit = limit - recommendations.length;
+				const remainingCategories = targetCategories.length - targetCategories.indexOf(cat);
+				const perCatLimit = Math.max(1, Math.ceil(remainingLimit / Math.max(1, remainingCategories)));
+
+				const query: any = {
+					isActive: true,
+					category: cat,
+					_id: { $nin: Array.from(selectedIdsSet).map(id => new Types.ObjectId(id)) },
+					...genderFilter
+				};
+
+				const catProducts = (await models.Product.find(query)
+					.sort({ isFeatured: -1, 'price.cashTransferPrice': -1 })
+					.limit(perCatLimit)
+					.lean()) as unknown as IProduct[];
+
+				for (const p of catProducts) {
+					if (recommendations.length >= limit) break;
+					const pId = p._id.toString();
+					if (!selectedIdsSet.has(pId)) {
+						selectedIdsSet.add(pId);
+						recommendations.push(p);
+					}
+				}
+			}
+
+			// 6. Fallback final si faltan productos para completar el limit
+			if (recommendations.length < limit) {
+				const remainingCount = limit - recommendations.length;
+				const fallbackQuery: any = {
+					isActive: true,
+					_id: { $nin: Array.from(selectedIdsSet).map(id => new Types.ObjectId(id)) },
+					productType: sourceProduct.productType,
+					...genderFilter
+				};
+
+				const fallbackProducts = (await models.Product.find(fallbackQuery)
+					.sort({ isFeatured: -1, createdAt: -1 })
+					.limit(remainingCount)
+					.lean()) as unknown as IProduct[];
+
+				for (const p of fallbackProducts) {
+					if (recommendations.length >= limit) break;
+					const pId = p._id.toString();
+					if (!selectedIdsSet.has(pId)) {
+						selectedIdsSet.add(pId);
+						recommendations.push(p);
+					}
+				}
+			}
+
+			return recommendations;
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError('Failed to fetch recommendations', 'Error al obtener las recomendaciones', 500);
 		}
 	}
 

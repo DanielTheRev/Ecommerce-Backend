@@ -109,6 +109,27 @@ export class ProductController {
 		}
 	}
 
+	// GET /api/products/:slug/recommendations - Obtener recomendaciones para un producto
+	static async getRecommendations(
+		req: AuthRequest,
+		res: Response,
+		next: NextFunction
+	): Promise<void> {
+		try {
+			const { slug } = req.params;
+			const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+			const recommendations = await ProductService.getRecommendationsForProduct(
+				req.models!,
+				slug,
+				limit
+			);
+
+			res.status(200).json(recommendations);
+		} catch (error) {
+			next(error);
+		}
+	}
+
 	// POST /api/products - Crear nuevo producto
 	static async createProduct(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		const data = req.body as IProductCreateDTO;
