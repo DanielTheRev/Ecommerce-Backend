@@ -266,7 +266,18 @@ export class ProductService {
 		}
 	}
 
-	static async getPaginatedProductsWCompletePrices(models: TenantModels, page: number = 1, limit: number = 10, productType?: string, q?: string, category?: string, isActive?: boolean, providerId?: string) {
+	static async getPaginatedProductsWCompletePrices(
+		models: TenantModels,
+		page: number = 1,
+		limit: number = 10,
+		productType?: string,
+		q?: string,
+		category?: string,
+		isActive?: boolean,
+		providerId?: string,
+		hasSizeGuide?: boolean,
+		hasSeoImage?: boolean
+	) {
 		try {
 			const Model = this.getModel(models, productType);
 
@@ -289,6 +300,31 @@ export class ProductService {
 				query.provider = providerId;
 			}
 
+			if (hasSizeGuide !== undefined) {
+				if (hasSizeGuide) {
+					query['sizeGuide.rows.0'] = { $exists: true };
+				} else {
+					query.$or = [
+						{ sizeGuide: { $exists: false } },
+						{ 'sizeGuide.rows': { $size: 0 } },
+						{ 'sizeGuide.rows': { $exists: false } }
+					];
+				}
+			}
+
+			if (hasSeoImage !== undefined) {
+				if (hasSeoImage) {
+					query['seo.metaImage.url'] = { $exists: true, $ne: '' };
+				} else {
+					query.$or = [
+						{ seo: { $exists: false } },
+						{ 'seo.metaImage': { $exists: false } },
+						{ 'seo.metaImage.url': { $exists: false } },
+						{ 'seo.metaImage.url': '' }
+					];
+				}
+			}
+
 			const result = await paginate(Model, query, {
 				page,
 				limit,
@@ -302,6 +338,75 @@ export class ProductService {
 		} catch (error) {
 			if (error instanceof AppError) throw error;
 			throw new AppError('Failed to fetch paginated products', 'Error al obtener los productos', 500);
+		}
+	}
+
+	static async getQualityAudit(models: TenantModels) {
+		try {
+			const products = (await models.Product.find({ isActive: true })
+				.select('_id brand model category slug productType seo sizeGuide images')
+				.lean()) as unknown as any[];
+
+			const clothingProducts = products.filter(p => p.productType === ProductType.CLOTHING);
+
+			const withSizeGuide = clothingProducts.filter(
+				p => p.sizeGuide && Array.isArray(p.sizeGuide.rows) && p.sizeGuide.rows.length > 0
+			);
+			const withoutSizeGuide = clothingProducts.filter(
+				p => !p.sizeGuide || !Array.isArray(p.sizeGuide.rows) || p.sizeGuide.rows.length === 0
+			);
+
+			const withSeoImage = products.filter(
+				p => p.seo && p.seo.metaImage && typeof p.seo.metaImage.url === 'string' && p.seo.metaImage.url.trim() !== ''
+			);
+			const withoutSeoImage = products.filter(
+				p => !p.seo || !p.seo.metaImage || !p.seo.metaImage.url || p.seo.metaImage.url.trim() === ''
+			);
+
+			return {
+				summary: {
+					totalProducts: products.length,
+					totalClothingProducts: clothingProducts.length,
+					withSizeGuideCount: withSizeGuide.length,
+					withoutSizeGuideCount: withoutSizeGuide.length,
+					withSeoImageCount: withSeoImage.length,
+					withoutSeoImageCount: withoutSeoImage.length,
+				},
+				withoutSizeGuide: withoutSizeGuide.map(p => ({
+					_id: p._id,
+					brand: p.brand,
+					model: p.model,
+					category: p.category,
+					slug: p.slug
+				})),
+				withSizeGuide: withSizeGuide.map(p => ({
+					_id: p._id,
+					brand: p.brand,
+					model: p.model,
+					category: p.category,
+					slug: p.slug
+				})),
+				withoutSeoImage: withoutSeoImage.map(p => ({
+					_id: p._id,
+					brand: p.brand,
+					model: p.model,
+					category: p.category,
+					slug: p.slug,
+					productType: p.productType
+				})),
+				withSeoImage: withSeoImage.map(p => ({
+					_id: p._id,
+					brand: p.brand,
+					model: p.model,
+					category: p.category,
+					slug: p.slug,
+					productType: p.productType,
+					metaImageUrl: p.seo.metaImage.url
+				}))
+			};
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError('Failed to get quality audit', 'Error al obtener auditoría de calidad', 500);
 		}
 	}
 
@@ -915,7 +1020,7 @@ export class ProductService {
 			if (updateData.provider) updateData.provider = updateData.provider;
 			if (updateData.variants) {
 				const parsedVariants = JSON.parse(updateData.variants as string);
-				const processedVariants = parsedVariants.map((v: any) => {
+				let processedVariants = parsedVariants.map((v: any) => {
 					// Si el front nos mandó un imageIndex y tenemos fotos en el array final...
 					if (v.imageIndex !== undefined && v.imageIndex !== null && updateData.images && updateData.images[v.imageIndex]) {
 						v.imageReference = {
@@ -938,18 +1043,63 @@ export class ProductService {
 				/* Sizes Guide */
 				if(updateData.sizeGuide) updateData.sizeGuide = JSON.parse(updateData.sizeGuide as string) as ISizeGuide;
 
-				// ── Auto-generar SKUs para variantes NUEVAS ──
-				const existingVariants = processedVariants.filter((v: any) => v._id);
-				const newVariants = processedVariants.filter((v: any) => !v._id);
+				const dbVariants = (product.variants || []) as any[];
+
+				// ── Matchear variantes enviadas con las existentes en DB para preservar _id y SKU ──
+				processedVariants = processedVariants.map((v: any) => {
+					let match: any = null;
+
+					if (v._id) {
+						match = dbVariants.find(dbV => dbV._id.toString() === v._id.toString());
+					}
+					if (!match && v.sku) {
+						match = dbVariants.find(dbV => dbV.sku === v.sku);
+					}
+					if (!match) {
+						const colorName = v.color?.name?.toLowerCase().trim();
+						if (product.productType === ProductType.CLOTHING && v.size) {
+							const size = String(v.size).toLowerCase().trim();
+							match = dbVariants.find(dbV => {
+								const dbColor = dbV.color?.name?.toLowerCase().trim();
+								const dbSize = String(dbV.size || '').toLowerCase().trim();
+								return dbSize === size && (!colorName || dbColor === colorName);
+							});
+						} else if (product.productType === ProductType.TECH && v.attributes) {
+							match = dbVariants.find(dbV => {
+								const dbColor = dbV.color?.name?.toLowerCase().trim();
+								const dbColorMatch = !colorName || dbColor === colorName;
+								const dbAttrsStr = JSON.stringify(dbV.attributes || []);
+								const vAttrsStr = JSON.stringify(v.attributes || []);
+								return dbColorMatch && dbAttrsStr === vAttrsStr;
+							});
+						}
+					}
+
+					if (match) {
+						v._id = match._id;
+						v.sku = match.sku;
+					}
+
+					return v;
+				});
+
+				// ── Auto-generar SKUs solo para variantes verdaderamente NUEVAS ──
+				const existingVariants = processedVariants.filter((v: any) => v._id || v.sku);
+				const newVariants = processedVariants.filter((v: any) => !v._id && !v.sku);
 
 				if (newVariants.length > 0) {
-					// Ignorar cualquier SKU que haya mandado el frontend en variantes nuevas
 					newVariants.forEach((v: any) => delete v.sku);
 
-					// Reutilizar la secuencia de variantes existentes si las hay
+					// Reutilizar la secuencia existente del producto (extraída del primer SKU válido)
 					let existingSequence: number | undefined;
-					if (existingVariants.length > 0 && existingVariants[0].sku) {
-						existingSequence = SkuService.extractSequenceFromSku(existingVariants[0].sku) ?? undefined;
+					for (const extV of dbVariants) {
+						if (extV.sku) {
+							const seq = SkuService.extractSequenceFromSku(extV.sku);
+							if (seq !== null) {
+								existingSequence = seq;
+								break;
+							}
+						}
 					}
 
 					const category = (updateData.category as string) || product.category;

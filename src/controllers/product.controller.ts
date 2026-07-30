@@ -19,6 +19,11 @@ export class ProductController {
 			const isActive =
 				req.query.isActive !== undefined ? req.query.isActive === 'true' : undefined;
 			const providerId = req.query.provider as string | undefined;
+			const hasSizeGuide =
+				req.query.hasSizeGuide !== undefined ? req.query.hasSizeGuide === 'true' : undefined;
+			const hasSeoImage =
+				req.query.hasSeoImage !== undefined ? req.query.hasSeoImage === 'true' : undefined;
+
 			const result = await ProductService.getPaginatedProductsWCompletePrices(
 				req.models!,
 				page,
@@ -27,8 +32,20 @@ export class ProductController {
 				q,
 				category,
 				isActive,
-				providerId
+				providerId,
+				hasSizeGuide,
+				hasSeoImage
 			);
+			res.status(200).json(result);
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// GET /api/products/admin/quality-audit - Auditoría de calidad (guía de talles e imagen SEO)
+	static async getQualityAudit(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const result = await ProductService.getQualityAudit(req.models!);
 			res.status(200).json(result);
 		} catch (error) {
 			next(error);
