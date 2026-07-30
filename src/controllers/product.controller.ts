@@ -6,6 +6,7 @@ import { getDolar } from '@/services/dolar.service';
 import { FinanceService } from '@/services/finance.service';
 import { ProductService } from '@/services/product.service';
 import { NextFunction, Response } from 'express';
+import { MetaService } from '@/services/meta.service';
 
 export class ProductController {
 	// GET /api/products/list - Productos con precios completos (admin) - paginado
@@ -121,6 +122,32 @@ export class ProductController {
 			const product = await ProductService.getProductBySlug(req.models!, slug);
 
 			res.status(200).json(product);
+
+			if (product) {
+				const prod = product as any;
+				const priceVal = prod.price?.cashTransferPrice || prod.price?.listPrice || 0;
+				MetaService.trackViewContent({
+					productId: prod._id ? prod._id.toString() : slug,
+					productName: prod.model || prod.brand || slug,
+					category: typeof prod.category === 'object' ? prod.category?.name : prod.category,
+					value: priceVal,
+					currency: 'ARS',
+					userData: {
+						clientIp: req.ip,
+						clientUserAgent: req.get('user-agent'),
+					},
+					eventSourceUrl: `${req.protocol}://${req.get('host')}/products/${slug}`,
+				}).catch(err => console.error('[Meta CAPI] Error tracking ViewContent:', err));
+
+				MetaService.trackEvent({
+					eventName: 'PageView',
+					userData: {
+						clientIp: req.ip,
+						clientUserAgent: req.get('user-agent'),
+					},
+					eventSourceUrl: `${req.protocol}://${req.get('host')}/products/${slug}`,
+				}).catch(err => console.error('[Meta CAPI] Error tracking PageView:', err));
+			}
 		} catch (error) {
 			next(error);
 		}
@@ -340,6 +367,20 @@ export class ProductController {
 				limit: limit,
 				productType: productType
 			});
+
+			if (q && typeof q === 'string') {
+				MetaService.trackEvent({
+					eventName: 'Search',
+					customData: {
+						search_string: q,
+					},
+					userData: {
+						clientIp: req.ip,
+						clientUserAgent: req.get('user-agent'),
+					},
+					eventSourceUrl: `${req.protocol}://${req.get('host')}${req.originalUrl}`,
+				}).catch(err => console.error('[Meta CAPI] Error tracking Search:', err));
+			}
 
 			res.status(200).json({
 				success: true,

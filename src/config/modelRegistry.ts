@@ -18,6 +18,8 @@ import { addressSchema } from '@/models/Address.model';
 import { SkuCounterSchema, ISkuCounterDocument } from '@/models/SkuCounter.model';
 import { favoriteSchema } from '@/models/Favorite.model';
 import { IFavoriteDocument } from '@/interfaces/favorites.interface';
+import { cartSchema } from '@/models/Cart.model';
+import { ICartDocument } from '@/interfaces/cart.interface';
 
 // Interfaces
 import { ICashRegisterDocument, ICashRegisterModel } from '@/interfaces/cash-register.interface';
@@ -56,6 +58,7 @@ export interface TenantModels {
 	Address: Model<IAddressDocument>;
 	SkuCounter: Model<ISkuCounterDocument>;
 	Favorite: Model<IFavoriteDocument>;
+	Cart: Model<ICartDocument>;
 }
 
 /**
@@ -158,6 +161,11 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		? db.model<IFavoriteDocument>('Favorite')
 		: db.model<IFavoriteDocument>('Favorite', favoriteSchema);
 
+	// Cart
+	const CartModel = db.models.Cart
+		? db.model<ICartDocument>('Cart')
+		: db.model<ICartDocument>('Cart', cartSchema);
+
 	return {
 		Product: ProductModel,
 		TechProduct: TechProductModel,
@@ -175,6 +183,7 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		Provider: ProviderModel,
 		Address: AddressModel,
 		SkuCounter: SkuCounterModel,
-		Favorite: FavoriteModel
+		Favorite: FavoriteModel,
+		Cart: CartModel
 	};
 }

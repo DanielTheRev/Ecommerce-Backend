@@ -33,6 +33,7 @@ import { TenantModels } from '@/config/modelRegistry';
 import { PaymentElement } from '@/interfaces/mp_payment.interface';
 import { ResendService } from './resend.service';
 import { IVariant } from '@/interfaces/variant.interface';
+import { MetaService } from './meta.service';
 import { isEligibleForFreeShipping } from '@/utils/provinces';
 import { getDolar } from './dolar.service';
 
@@ -331,6 +332,10 @@ export class OrderService {
 				}
 			}
 
+			// Disparar evento InitiateCheckout a Meta Conversions API para cualquier orden creada
+			MetaService.trackInitiateCheckoutFromOrder(newOrder.toObject())
+				.catch(err => console.error('[Meta CAPI] Error enviando InitiateCheckout:', err));
+
 			const safeOrder = this.buildSafeOrder(newOrder);
 
 			return { order: newOrder, safeOrder: safeOrder!, extras };
@@ -623,9 +628,11 @@ export class OrderService {
 
 			await order.save();
 
-			// Trigger emails
+			// Trigger emails & Meta CAPI Purchase
 			if (order.paymentInfo.status === PaymentStatus.APPROVED && oldPaymentStatus !== PaymentStatus.APPROVED) {
 				await ResendService.sendOrderConfirmationEmail(order.toObject() as unknown as IOrder, models);
+				MetaService.trackPurchaseFromOrder(order.toObject())
+					.catch(err => console.error('[Meta CAPI] Error enviando Purchase event:', err));
 			} else if (order.paymentInfo.status === PaymentStatus.PENDING && isFirstPaymentUpdate) {
 				await ResendService.sendPaymentInProcessEmail(order.toObject() as unknown as IOrder, models);
 			}
@@ -786,6 +793,8 @@ export class OrderService {
 
 			if (data.status === PaymentStatus.APPROVED) {
 				await ResendService.sendPaymentReceivedEmail(orderUpdated.toObject() as unknown as IOrder, models);
+				MetaService.trackPurchaseFromOrder(orderUpdated.toObject())
+					.catch(err => console.error('[Meta CAPI] Error enviando Purchase event:', err));
 			}
 
 			return orderUpdated;
@@ -1067,9 +1076,11 @@ export class OrderService {
 
 			await order.save();
 
-			// Trigger emails
+			// Trigger emails & Meta CAPI Purchase
 			if (order.paymentInfo.status === PaymentStatus.APPROVED && oldPaymentStatus !== PaymentStatus.APPROVED) {
 				await ResendService.sendOrderConfirmationEmail(order.toObject() as unknown as IOrder, models);
+				MetaService.trackPurchaseFromOrder(order.toObject())
+					.catch(err => console.error('[Meta CAPI] Error enviando Purchase event:', err));
 			} else if (order.paymentInfo.status === PaymentStatus.PENDING && isFirstPaymentUpdate) {
 				await ResendService.sendPaymentInProcessEmail(order.toObject() as unknown as IOrder, models);
 			}
