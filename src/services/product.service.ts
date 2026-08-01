@@ -24,6 +24,35 @@ export class ProductService {
 		ALLOW_DATA_ATTR: false,
 	};
 
+	public static readonly CATEGORY_GROUPS: Record<string, string[]> = {
+		abrigos: ['Abrigos', 'Camperas', 'Poleras', 'Buzos', 'Sweaters', 'Chaquetas', 'Tapados', 'Parkas', 'Chalecos', 'Abrigo', 'Campera', 'Buzo', 'Polera', 'Sweater'],
+		pantalones: ['Pantalones', 'Denim', 'Jeans', 'Baggies', 'Bermudas', 'Shorts', 'Pantalón', 'Pantalon', 'Joggers', 'Cargo', 'Jean', 'Short', 'Baggy'],
+		remeras: ['Remeras', 'Remera', 'T-Shirts', 'T-Shirt', 'Tops', 'Top', 'Musculosas', 'Musculosa'],
+		calzado: ['Calzado', 'Zapatillas', 'Zapatos', 'Botas', 'Mule', 'Ojotas', 'Sandalias', 'Zapatilla', 'Zapato', 'Bota']
+	};
+
+	public static buildCategoryQuery(categoryParam: string): any {
+		const rawCategories = categoryParam.split(',').map(c => c.trim()).filter(Boolean);
+		const expandedCategories = new Set<string>();
+
+		for (const cat of rawCategories) {
+			const lowerKey = cat.toLowerCase();
+			if (this.CATEGORY_GROUPS[lowerKey]) {
+				this.CATEGORY_GROUPS[lowerKey].forEach(c => expandedCategories.add(c));
+			} else {
+				expandedCategories.add(cat);
+			}
+		}
+
+		const catList = Array.from(expandedCategories);
+		const regexes = catList.map(c => new RegExp(`^${c}$`, 'i'));
+
+		if (regexes.length === 1) {
+			return regexes[0];
+		}
+		return { $in: regexes };
+	}
+
 	// ============ DISCRIMINATOR HELPER ============
 
 	/**
@@ -290,7 +319,7 @@ export class ProductService {
 				];
 			}
 			if (category) {
-				query.category = category;
+				query.category = this.buildCategoryQuery(category);
 			}
 			if (isActive !== undefined) {
 				query.isActive = isActive;
@@ -626,8 +655,7 @@ export class ProductService {
 			}
 
 			if (filters.category) {
-				const categories = filters.category.split(',').map(c => c.trim());
-				query.category = { $in: categories };
+				query.category = ProductService.buildCategoryQuery(filters.category);
 			}
 
 			if (filters.brand) {

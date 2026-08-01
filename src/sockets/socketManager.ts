@@ -8,7 +8,8 @@ import {
 } from '@/interfaces/notification.interface';
 import { IUser, Role } from '@/interfaces/user.interface';
 import { connectionManager } from '@/config/multitenancy';
-import { getModelsForConnection } from '@/config/modelRegistry';
+import { getModelsForConnection, TenantModels } from '@/config/modelRegistry';
+import { NotificationService } from '@/services/notification.service';
 import { parse } from 'cookie';
 import { Server as HTTPServer } from 'http';
 import jwt from 'jsonwebtoken';
@@ -179,15 +180,27 @@ class SocketManager {
 	}
 
 	/**
-	 * Notifica a un cliente específico (Versión Sanitizada)
+	 * Notifica a un cliente específico (Versión Sanitizada) y guarda en BD si se pasa models.
 	 */
-	notifyClient(userId: string, notificationPayload: CreateClientNotificationDto) {
+	async notifyClient(userId: string, notificationPayload: CreateClientNotificationDto, models?: TenantModels) {
 		if (!this.io) return;
 
-		// Ensure we are not leaking unintended data, though TS types help, runtime check is good practice
-		// Here we trust the DTO passed by the controller/service layer
+		let notificationId = `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-		const finalNotification = this.buildNotification(notificationPayload, NotificationAudience.USER);
+		if (models) {
+			const savedNotif = await NotificationService.createClientNotification(models, userId, notificationPayload);
+			if (savedNotif) {
+				notificationId = savedNotif._id.toString();
+			}
+		}
+
+		const finalNotification: INotification = {
+			id: notificationId,
+			timestamp: new Date(),
+			read: false,
+			audience: NotificationAudience.USER,
+			...notificationPayload
+		} as INotification;
 
 		this.io
 			.to(`client_${userId}`)

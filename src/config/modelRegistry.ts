@@ -20,6 +20,9 @@ import { favoriteSchema } from '@/models/Favorite.model';
 import { IFavoriteDocument } from '@/interfaces/favorites.interface';
 import { cartSchema } from '@/models/Cart.model';
 import { ICartDocument } from '@/interfaces/cart.interface';
+import { notificationSchema } from '@/models/Notification.model';
+import { INotificationDocument } from '@/interfaces/notification.interface';
+import { providerSchema } from '@/models/provider.model';
 
 // Interfaces
 import { ICashRegisterDocument, ICashRegisterModel } from '@/interfaces/cash-register.interface';
@@ -34,11 +37,9 @@ import { IBentoConfigDocument } from '@/interfaces/bento.interface';
 import { IShopTheLookDocument } from '@/interfaces/shopTheLook.interface';
 import { IAddressDocument } from '@/interfaces/address.interface';
 import { IProviderDocument } from '@/interfaces/provider.interface';
-import { providerSchema } from '@/models/provider.model';
 
 /**
  * TenantModels - Todos los modelos Mongoose de un tenant.
- * Los servicios reciben este objeto en vez de importar modelos directamente.
  */
 export interface TenantModels {
 	Product: Model<IProductDocument>;
@@ -59,47 +60,33 @@ export interface TenantModels {
 	SkuCounter: Model<ISkuCounterDocument>;
 	Favorite: Model<IFavoriteDocument>;
 	Cart: Model<ICartDocument>;
+	Notification: Model<INotificationDocument>;
 }
 
-/**
- * Registra todos los modelos en una conexión de tenant y los retorna.
- * Si los modelos ya están registrados (cache), los retorna directamente.
- *
- * Esto permite que el MISMO schema funcione en múltiples DBs
- * sin tener que modificar los archivos de modelo originales.
- */
 export function getModelsForConnection(db: Connection): TenantModels {
-	// Product (base + discriminators)
-	let ProductModel: Model<IProductDocument>;
-	if (db.models.Product) {
-		ProductModel = db.model<IProductDocument>('Product');
-	} else {
-		ProductModel = db.model<IProductDocument>('Product', BaseProductSchema);
-	}
+	// Product (Base Model)
+	const ProductModel = db.models.Product
+		? (db.model('Product') as Model<IProductDocument>)
+		: db.model<IProductDocument>('Product', BaseProductSchema);
 
-	let TechProductModel: Model<IProductDocument>;
-	if (db.models.TechProduct) {
-		TechProductModel = db.model<IProductDocument>('TechProduct');
-	} else {
-		TechProductModel = ProductModel.discriminator<IProductDocument>('TechProduct', TechProductSchema);
-	}
+	// Discriminators
+	const TechProductModel = db.models.TechProduct
+		? (db.model('TechProduct') as Model<IProductDocument>)
+		: ProductModel.discriminator<IProductDocument>('TechProduct', TechProductSchema);
 
-	let ClothingProductModel: Model<IProductDocument>;
-	if (db.models.ClothingProduct) {
-		ClothingProductModel = db.model<IProductDocument>('ClothingProduct');
-	} else {
-		ClothingProductModel = ProductModel.discriminator<IProductDocument>('ClothingProduct', ClothingProductSchema);
-	}
+	const ClothingProductModel = db.models.ClothingProduct
+		? (db.model('ClothingProduct') as Model<IProductDocument>)
+		: ProductModel.discriminator<IProductDocument>('ClothingProduct', ClothingProductSchema);
 
 	// User
 	const UserModel = db.models.User
-		? db.model<IUser>('User')
+		? (db.model('User') as Model<IUser>)
 		: db.model<IUser>('User', userSchema);
 
 	// Order
 	const OrderModel = db.models.Order
-		? db.model<IOrder, IOrderModel>('Order')
-		: db.model<IOrder, IOrderModel>('Order', orderSchema);
+		? (db.model('Order') as unknown as IOrderModel)
+		: (db.model('Order', orderSchema) as unknown as IOrderModel);
 
 	// EcommerceConfig
 	const EcommerceConfigModel = db.models.EcommerceConfig
@@ -128,8 +115,8 @@ export function getModelsForConnection(db: Connection): TenantModels {
 
 	// CashRegister
 	const CashRegisterModel = db.models.CashRegister
-		? db.model<ICashRegisterDocument, ICashRegisterModel>('CashRegister')
-		: db.model<ICashRegisterDocument, ICashRegisterModel>('CashRegister', cashRegisterSchema);
+		? db.model<ICashRegisterDocument>('CashRegister')
+		: db.model<ICashRegisterDocument>('CashRegister', cashRegisterSchema);
 
 	// BentoConfig
 	const BentoConfigModel = db.models.BentoConfig
@@ -166,6 +153,11 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		? db.model<ICartDocument>('Cart')
 		: db.model<ICartDocument>('Cart', cartSchema);
 
+	// Notification
+	const NotificationModel = db.models.Notification
+		? db.model<INotificationDocument>('Notification')
+		: db.model<INotificationDocument>('Notification', notificationSchema);
+
 	return {
 		Product: ProductModel,
 		TechProduct: TechProductModel,
@@ -184,6 +176,7 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		Address: AddressModel,
 		SkuCounter: SkuCounterModel,
 		Favorite: FavoriteModel,
-		Cart: CartModel
+		Cart: CartModel,
+		Notification: NotificationModel
 	};
 }

@@ -1,3 +1,5 @@
+import { Document, Types } from 'mongoose';
+
 export enum NotificationType {
     // Orders
     NEW_ORDER = 'new_order',
@@ -77,4 +79,17 @@ export interface CreateClientNotificationDto<T = any> {
     message: string;
     data?: T;
     link?: string;
+}
+
+export interface INotificationDocument extends Document {
+    user: Types.ObjectId;
+    type: NotificationType;
+    severity: NotificationSeverity;
+    title: string;
+    message: string;
+    read: boolean;
+    data?: any;
+    link?: string;
+    createdAt: Date;
+    updatedAt: Date;
 }
