@@ -52,6 +52,7 @@ export interface IEcommerceConfig {
 	shippingConfig?: {
 		freeShippingThreshold: number;
 	};
+	workingHours?: IWorkingHoursConfig;
 	recommendationConfig?: IRecommendationConfig;
 }
 
@@ -91,12 +92,22 @@ export interface IEcommerceTransferPaymentGateway {
 	active: boolean;
 	alias: string;
 	cbuCvu: string;
+	bankName?: string;
+	titular?: string;
 }
 
 export enum EcommercePaymentProviders {
 	UALA = 'uala',
 	MERCADOPAGO = 'mercadopago',
 	TRANSFER = 'transfer'
+}
+
+export interface IWorkingHoursConfig {
+	weekdayStart?: string; // e.g. "10:00"
+	weekdayEnd?: string;   // e.g. "20:00"
+	sundayStart?: string;  // e.g. "10:00"
+	sundayEnd?: string;    // e.g. "15:00"
+	noticeText?: string;   // e.g. "Lun a Sáb 10-20h / Dom 10-15h"
 }
 
 export interface IEcommerceConfigPublic {
@@ -118,6 +129,7 @@ export interface IEcommerceConfigPublic {
 	shippingConfig?: {
 		freeShippingThreshold: number;
 	};
+	workingHours?: IWorkingHoursConfig;
 	/** El e-commerce necesita saber si se ofrecen cuotas sin interés */
 	absorbInstallments: boolean;
 	paymentGateways: {
@@ -131,6 +143,8 @@ export interface IEcommerceConfigPublic {
 			active: boolean;
 			alias: string;
 			cbuCvu: string;
+			bankName?: string;
+			titular?: string;
 		};
 	};
 }

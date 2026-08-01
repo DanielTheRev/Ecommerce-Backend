@@ -23,6 +23,7 @@ import { PaymentMethodService } from './paymentMethod.service';
 import { ProductService } from './product.service';
 import { ShippingMethodService } from './shippingMethod.service';
 import { MercadoPagoService } from './mercadopago.service';
+import { ImageService } from './images.service';
 
 import { PaymentType } from '@/interfaces/paymentMethod.interface';
 import { ShippingType } from '@/interfaces/shippingMethods.interface';
@@ -530,7 +531,7 @@ export class OrderService {
 			if (status === 'approved' || status === 'processed' || statusDetail === 'accredited') {
 				paymentStatus = PaymentStatus.APPROVED;
 				orderStatus = OrderStatus.PROCESSING_SHIPPING;
-				note = 'Pago acreditado automáticamente por pasarela';
+				note = 'Pago acreditado con éxito';
 			} else if (
 				status === 'in_process' || 
 				status === 'processing' || 
@@ -546,7 +547,7 @@ export class OrderService {
 			) {
 				paymentStatus = PaymentStatus.PENDING;
 				orderStatus = OrderStatus.PENDING_PAYMENT;
-				note = `Pago en proceso/revisión: ${result.status} (${result.status_detail})`;
+				note = `Pago en proceso: ${result.status}`;
 			} else if (
 				status === 'rejected' ||
 				status === 'cancelled' ||
@@ -557,11 +558,11 @@ export class OrderService {
 			) {
 				paymentStatus = PaymentStatus.REJECTED;
 				orderStatus = OrderStatus.PAYMENT_FAILED;
-				note = `Pago rechazado/fallido: ${result.status} (${result.status_detail})`;
+				note = `Pago no aprobado: ${result.status}`;
 			} else {
 				paymentStatus = PaymentStatus.PENDING;
 				orderStatus = OrderStatus.PENDING_PAYMENT;
-				note = `Estado de pago desconocido recibido: ${result.status} (${result.status_detail})`;
+				note = `Estado de pago recibido: ${result.status}`;
 			}
 
 			if (status === 'cancelled' || status === 'expired' || statusDetail === 'expired' || statusDetail === 'cancelled') {
@@ -588,7 +589,8 @@ export class OrderService {
 			order.history.push({
 				status: orderStatus,
 				timestamp: new Date(),
-				note
+				note,
+				target: 'all'
 			});
 
 			if (paymentStatus === PaymentStatus.APPROVED) {
@@ -963,7 +965,7 @@ export class OrderService {
 			if (status === 'approved' || status === 'processed' || statusDetail === 'accredited') {
 				paymentStatus = PaymentStatus.APPROVED;
 				orderStatus = OrderStatus.PROCESSING_SHIPPING;
-				note = 'Pago acreditado automáticamente por webhook';
+				note = 'Pago acreditado con éxito';
 			} else if (
 				status === 'in_process' || 
 				status === 'processing' || 
@@ -979,7 +981,7 @@ export class OrderService {
 			) {
 				paymentStatus = PaymentStatus.PENDING;
 				orderStatus = OrderStatus.PENDING_PAYMENT;
-				note = `Pago en proceso/revisión: ${payment.status} (${payment.status_detail})`;
+				note = `Pago en proceso: ${payment.status}`;
 			} else if (
 				status === 'rejected' ||
 				status === 'cancelled' ||
@@ -990,11 +992,11 @@ export class OrderService {
 			) {
 				paymentStatus = PaymentStatus.REJECTED;
 				orderStatus = OrderStatus.PAYMENT_FAILED;
-				note = `Pago rechazado/fallido: ${payment.status} (${payment.status_detail})`;
+				note = `Pago no aprobado: ${payment.status}`;
 			} else {
 				paymentStatus = PaymentStatus.PENDING;
 				orderStatus = OrderStatus.PENDING_PAYMENT;
-				note = `Estado de pago desconocido recibido: ${payment.status} (${payment.status_detail})`;
+				note = `Estado de pago recibido: ${payment.status}`;
 			}
 
 			if (status === 'cancelled' || status === 'expired' || statusDetail === 'expired' || statusDetail === 'cancelled') {
@@ -1003,6 +1005,7 @@ export class OrderService {
 			}
 
 			const oldPaymentStatus = order.paymentInfo.status;
+			const isAlreadyApproved = oldPaymentStatus === PaymentStatus.APPROVED;
 			const isFirstPaymentUpdate = !order.paymentInfo.transactionId || order.paymentInfo.transactionId.startsWith('TX-');
 
 			// Actualizar estado del pago
@@ -1013,7 +1016,8 @@ export class OrderService {
 			order.history.push({
 				status: orderStatus,
 				timestamp: new Date(),
-				note
+				note: isAlreadyApproved ? 'Notificación de webhook recibida (pago verificado)' : note,
+				target: isAlreadyApproved ? 'admin' : 'all'
 			});
 
 			if (!order.paymentInfo.mercadopagoData) {
@@ -1720,6 +1724,41 @@ export class OrderService {
 		} catch (error) {
 			console.error(error);
 			throw new AppError('Failed to get sales stats', 'Error al obtener las estadísticas de ventas', 500);
+		}
+	}
+
+	static async attachPaymentReceipt(
+		models: TenantModels,
+		orderId: string,
+		file: Express.Multer.File
+	): Promise<IOrderDocument> {
+		try {
+			if (!orderId) throw new AppError('Order ID is required', 'El ID de la orden es requerido', 400);
+			if (!file) throw new AppError('File is required', 'El archivo del comprobante es requerido', 400);
+
+			const order = await models.Order.findById(orderId);
+			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
+
+			// Subir archivo a Cloudinary en la carpeta vura/receipts
+			const uploadResult = await ImageService.UploadImage(file, `receipt-${order.orderNumber || orderId}`, 'vura/receipts');
+
+			// Actualizar datos de comprobante
+			order.paymentInfo.receiptUrl = uploadResult.secure_url;
+			order.paymentInfo.receiptUploadedAt = new Date();
+
+			// Registrar entrada en el historial
+			order.history.push({
+				status: order.status,
+				timestamp: new Date(),
+				note: 'Comprobante de pago cargado por el cliente'
+			});
+
+			await order.save();
+			return order;
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			console.error('Error attaching payment receipt:', error);
+			throw new AppError('Failed to attach payment receipt', 'Error al guardar el comprobante de pago', 500);
 		}
 	}
 }

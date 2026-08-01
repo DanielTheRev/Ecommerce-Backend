@@ -51,6 +51,7 @@ export interface StatusEntry {
 	status: OrderStatus;
 	timestamp: Date;
 	note?: string;
+	target?: 'client' | 'admin' | 'all';
 }
 
 export interface updatePaymentStatusDTO {
@@ -185,6 +186,8 @@ export interface IPaymentInfo {
 	transactionId?: string;
 	paymentDate?: Date;
 	amount: number;
+	receiptUrl?: string;
+	receiptUploadedAt?: Date;
 	ualaOrderStatus?: OrderData;
 	mercadopagoData?: {
 		items: Item[],

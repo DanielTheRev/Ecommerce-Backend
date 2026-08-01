@@ -72,7 +72,16 @@ const EcommerceSchema = new Schema(
 				active: { type: Boolean, default: false },
 				alias: { type: String, default: '' },
 				cbuCvu: { type: String, default: '' },
+				bankName: { type: String, default: '' },
+				titular: { type: String, default: '' }
 			}
+		},
+		workingHours: {
+			weekdayStart: { type: String, default: '10:00' },
+			weekdayEnd: { type: String, default: '20:00' },
+			sundayStart: { type: String, default: '10:00' },
+			sundayEnd: { type: String, default: '15:00' },
+			noticeText: { type: String, default: 'Lun a Sáb 10-20h / Dom 10-15h' }
 		},
 		callbackURLs: {
 			success: { type: String, required: false, default: '' },

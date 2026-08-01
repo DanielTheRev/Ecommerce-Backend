@@ -26,6 +26,13 @@ export const paymentInfoSchema = new Schema<IPaymentInfo>({
     required: true,
     min: 0
   },
+  receiptUrl: {
+    type: String,
+    trim: true
+  },
+  receiptUploadedAt: {
+    type: Date
+  },
   ualaOrderStatus: {
     type: Object,
     default: undefined

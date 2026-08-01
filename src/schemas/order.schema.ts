@@ -48,7 +48,7 @@ export const CreateOrderSchema = z.object({
 			lastName: z.string(),
 			email: z.string().email(),
 			identificationType: z.string().min(1).optional(),
-			identificationNumber: z.string().min(1).optional()
+			identificationNumber: z.string().min(5, 'El DNI debe tener al menos 5 caracteres').optional()
 		}),
 
 		mercadopagoData: z.object({

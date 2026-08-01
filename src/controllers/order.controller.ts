@@ -525,3 +525,29 @@ export const getTicket = async (req: AuthRequest, res: Response, next: NextFunct
 		return next(error);
 	}
 };
+
+// Cargar comprobante de pago
+export const uploadPaymentReceipt = async (req: AuthRequest, res: Response, next: NextFunction) => {
+	try {
+		const { id } = req.params;
+		const file = req.file;
+
+		if (!file) {
+			return res.status(400).json({ status: 'fail', message: 'No se envió ningún archivo de comprobante' });
+		}
+
+		const order = await OrderService.attachPaymentReceipt(req.models!, id, file);
+
+		if (req.tenant) {
+			socketManager.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'payment');
+		}
+
+		return res.status(200).json({
+			status: 'success',
+			message: 'Comprobante de pago guardado exitosamente',
+			data: order
+		});
+	} catch (error) {
+		return next(error);
+	}
+};

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import multer from 'multer';
 import {
 	cancelOrder,
 	createOrder,
@@ -17,12 +18,14 @@ import {
 	getDailyStats,
 	getSalesStats,
 	getTicket,
-	trackOrder
+	trackOrder,
+	uploadPaymentReceipt
 } from '../controllers/order.controller';
 import { adminOnly, optionalAuth, protect } from '../middleware/auth';
 import { validateSchema } from '@/middleware/validator.middleware';
 import { CreateOrderSchema, PayOrderSchema, UpdatePaymentStatusSchema, UpdateShippingStatusSchema, TrackOrderSchema } from '@/schemas/order.schema';
 
+const upload = multer();
 const router: Router = Router();
 // webhooks
 router.post('/mercadopago-notification', mercadopagoWebhook);
@@ -33,6 +36,7 @@ router.get('/ualabis-failedNotifications', getNotificationsUala);
 // Rutas para usuarios autenticados
 router.post('/', optionalAuth, validateSchema(CreateOrderSchema), createOrder); // Crear nueva orden
 router.post('/:id/pay', optionalAuth, validateSchema(PayOrderSchema), payOrder); // Intentar pagar una orden existente (reintentable)
+router.post('/:id/receipt', optionalAuth, upload.single('receipt'), uploadPaymentReceipt); // Cargar comprobante de pago por parte del cliente
 router.get('/my-orders', protect, getUserOrders); // Obtener órdenes del usuario
 router.get('/track', validateSchema(TrackOrderSchema), trackOrder); // Rastreo de orden para invitados
 router.get('/:id', protect, getOrderById); // Obtener orden por ID

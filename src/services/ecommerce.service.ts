@@ -79,6 +79,13 @@ export class EcommerceService {
 				brands: publicConfig.brands,
 				categories: publicConfig.categories,
 				shippingConfig: publicConfig.shippingConfig,
+				workingHours: publicConfig.workingHours || {
+					weekdayStart: '10:00',
+					weekdayEnd: '20:00',
+					sundayStart: '10:00',
+					sundayEnd: '15:00',
+					noticeText: 'Lun a Sáb 10-20h / Dom 10-15h'
+				},
 				absorbInstallments: publicConfig.pricingStrategy?.absorbInstallments ?? true,
 				paymentGateways: {
 					mercadopago: {
@@ -90,7 +97,9 @@ export class EcommerceService {
 					transfer: {
 						active: publicConfig.paymentGateways?.transfer?.active || false,
 						alias: publicConfig.paymentGateways?.transfer?.alias || '',
-						cbuCvu: publicConfig.paymentGateways?.transfer?.cbuCvu || ''
+						cbuCvu: publicConfig.paymentGateways?.transfer?.cbuCvu || '',
+						bankName: publicConfig.paymentGateways?.transfer?.bankName || '',
+						titular: publicConfig.paymentGateways?.transfer?.titular || ''
 					}
 				}
 			}
