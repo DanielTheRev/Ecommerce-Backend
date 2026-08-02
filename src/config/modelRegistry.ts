@@ -23,6 +23,8 @@ import { ICartDocument } from '@/interfaces/cart.interface';
 import { notificationSchema } from '@/models/Notification.model';
 import { INotificationDocument } from '@/interfaces/notification.interface';
 import { providerSchema } from '@/models/provider.model';
+import { CouponSchema } from '@/models/Coupon.model';
+import { NewsletterSchema } from '@/models/Newsletter.model';
 
 // Interfaces
 import { ICashRegisterDocument, ICashRegisterModel } from '@/interfaces/cash-register.interface';
@@ -37,6 +39,8 @@ import { IBentoConfigDocument } from '@/interfaces/bento.interface';
 import { IShopTheLookDocument } from '@/interfaces/shopTheLook.interface';
 import { IAddressDocument } from '@/interfaces/address.interface';
 import { IProviderDocument } from '@/interfaces/provider.interface';
+import { ICouponDocument } from '@/interfaces/coupon.interface';
+import { INewsletterDocument } from '@/interfaces/newsletter.interface';
 
 /**
  * TenantModels - Todos los modelos Mongoose de un tenant.
@@ -61,6 +65,8 @@ export interface TenantModels {
 	Favorite: Model<IFavoriteDocument>;
 	Cart: Model<ICartDocument>;
 	Notification: Model<INotificationDocument>;
+	Coupon: Model<ICouponDocument>;
+	Newsletter: Model<INewsletterDocument>;
 }
 
 export function getModelsForConnection(db: Connection): TenantModels {
@@ -158,6 +164,16 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		? db.model<INotificationDocument>('Notification')
 		: db.model<INotificationDocument>('Notification', notificationSchema);
 
+	// Coupon
+	const CouponModel = db.models.Coupon
+		? db.model<ICouponDocument>('Coupon')
+		: db.model<ICouponDocument>('Coupon', CouponSchema);
+
+	// Newsletter
+	const NewsletterModel = db.models.Newsletter
+		? db.model<INewsletterDocument>('Newsletter')
+		: db.model<INewsletterDocument>('Newsletter', NewsletterSchema);
+
 	return {
 		Product: ProductModel,
 		TechProduct: TechProductModel,
@@ -177,6 +193,8 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		SkuCounter: SkuCounterModel,
 		Favorite: FavoriteModel,
 		Cart: CartModel,
-		Notification: NotificationModel
+		Notification: NotificationModel,
+		Coupon: CouponModel,
+		Newsletter: NewsletterModel
 	};
 }

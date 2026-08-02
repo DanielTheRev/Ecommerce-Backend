@@ -51,6 +51,8 @@ export const CreateOrderSchema = z.object({
 			identificationNumber: z.string().min(5, 'El DNI debe tener al menos 5 caracteres').optional()
 		}),
 
+		couponCode: z.string().optional().nullable(),
+
 		mercadopagoData: z.object({
 			token: z.string().optional(),
 			payment_method_id: z.string(),

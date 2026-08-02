@@ -24,6 +24,7 @@ import { ProductService } from './product.service';
 import { ShippingMethodService } from './shippingMethod.service';
 import { MercadoPagoService } from './mercadopago.service';
 import { ImageService } from './images.service';
+import { CouponService } from './coupon.service';
 
 import { PaymentType } from '@/interfaces/paymentMethod.interface';
 import { ShippingType } from '@/interfaces/shippingMethods.interface';
@@ -172,6 +173,34 @@ export class OrderService {
 				);
 			}
 
+			// Validar límite de órdenes pendientes para pagos manuales (transferencia/efectivo)
+			const isManualPayment = paymentMethod.type === PaymentType.BANK_TRANSFER || 
+			                        paymentMethod.type === PaymentType.ALIAS_TRANSFER || 
+			                        paymentMethod.type === PaymentType.CASH;
+
+			if (isManualPayment) {
+				const userEmail = user?.email || data.formPayerData?.email;
+				const pendingFilter: any[] = [];
+				if (userId) pendingFilter.push({ user: userId });
+				if (userEmail) pendingFilter.push({ 'buyerData.email': userEmail.toLowerCase() });
+
+				if (pendingFilter.length > 0) {
+					const existingPendingOrder = await models.Order.findOne({
+						$or: pendingFilter,
+						status: OrderStatus.PENDING_PAYMENT,
+						'paymentInfo.status': { $in: [PaymentStatus.PENDING, PaymentStatus.WAITING_CONFIRMATION] }
+					}).select('orderNumber createdAt total');
+
+					if (existingPendingOrder) {
+						throw new AppError(
+							'Pending order limit reached',
+							`Ya tenés una orden pendiente de pago (Orden N° ${existingPendingOrder.orderNumber}). Por favor realizá el pago o esperá su confirmación antes de generar un nuevo pedido.`,
+							400
+						);
+					}
+				}
+			}
+
 			const processItems = data.items.map(item => ({
 				_id: item._id,
 				sku: item.sku || '',
@@ -244,9 +273,29 @@ export class OrderService {
 			const { venta: dolarVenta } = await getDolar();
 			const isARS = config.costCurrency === 'ARS';
 
+			// Aplicar descuento por cupón o primera compra automática
+			let couponDiscountAmount = 0;
+			let appliedCouponCode: string | undefined = undefined;
+			const couponToValidate = data.couponCode || 'PRIMERACOMPRA';
+			const payerEmail = user?.email || data.formPayerData?.email;
+
+			const couponResult = await CouponService.validateCoupon(models, {
+				code: couponToValidate,
+				subtotal: finalCost,
+				email: payerEmail,
+				userId
+			});
+
+			if (couponResult.isValid && couponResult.discountAmount > 0) {
+				couponDiscountAmount = couponResult.discountAmount;
+				appliedCouponCode = couponResult.code;
+			}
+
+			const payableTotal = Math.max(0, finalCost - couponDiscountAmount);
+
 			const baseCost = orderItems.reduce((acc, item) => acc + (isARS ? item.costPriceSnapshot.inARS : item.costPriceSnapshot.inUSD) * item.quantity, 0);
 
-			const totalOppositeCurrency = isARS ? finalCost / dolarVenta : finalCost * dolarVenta;
+			const totalOppositeCurrency = isARS ? payableTotal / dolarVenta : payableTotal * dolarVenta;
 			const earningsVal = PaymentService.theOrderIsPreferredPayment(paymentMethod.type)
 				? paymentService.getEarnings()
 				: 0;
@@ -267,7 +316,7 @@ export class OrderService {
 					},
 					paymentInfo: {
 						method: paymentMethod.type,
-						amount: finalCost
+						amount: payableTotal
 					},
 					buyerData: (user && !(data.isThirdPartyPayer && data.formPayerData)) ? {
 						firstName: user.name.split(' ')[0],
@@ -277,13 +326,15 @@ export class OrderService {
 						identificationNumber: data.formPayerData?.identificationNumber || ''
 					} : data.formPayerData,
 					finance: {
-						total: finalCost,
+						total: payableTotal,
 						baseCost,
 						earnings: earningsVal,
 						totalOppositeCurrency,
 						earningsOppositeCurrency,
 						exchangeRateSnapshot: dolarVenta,
-						installments: installments || 1
+						installments: installments || 1,
+						couponCode: appliedCouponCode,
+						couponDiscount: couponDiscountAmount
 					},
 					orderNumber: this.generateOrderNumber(),
 					isThirdPartyPayer: data.isThirdPartyPayer || false,
@@ -298,6 +349,10 @@ export class OrderService {
 					{ path: 'user', select: 'name email' },
 					{ path: 'items.productSnapshot.providerSnapshot' }
 				])
+
+			if (appliedCouponCode) {
+				await CouponService.recordCouponUsage(models, appliedCouponCode, String(newOrder._id), payerEmail, userId);
+			}
 
 			// Para pagos manuales, no se necesita un paso separado de pago
 			let extras: CreateOrderExtras | undefined;
@@ -662,6 +717,8 @@ export class OrderService {
 				exchangeRateSnapshot: orderObj.finance.exchangeRateSnapshot,
 				installments: orderObj.finance.installments,
 				paymentGatewayFee: orderObj.finance.paymentGatewayFee,
+				couponCode: orderObj.finance.couponCode,
+				couponDiscount: orderObj.finance.couponDiscount,
 				// Omit sensitive data
 				baseCost: 0,
 				earnings: 0,

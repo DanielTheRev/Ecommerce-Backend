@@ -2,10 +2,23 @@ import { AppError } from '@/errors/app.error';
 import { IUser, Role } from '@/interfaces/user.interface';
 import { TenantModels } from '@/config/modelRegistry';
 
+const defaultRewards = {
+	firstPurchaseEligible: true,
+	firstPurchaseUsed: false,
+	newsletterSubscribed: false,
+	newsletterSubscribedAt: null,
+	newsletterUsed: false,
+	instagramClaimed: false,
+	instagramUsed: false
+};
+
 export class UserService {
 	static async getUserByGoogleID(models: TenantModels, id: string) {
 		try {
 			const user = (await models.User.findOne({ googleID: id }).lean()) as any as IUser;
+			if (user && !user.rewards) {
+				user.rewards = { ...defaultRewards };
+			}
 			return user;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
@@ -21,6 +34,9 @@ export class UserService {
 		try {
 			const user = (await models.User.findById(id).lean()) as any as IUser;
 			if (!user) throw new AppError('User not found', 'Usuario no encontrado', 404);
+			if (!user.rewards) {
+				user.rewards = { ...defaultRewards };
+			}
 			return user;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
@@ -36,6 +52,9 @@ export class UserService {
 		try {
 			const user = await models.User.findOne({ email }).select('+password').exec();
 			if (!user) throw new AppError('User not found', 'Usuario no encontrado', 404);
+			if (!user.rewards) {
+				user.rewards = { ...defaultRewards };
+			}
 			return user;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
@@ -51,10 +70,14 @@ export class UserService {
 		try {
 			const user = await models.User.create({
 				name: userData.name,
+				lastName: userData.lastName || '',
+				dni: userData.dni || '',
+				phone: userData.phone || '',
 				email: userData.email,
 				role: userData.role || Role.user,
 				googleID: userData.googleID,
 				profilePhoto: userData.profilePhoto,
+				rewards: userData.rewards || { ...defaultRewards },
 				isActive: true
 			});
 			return user;
@@ -68,6 +91,29 @@ export class UserService {
 			);
 		}
 	}
+
+	static async updateUserProfile(models: TenantModels, userId: string, data: { name?: string; lastName?: string; dni?: string; phone?: string }) {
+		try {
+			const user = await models.User.findById(userId);
+			if (!user) throw new AppError('User not found', 'Usuario no encontrado', 404);
+
+			if (data.name !== undefined) user.name = data.name.trim();
+			if (data.lastName !== undefined) user.lastName = data.lastName.trim();
+			if (data.dni !== undefined) user.dni = data.dni.trim();
+			if (data.phone !== undefined) user.phone = data.phone.trim();
+
+			await user.save();
+			return user;
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError(
+				'Error updating profile',
+				'Error al actualizar el perfil de usuario',
+				500
+			);
+		}
+	}
+
 	static async getAllClients(models: TenantModels, page: number, limit: number, q?: string) {
 		try {
 			const skip = (page - 1) * limit;
@@ -124,6 +170,7 @@ export class UserService {
 				name: 'Consumidor Final',
 				email: 'ventas@local.com',
 				role: Role.user,
+				rewards: { ...defaultRewards },
 				isActive: true
 			});
 

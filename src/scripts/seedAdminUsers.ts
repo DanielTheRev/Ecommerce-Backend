@@ -6,7 +6,7 @@ import mongoose from 'mongoose';
 const adminUsers = [
 	{
 		name: 'Daniel Larrosa',
-		email: 'fernando.larrosa94@gmail.com',
+		email: 'larrosadaniel@vura.com.ar',
 		password: '@Unarefacil1'
 	}
 ];
@@ -14,7 +14,7 @@ const adminUsers = [
 const poblateAdminUsers = async () => {
 	try {
 		// Conectar a MongoDB
-		const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/electro-hub';
+		const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/vura_store_db';
 		await mongoose.connect(mongoURI);
 		console.log('✅ Conectado a MongoDB');
 

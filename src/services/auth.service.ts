@@ -82,17 +82,38 @@ export class AuthService {
 				);
 			}
 			const { name, email, sub: googleID, picture } = userData;
+			const userEmail = (email || '').toLowerCase();
 
-			const user = await UserService.getUserByGoogleID(models, googleID);
+			// Verificar si el correo ya figuraba en la lista de suscriptores del Newsletter
+			const isNewsletterSubscribed = userEmail ? await models.Newsletter.exists({ email: userEmail }) : null;
+
+			let user = await UserService.getUserByGoogleID(models, googleID);
 			/* user already registered with google */
-			if (user) return user;
+			if (user) {
+				if (isNewsletterSubscribed && (!user.rewards || !user.rewards.newsletterSubscribed)) {
+					await models.User.findByIdAndUpdate(user._id, {
+						$set: {
+							'rewards.newsletterSubscribed': true,
+							'rewards.newsletterSubscribedAt': new Date()
+						}
+					});
+					user = await UserService.getUserByID(models, String(user._id));
+				}
+				return user;
+			}
 
 			const newUserData = {
 				name,
-				email,
+				email: userEmail,
 				role,
 				googleID,
 				profilePhoto: picture,
+				rewards: {
+					firstPurchaseEligible: true,
+					newsletterSubscribed: !!isNewsletterSubscribed,
+					newsletterSubscribedAt: isNewsletterSubscribed ? new Date() : null,
+					instagramClaimed: false
+				},
 				isActive: true
 			};
 			const newUser = await UserService.createUser(models, newUserData);
@@ -124,6 +145,7 @@ export class AuthService {
 				role: user.role,
 				googleID: user.googleID,
 				profilePhoto: user.profilePhoto,
+				rewards: user.rewards,
 				isActive: user.isActive,
 				createdAt: user.createdAt,
 				updatedAt: user.updatedAt
@@ -132,7 +154,7 @@ export class AuthService {
 		} catch (error) {
 			console.log(error);
 			if (error instanceof AppError) throw error;
-			throw new AppError('Authentication failed', 'Error al intentar iniciar sesión', 500);
+			throw new AuthError('Authentication failed', 'Error al intentar iniciar sesión', 500);
 		}
 	}
 }

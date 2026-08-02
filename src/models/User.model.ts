@@ -9,6 +9,21 @@ const userSchema = new Schema<IUser>(
 			required: [true, 'El nombre es requerido'],
 			trim: true
 		},
+		lastName: {
+			type: String,
+			trim: true,
+			default: ''
+		},
+		dni: {
+			type: String,
+			trim: true,
+			default: ''
+		},
+		phone: {
+			type: String,
+			trim: true,
+			default: ''
+		},
 		googleID: {
 			type: String,
 			unique: true,
@@ -37,6 +52,15 @@ const userSchema = new Schema<IUser>(
 			select: false,
 			default: null
 		},
+		rewards: {
+			firstPurchaseEligible: { type: Boolean, default: true },
+			firstPurchaseUsed: { type: Boolean, default: false },
+			newsletterSubscribed: { type: Boolean, default: false },
+			newsletterSubscribedAt: { type: Date, default: null },
+			newsletterUsed: { type: Boolean, default: false },
+			instagramClaimed: { type: Boolean, default: false },
+			instagramUsed: { type: Boolean, default: false }
+		},
 		isActive: {
 			type: Boolean,
 			default: true
@@ -50,7 +74,7 @@ const userSchema = new Schema<IUser>(
 
 // Middleware to hash password before save
 userSchema.pre('save', async function (next) {
-	if (!this.isModified('password')) return next();
+	if (!this.isModified('password') || !this.password) return next();
 
 	try {
 		const salt = await bcrypt.genSalt(12);
@@ -63,6 +87,7 @@ userSchema.pre('save', async function (next) {
 
 // Método para comparar contraseñas
 userSchema.methods.comparePassword = async function (candidatePassword: string): Promise<boolean> {
+	if (!this.password) return false;
 	return bcrypt.compare(candidatePassword, this.password);
 };
 

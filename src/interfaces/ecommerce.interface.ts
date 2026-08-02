@@ -28,6 +28,10 @@ export interface IEcommerceConfig {
 	taxes: {
 		iva: number;
 	};
+	firstPurchaseDiscount?: {
+		enabled: boolean;
+		percentage: number;
+	};
 	pricingStrategy: IPricingStrategy;
 	paymentGateways: IEcommercePaymentGateway;
 	callbackURLs: {

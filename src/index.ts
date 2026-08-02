@@ -26,6 +26,8 @@ import favoritesRoutes from './routes/favorites.routes';
 import userRoutes from './routes/user.routes';
 import cartRoutes from './routes/cart.routes';
 import notificationRoutes from './routes/notification.routes';
+import couponRoutes from './routes/coupon.routes';
+import newsletterRoutes from './routes/newsletter.routes';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -132,6 +134,8 @@ app.use('/api/favorites', resolveTenant, favoritesRoutes);
 app.use('/api/users', resolveTenant, userRoutes);
 app.use('/api/cart', resolveTenant, cartRoutes);
 app.use('/api/notifications', resolveTenant, notificationRoutes);
+app.use('/api/coupons', resolveTenant, couponRoutes);
+app.use('/api/newsletter', resolveTenant, newsletterRoutes);
 
 // Error handler middleware
 app.use(errorMiddleware);

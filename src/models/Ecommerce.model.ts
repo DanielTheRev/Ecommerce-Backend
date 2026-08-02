@@ -38,6 +38,10 @@ const EcommerceSchema = new Schema(
 				default: true
 			}
 		},
+		firstPurchaseDiscount: {
+			enabled: { type: Boolean, default: true },
+			percentage: { type: Number, default: 10, min: 0, max: 100 }
+		},
 		costCurrency: {
 			type: String,
 			enum: ['USD', 'ARS'],

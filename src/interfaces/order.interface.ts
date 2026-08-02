@@ -22,6 +22,7 @@ export interface CreateOrderDTO {
 	};
 	formPayerData?: IFormPayerData,
 	isThirdPartyPayer?: boolean; // Para diferenciar entre comprador y pagador en casos de terceros
+	couponCode?: string; // Código de cupón promocional o PRIMERACOMPRA
 	mercadopagoData?: {
 		token?: string;
 		payment_method_id: string;
@@ -110,7 +111,8 @@ export enum PaymentStatus {
 	PENDING = 'PENDING',
 	APPROVED = 'APPROVED',
 	REJECTED = 'REJECTED',
-	CANCELLED = 'CANCELLED'
+	CANCELLED = 'CANCELLED',
+	WAITING_CONFIRMATION = 'waiting_confirmation'
 }
 
 // Interface for order items
@@ -217,6 +219,8 @@ export interface IOrderFinance {
 	exchangeRateSnapshot?: number;
 	installments: number;
 	paymentGatewayFee?: number;
+	couponCode?: string;
+	couponDiscount?: number;
 }
 
 // Interface principal de la orden

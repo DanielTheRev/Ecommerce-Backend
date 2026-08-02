@@ -7,13 +7,27 @@ export enum Role {
 	employee = 'employee'
 }
 
+export interface IUserRewards {
+	firstPurchaseEligible: boolean;
+	firstPurchaseUsed?: boolean;
+	newsletterSubscribed: boolean;
+	newsletterSubscribedAt?: Date | null;
+	newsletterUsed?: boolean;
+	instagramClaimed: boolean;
+	instagramUsed?: boolean;
+}
+
 export interface ISecureUser {
 	_id: string;
 	name: string;
+	lastName?: string;
+	dni?: string;
+	phone?: string;
 	email: string;
 	role: Role;
 	googleID: string;
 	profilePhoto: string;
+	rewards?: IUserRewards;
 	isActive: boolean;
 	createdAt: Date;
 	updatedAt: Date;
@@ -23,11 +37,15 @@ export interface ISecureUser {
 export interface IUser {
 	_id: string;
 	name: string;
+	lastName?: string;
+	dni?: string;
+	phone?: string;
 	email: string;
 	role: Role;
 	googleID: string;
 	profilePhoto: string;
-	password: string;
+	password?: string;
+	rewards?: IUserRewards;
 	isActive: boolean;
 	createdAt: Date;
 	updatedAt: Date;

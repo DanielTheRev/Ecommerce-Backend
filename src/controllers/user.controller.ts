@@ -3,6 +3,45 @@ import { UserService } from '@/services/user.service';
 import { NextFunction, Response } from 'express';
 
 export class UserController {
+	// GET /api/users/me - Obtener perfil del usuario autenticado
+	static async getMe(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const userId = req.user?._id;
+			if (!userId) {
+				res.status(401).json({ message: 'No autenticado' });
+				return;
+			}
+
+			const user = await UserService.getUserByID(req.models!, String(userId));
+			res.status(200).json(user);
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// PUT /api/users/me - Actualizar perfil (nombre, apellido, DNI, teléfono)
+	static async updateMe(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const userId = req.user?._id;
+			if (!userId) {
+				res.status(401).json({ message: 'No autenticado' });
+				return;
+			}
+
+			const { name, lastName, dni, phone } = req.body;
+			const updatedUser = await UserService.updateUserProfile(req.models!, String(userId), {
+				name,
+				lastName,
+				dni,
+				phone
+			});
+
+			res.status(200).json(updatedUser);
+		} catch (error) {
+			next(error);
+		}
+	}
+
 	// GET /api/users/clients - Obtener todos los clientes registrados (admin)
 	static async getAllClients(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {

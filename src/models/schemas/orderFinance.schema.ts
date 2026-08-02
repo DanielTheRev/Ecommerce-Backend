@@ -9,5 +9,7 @@ export const orderFinanceSchema = new Schema<IOrderFinance>({
 	earningsOppositeCurrency: { type: Number, select: false },
 	exchangeRateSnapshot: { type: Number },
 	installments: { type: Number, required: true, default: 1 },
-	paymentGatewayFee: { type: Number }
+	paymentGatewayFee: { type: Number },
+	couponCode: { type: String },
+	couponDiscount: { type: Number, default: 0 }
 });
