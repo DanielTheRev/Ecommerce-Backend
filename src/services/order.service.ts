@@ -523,18 +523,41 @@ export class OrderService {
 			const payerFirstName = orderUser?.name?.split(' ')[0] || buyerData?.firstName;
 			const payerLastName = orderUser?.name?.split(' ').slice(1).join(' ') || buyerData?.lastName;
 
-			const mpItems = order.items.map((item) => ({
-				title: `${item.productSnapshot.brand} ${item.productSnapshot.model}`,
-				quantity: item.quantity,
-				unit_price: item.price.toString(),
-				picture_url: item.variantSnapshot?.imageReference?.url || ''
-			}));
+			// Calcular precios netos ajustados por descuento para MercadoPago
+			const shippingCost = order.shippingInfo?.cost || 0;
+			const targetItemsSubtotal = Math.max(0, finalCost - shippingCost);
+			const rawItemsSubtotal = order.items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
 
-			if (order.shippingInfo.cost > 0) {
+			let currentSum = 0;
+			const mpItems = order.items.map((item, index) => {
+				let discountedUnitPrice: number;
+				if (rawItemsSubtotal > 0) {
+					if (index === order.items.length - 1) {
+						const remaining = targetItemsSubtotal - currentSum;
+						discountedUnitPrice = Math.max(0, Math.round(remaining / item.quantity));
+					} else {
+						const ratio = (item.price * item.quantity) / rawItemsSubtotal;
+						const itemTarget = targetItemsSubtotal * ratio;
+						discountedUnitPrice = Math.max(0, Math.round(itemTarget / item.quantity));
+						currentSum += discountedUnitPrice * item.quantity;
+					}
+				} else {
+					discountedUnitPrice = item.price;
+				}
+
+				return {
+					title: `${item.productSnapshot.brand} ${item.productSnapshot.model}`,
+					quantity: item.quantity,
+					unit_price: discountedUnitPrice.toString(),
+					picture_url: item.variantSnapshot?.imageReference?.url || ''
+				};
+			});
+
+			if (shippingCost > 0) {
 				mpItems.push({
 					title: 'Costo de Envío',
 					quantity: 1,
-					unit_price: order.shippingInfo.cost.toString(),
+					unit_price: shippingCost.toString(),
 					picture_url: ''
 				});
 			}
@@ -650,24 +673,45 @@ export class OrderService {
 
 			if (paymentStatus === PaymentStatus.APPROVED) {
 				order.paymentInfo.paymentDate = new Date();
-				// Usar las ganancias pre-calculadas por producto (respeta márgenes custom)
 				const mpInstallments = mercadopagoData.installments || 1;
-				const earningsVal = paymentService.getEarnings(mpInstallments);
-				order.finance.earnings = earningsVal;
 				order.finance.installments = mpInstallments;
 
-				// Calcular comisión de Mercado Pago
+				// 1. Calcular comisión real de Mercado Pago con IVA
 				const rawBaseComm = config.paymentGateways.mercadopago.baseCommission;
 				const rawCFT3 = config.paymentGateways.mercadopago.cft3cuotas;
 				const rawCFT6 = config.paymentGateways.mercadopago.cft6Cuotas;
-				const ivaFactor = 1 + Number(config.taxes.iva) / 100;
+				const ivaFactor = 1 + Number(config.taxes?.iva || 21) / 100;
 				let tasa = Number(rawBaseComm) / 100;
 				if (mpInstallments > 3) {
 					tasa = (Number(rawBaseComm) + Number(rawCFT6)) / 100;
 				} else if (mpInstallments > 1) {
 					tasa = (Number(rawBaseComm) + Number(rawCFT3)) / 100;
 				}
-				order.finance.paymentGatewayFee = order.finance.total * (tasa * ivaFactor);
+				order.finance.paymentGatewayFee = Math.round(order.finance.total * (tasa * ivaFactor));
+
+				// 2. Calcular gastos adicionales totales de los productos (reposición, arca, bolsas)
+				const totalAdditionalCosts = order.items.reduce((acc, item) => {
+					const providerCost = item.productSnapshot?.finance?.providerCost?.inARS || 0;
+					const additionalCosts = item.productSnapshot?.finance?.additionalCosts;
+					if (!additionalCosts || !Array.isArray(additionalCosts)) return acc;
+					let itemAddCost = 0;
+					for (const c of additionalCosts) {
+						if (c.type === 'percent_over_provider') {
+							itemAddCost += providerCost * (c.value / 100);
+						} else if (c.type === 'fixed') {
+							itemAddCost += c.value;
+						}
+					}
+					return acc + (itemAddCost * item.quantity);
+				}, 0);
+
+				// 3. Calcular Ganancia Neta Real (Total Abonado - Costo Base - Gastos Adicionales - Comisión MP - Envío)
+				const shippingCost = order.shippingInfo?.cost || 0;
+				const realEarnings = Math.round(
+					order.finance.total - order.finance.baseCost - totalAdditionalCosts - order.finance.paymentGatewayFee - shippingCost
+				);
+				const earningsVal = Math.max(0, realEarnings);
+				order.finance.earnings = earningsVal;
 
 				const dolarVenta = order.finance.exchangeRateSnapshot || (await getDolar()).venta;
 				const isARS = config.costCurrency === 'ARS';
@@ -1285,12 +1329,16 @@ export class OrderService {
 				'El ID del usuario es requerido para cancelar la orden',
 				400
 			);
-		if (role !== Role.admin)
-			throw new AppError('Unauthorized access', 'Acceso no autorizado', 403);
+
 		try {
 			const order = await this.getOrderById(models, id);
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
-			if (order.user?.toString() !== userID && role !== 'admin') {
+
+			const isAdmin = role === Role.admin || (role as string) === 'admin';
+			const orderUserId = order.user ? (order.user._id ? order.user._id.toString() : order.user.toString()) : null;
+
+			// Verificar propiedad de la orden para usuarios no administradores
+			if (!isAdmin && orderUserId !== userID.toString()) {
 				throw new AppError(
 					'You can only cancel your own orders',
 					'Solo puedes cancelar tus propias órdenes',
@@ -1298,12 +1346,28 @@ export class OrderService {
 				);
 			}
 
-			if (order.status !== OrderStatus.PENDING_PAYMENT && order.status !== OrderStatus.PAYMENT_FAILED) {
+			// Ya está cancelada
+			if (order.status === OrderStatus.CANCELLED) {
 				throw new AppError(
-					'Only pending orders can be cancelled',
-					'Solo se pueden cancelar órdenes pendientes de pago',
+					'Order is already cancelled',
+					'Esta orden ya fue cancelada previamente',
 					400
 				);
+			}
+
+			// Para clientes comunes, solo se permite cancelar órdenes pendientes de pago o fallidas
+			if (!isAdmin) {
+				const cancellableStatuses: OrderStatus[] = [
+					OrderStatus.PENDING_PAYMENT,
+					OrderStatus.PAYMENT_FAILED
+				];
+				if (!cancellableStatuses.includes(order.status)) {
+					throw new AppError(
+						'Paid or processing orders cannot be cancelled directly',
+						'Esta orden ya fue pagada o está en proceso. Para cancelarla, por favor ponete en contacto con nosotros vía WhatsApp.',
+						400
+					);
+				}
 			}
 
 			order.status = OrderStatus.CANCELLED;
@@ -1315,14 +1379,23 @@ export class OrderService {
 			order.paymentInfo.status = PaymentStatus.CANCELLED;
 			await order.save();
 
-			// restore variant stock
-			await ProductService.restoreVariantStock(models,
-				order.items.map((item: any) => ({
-					product: item.productSnapshot._id,
-					variantSku: item.variantSnapshot.sku,
-					quantity: item.quantity
-				}))
-			);
+			// 1. Restaurar stock de las variantes
+			if (order.items && order.items.length > 0) {
+				await ProductService.restoreVariantStock(models,
+					order.items.map((item: any) => ({
+						product: item.productSnapshot._id,
+						variantSku: item.variantSnapshot.sku,
+						quantity: item.quantity
+					}))
+				);
+			}
+
+			// 2. Restaurar cupón o beneficio/reward consumido si aplica
+			if (order.finance?.couponCode) {
+				const targetEmail = order.buyerData?.email;
+				await CouponService.restoreCouponUsage(models, order.finance.couponCode, String(order._id), targetEmail, userID);
+			}
+
 			const updatedOrder = await this.getOrderByIdFullyPopulated(models, id);
 			return updatedOrder;
 		} catch (error) {

@@ -164,6 +164,24 @@ class SocketManager {
 	}
 
 	/**
+	 * Notifica a los admins que un cliente subió un comprobante de pago
+	 */
+	notifyReceiptUploadedToAdmins(tenantSlug: string, order: any) {
+		if (!this.io || !tenantSlug) return;
+
+		const notification: CreateAdminNotificationDto = {
+			type: NotificationType.ORDER_STATUS_CHANGED,
+			title: '🧾 Comprobante de Pago Cargado',
+			message: `El cliente cargó un comprobante de pago para la orden #${order.orderNumber || order._id}.`,
+			severity: NotificationSeverity.INFO,
+			data: order,
+			actionUrl: `/home/client-orders`
+		};
+
+		this.io.to(`admins_${tenantSlug}`).emit('admin-notification', this.buildNotification(notification, NotificationAudience.ADMIN));
+	}
+
+	/**
 	 * Notifica cualquier alerta de sistema a los administradores
 	 */
 	notifyAdminAlert(title: string, message: string, severity: NotificationSeverity = NotificationSeverity.INFO) {

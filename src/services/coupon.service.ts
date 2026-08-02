@@ -278,6 +278,22 @@ export class CouponService {
 			return false;
 		});
 
+		// Verificar si es un cupón de Instagram y el usuario ya usó su beneficio de Instagram
+		const couponDesc = (coupon as any).description || '';
+		const isIgCode = rawCode.startsWith('VURAIG') || rawCode.includes('INSTAGRAM') || rawCode.includes('IG_') || rawCode.includes('IG-') || /(^|[^A-Z])IG($|[^A-Z0-9])/i.test(rawCode);
+		const isIg = isIgCode || couponDesc.toLowerCase().includes('instagram') || couponDesc.toLowerCase().includes('@vura');
+		if (isIg && userObj?.rewards?.instagramUsed) {
+			return {
+				isValid: false,
+				code: rawCode,
+				discountType: coupon.discountType,
+				discountValue: coupon.discountValue,
+				discountAmount: 0,
+				finalTotal: dto.subtotal,
+				message: 'Ya has utilizado tu beneficio de Instagram previamente.'
+			};
+		}
+
 		if (alreadyUsed) {
 			return {
 				isValid: false,
@@ -354,7 +370,8 @@ export class CouponService {
 				await userDoc.save();
 				return;
 			}
-			if (rawCode === 'VURAIG10' || rawCode.includes('IG') || rawCode.includes('INSTAGRAM')) {
+			const isIgCode = rawCode.startsWith('VURAIG') || rawCode.includes('INSTAGRAM') || rawCode.includes('IG_') || rawCode.includes('IG-') || /(^|[^A-Z])IG($|[^A-Z0-9])/i.test(rawCode);
+			if (rawCode === 'VURAIG10' || isIgCode) {
 				userDoc.rewards.instagramUsed = true;
 				await userDoc.save();
 			}
@@ -371,6 +388,54 @@ export class CouponService {
 						orderId,
 						usedAt: new Date()
 					}
+				}
+			}
+		);
+	}
+
+	/**
+	 * Revierte el uso de un cupón cuando una orden es cancelada.
+	 */
+	static async restoreCouponUsage(
+		models: TenantModels,
+		code: string,
+		orderId: string,
+		email?: string,
+		userId?: string
+	): Promise<void> {
+		const rawCode = (code || '').trim().toUpperCase();
+		if (!rawCode) return;
+
+		const targetEmail = (email || '').trim().toLowerCase();
+		let userDoc: any = null;
+		if (userId) {
+			userDoc = await models.User.findById(userId);
+		} else if (targetEmail) {
+			userDoc = await models.User.findOne({ email: targetEmail });
+		}
+
+		if (userDoc && userDoc.rewards) {
+			if (rawCode === 'PRIMERACOMPRA' || rawCode === 'FIRST10') {
+				userDoc.rewards.firstPurchaseUsed = false;
+				await userDoc.save();
+			} else if (rawCode === 'CLUBVURA10') {
+				userDoc.rewards.newsletterUsed = false;
+				await userDoc.save();
+			} else {
+				const isIgCode = rawCode.startsWith('VURAIG') || rawCode.includes('INSTAGRAM') || rawCode.includes('IG_') || rawCode.includes('IG-') || /(^|[^A-Z])IG($|[^A-Z0-9])/i.test(rawCode);
+				if (rawCode === 'VURAIG10' || isIgCode) {
+					userDoc.rewards.instagramUsed = false;
+					await userDoc.save();
+				}
+			}
+		}
+
+		await models.Coupon.findOneAndUpdate(
+			{ code: rawCode },
+			{
+				$inc: { usedCount: -1 },
+				$pull: {
+					usedBy: { orderId: orderId }
 				}
 			}
 		);
@@ -489,6 +554,32 @@ export class CouponService {
 			}
 		}
 
-		return [...rewardCoupons, ...customCoupons];
+		const availableCustomCoupons = customCoupons.filter((coupon: any) => {
+			// 1. Validar límite máximo de usos global
+			if (coupon.maxUses && coupon.maxUses > 0 && coupon.usedCount >= coupon.maxUses) {
+				return false;
+			}
+			// 2. Validar si este usuario/email ya usó el cupón
+			if (coupon.usedBy && Array.isArray(coupon.usedBy)) {
+				const alreadyUsed = coupon.usedBy.some((usage: any) => {
+					if (targetEmail && usage.email && usage.email.toLowerCase() === targetEmail) return true;
+					if (userId && usage.userId && String(usage.userId) === String(userId)) return true;
+					return false;
+				});
+				if (alreadyUsed) return false;
+			}
+			// 3. Si es un cupón de Instagram y el usuario ya consumió su reward de Instagram
+			if (userObj?.rewards?.instagramUsed) {
+				const code = (coupon.code || '').toUpperCase();
+				const desc = (coupon.description || '').toLowerCase();
+				const isIgCode = code.startsWith('VURAIG') || code.includes('INSTAGRAM') || code.includes('IG_') || code.includes('IG-') || /(^|[^A-Z])IG($|[^A-Z0-9])/i.test(code);
+				if (isIgCode || desc.includes('instagram') || desc.includes('@vura')) {
+					return false;
+				}
+			}
+			return true;
+		});
+
+		return [...rewardCoupons, ...availableCustomCoupons];
 	}
 }

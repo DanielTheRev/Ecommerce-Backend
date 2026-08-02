@@ -539,7 +539,7 @@ export const uploadPaymentReceipt = async (req: AuthRequest, res: Response, next
 		const order = await OrderService.attachPaymentReceipt(req.models!, id, file);
 
 		if (req.tenant) {
-			socketManager.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'payment');
+			socketManager.notifyReceiptUploadedToAdmins(req.tenant.slug, order);
 		}
 
 		return res.status(200).json({
