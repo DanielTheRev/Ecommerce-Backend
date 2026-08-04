@@ -27,6 +27,10 @@ export class MetaService {
   }
 
   private static get testEventCode(): string | undefined {
+    // En producción (NODE_ENV=production), NUNCA enviar test_event_code para que Meta registre los eventos como REALES.
+    if (process.env.NODE_ENV === 'production') {
+      return undefined;
+    }
     return process.env.META_TEST_EVENT_CODE || undefined;
   }
 

@@ -37,14 +37,18 @@ const app: Application = express();
 const PORT = process.env.PORT || 3000;
 
 // Middlewares de seguridad
-// CORS dinámico: los origins permitidos vienen de la config de cada tenant
-const devOrigins = [
+// CORS dinámico: los origins permitidos vienen de la config de cada tenant y defaults de producción
+const defaultOrigins = [
 	'http://localhost:3000',
 	'http://localhost:3001',
 	'http://localhost:5173',
 	'http://localhost:4200',
 	'http://localhost:4300',
-	'http://localhost:4000'
+	'http://localhost:4000',
+	'https://vura.com.ar',
+	'https://www.vura.com.ar',
+	'https://dashboard.vura.com.ar',
+	'https://admin.vura.com.ar'
 ];
 
 // Cache de origins por tenant para no consultar la DB en cada request
@@ -67,23 +71,33 @@ async function loadAllTenantOrigins(): Promise<void> {
 }
 
 function getAllAllowedOrigins(): string[] {
-	const allOrigins = [...devOrigins];
+	const allOrigins = [...defaultOrigins];
 	for (const origins of tenantOriginsCache.values()) {
 		allOrigins.push(...origins);
 	}
 	return allOrigins;
 }
 
+function isOriginAllowed(origin: string | undefined): boolean {
+	if (!origin) return true;
+	if (process.env.NODE_ENV !== 'production') return true;
+
+	const allowed = getAllAllowedOrigins();
+	if (allowed.includes(origin)) return true;
+
+	// Permitir automáticamente cualquier variante o subdominio de vura.com.ar
+	if (origin === 'https://vura.com.ar' || origin === 'https://www.vura.com.ar' || origin.endsWith('.vura.com.ar')) {
+		return true;
+	}
+
+	return false;
+}
+
 app.use(helmet());
 app.use(
 	cors({
 		origin: (origin, callback) => {
-			if (process.env.NODE_ENV !== 'production') {
-				return callback(null, true);
-			}
-
-			const allowed = getAllAllowedOrigins();
-			if (!origin || allowed.includes(origin)) {
+			if (isOriginAllowed(origin)) {
 				callback(null, true);
 			} else {
 				console.log('CORS bloqueado:', origin);
