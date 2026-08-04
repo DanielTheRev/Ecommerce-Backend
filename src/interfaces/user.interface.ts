@@ -27,6 +27,7 @@ export interface ISecureUser {
 	role: Role;
 	googleID: string;
 	profilePhoto: string;
+	isEmailVerified?: boolean;
 	rewards?: IUserRewards;
 	isActive: boolean;
 	createdAt: Date;
@@ -45,6 +46,7 @@ export interface IUser {
 	googleID: string;
 	profilePhoto: string;
 	password?: string;
+	isEmailVerified?: boolean;
 	rewards?: IUserRewards;
 	isActive: boolean;
 	createdAt: Date;

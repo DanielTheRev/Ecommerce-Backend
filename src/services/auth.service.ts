@@ -157,4 +157,126 @@ export class AuthService {
 			throw new AuthError('Authentication failed', 'Error al intentar iniciar sesión', 500);
 		}
 	}
+
+	static async sendOtp(
+		models: TenantModels,
+		email: string,
+		userData?: { name?: string; lastName?: string; dni?: string }
+	) {
+		const cleanEmail = (email || '').trim().toLowerCase();
+		if (!cleanEmail || !cleanEmail.includes('@')) {
+			throw new AppError('Invalid email', 'Ingresá un correo electrónico válido', 400);
+		}
+
+		const existingUser = await models.User.findOne({ email: cleanEmail });
+		const isNewUser = !existingUser;
+
+		if (isNewUser && (!userData?.name || !userData.name.trim())) {
+			throw new AppError('Name is required for registration', 'Por favor ingresá tu nombre para registrarte', 400);
+		}
+
+		const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+		const otpToken = jwt.sign(
+			{
+				email: cleanEmail,
+				code,
+				isNewUser,
+				name: userData?.name?.trim() || '',
+				lastName: userData?.lastName?.trim() || '',
+				dni: userData?.dni?.trim() || ''
+			},
+			process.env.JWT_SECRET!,
+			{ expiresIn: '10m' }
+		);
+
+		const { ResendService } = await import('./resend.service');
+		await ResendService.sendOtpEmail(cleanEmail, code, models);
+
+		return {
+			success: true,
+			message: 'Código de acceso enviado a tu correo',
+			otpToken,
+			isNewUser
+		};
+	}
+
+	static async verifyOtp(
+		models: TenantModels,
+		otpToken: string,
+		submittedCode: string
+	) {
+		if (!otpToken || !submittedCode) {
+			throw new AppError('Missing token or code', 'Ingresá el código de 6 dígitos enviado a tu correo', 400);
+		}
+
+		let decoded: any;
+		try {
+			decoded = jwt.verify(otpToken, process.env.JWT_SECRET!);
+		} catch (err) {
+			throw new AppError('Invalid or expired token', 'El código venció o es inválido. Volvé a ingresar tu mail para recibir uno nuevo.', 400);
+		}
+
+		const cleanSubmitted = submittedCode.trim().replace(/\s+/g, '');
+		if (decoded.code !== cleanSubmitted) {
+			throw new AppError('Incorrect code', 'El código de 6 dígitos ingresado es incorrecto', 400);
+		}
+
+		const email = decoded.email;
+		let user = await models.User.findOne({ email });
+
+		if (!user) {
+			const isNewsletterSubscribed = await models.Newsletter.exists({ email });
+
+			const newUserData = {
+				name: decoded.name || 'Cliente',
+				lastName: decoded.lastName || '',
+				dni: decoded.dni || '',
+				email,
+				role: Role.user,
+				isEmailVerified: true,
+				rewards: {
+					firstPurchaseEligible: true,
+					firstPurchaseUsed: false,
+					newsletterSubscribed: !!isNewsletterSubscribed,
+					newsletterSubscribedAt: isNewsletterSubscribed ? new Date() : null,
+					newsletterUsed: false,
+					instagramClaimed: false,
+					instagramUsed: false
+				},
+				isActive: true
+			};
+
+			user = await UserService.createUser(models, newUserData as any);
+
+			try {
+				await models.Order.updateMany(
+					{ 'buyerData.email': email, user: { $exists: false } },
+					{ $set: { user: user._id } }
+				);
+			} catch (err) {
+				console.error('Error linking past guest orders:', err);
+			}
+		} else {
+			if (!user.isEmailVerified) {
+				user.isEmailVerified = true;
+				await user.save();
+			}
+		}
+
+		const userFlat: ISecureUser = {
+			_id: String(user._id),
+			name: user.name,
+			email: user.email,
+			role: user.role,
+			googleID: user.googleID,
+			profilePhoto: user.profilePhoto,
+			rewards: user.rewards,
+			isActive: user.isActive,
+			createdAt: user.createdAt,
+			updatedAt: user.updatedAt
+		};
+
+		return userFlat;
+	}
 }

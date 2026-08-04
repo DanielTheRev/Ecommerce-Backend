@@ -52,6 +52,10 @@ const userSchema = new Schema<IUser>(
 			select: false,
 			default: null
 		},
+		isEmailVerified: {
+			type: Boolean,
+			default: false
+		},
 		rewards: {
 			firstPurchaseEligible: { type: Boolean, default: true },
 			firstPurchaseUsed: { type: Boolean, default: false },

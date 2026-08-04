@@ -704,6 +704,52 @@ export class ResendService {
 		}
 	}
 
+	static async sendOtpEmail(email: string, code: string, models?: TenantModels) {
+		try {
+			const resend = new Resend(this.#apikey);
+			const logoUrl = models ? await this.getLogoUrl(models) : this.DEFAULT_LOGO_URL;
+
+			const formattedCode = `${code.slice(0, 3)} ${code.slice(3)}`;
+
+			const emailHtml = `
+        <div style="max-width: 500px; margin: 0 auto; padding: 30px 20px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #111; border: 1px solid #eeeeee; border-radius: 12px; background-color: #ffffff;">
+          <div style="text-align: center; padding-bottom: 25px; border-bottom: 1px solid #f1f1f1;">
+            <img src="${logoUrl}" alt="VURA Logo" width="110" style="display: block; margin: 0 auto;" />
+          </div>
+
+          <div style="text-align: center; padding: 30px 10px;">
+            <h1 style="font-size: 22px; font-weight: 700; margin: 0 0 10px 0; letter-spacing: -0.5px; color: #0a0a0a;">Tu código de acceso a VURA</h1>
+            <p style="font-size: 14px; color: #666666; margin: 0 0 25px 0;">Ingresá estos 6 dígitos en la tienda para ingresar a tu cuenta:</p>
+
+            <div style="background-color: #f7f7f8; border: 1px dashed #d1d1d6; padding: 18px 24px; border-radius: 8px; display: inline-block; margin-bottom: 25px;">
+              <span style="font-family: 'Courier New', Courier, monospace; font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #000000;">${formattedCode}</span>
+            </div>
+
+            <p style="font-size: 12px; color: #8e8e93; margin: 0;">Este código vence en 10 minutos y es de uso único.</p>
+          </div>
+
+          <div style="text-align: center; padding-top: 20px; border-top: 1px solid #f1f1f1;">
+            <a href="https://vura.com.ar" style="font-size: 13px; font-weight: 600; color: #000; text-decoration: none;">VURA.COM.AR</a>
+          </div>
+        </div>
+      `;
+
+			const { data, error } = await resend.emails.send({
+				from: 'Vura <ordenes@vura.com.ar>',
+				to: email,
+				subject: `Vura - Tu código de acceso es ${formattedCode}`,
+				html: emailHtml
+			});
+
+			if (error) throw error;
+			console.log('✅ OTP email sent to:', email, data);
+			return true;
+		} catch (error: any) {
+			console.error('❌ Failed to send OTP email:', error);
+			return false;
+		}
+	}
+
 	private static buildItemsHtml(order: IOrder): string {
 		if (!order.items || order.items.length === 0) return '';
 		return order.items

@@ -91,3 +91,23 @@ export const logout = async (req: AuthRequest, res: Response) => {
 		});
 	}
 };
+
+export const sendOtp = async (req: AuthRequest, res: Response, next: NextFunction) => {
+	const { email, name, lastName, dni } = req.body;
+	try {
+		const result = await AuthService.sendOtp(req.models!, email, { name, lastName, dni });
+		return res.status(200).json(result);
+	} catch (error) {
+		return next(error);
+	}
+};
+
+export const verifyOtp = async (req: AuthRequest, res: Response, next: NextFunction) => {
+	const { otpToken, code } = req.body;
+	try {
+		const user = await AuthService.verifyOtp(req.models!, otpToken, code);
+		return sendTokenResponse(200, res, user as ISecureUser);
+	} catch (error) {
+		return next(error);
+	}
+};
