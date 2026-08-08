@@ -1429,4 +1429,14 @@ export class ProductService {
 		}
 	}
 
+	static async getPublicActiveProducts(models: TenantModels) {
+		try {
+			const products = await models.Product.find({ isActive: true })
+				.populate('provider')
+				.lean();
+			return products;
+		} catch (error) {
+			throw new AppError('Failed to fetch active products', 'Error al obtener los productos activos', 500);
+		}
+	}
 }

@@ -45,4 +45,13 @@ export class ProviderController {
       next(error);
     }
   }
+
+  static async deleteProvider(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const result = await ProviderService.deleteProvider(req.models!, req.params.id);
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
 }

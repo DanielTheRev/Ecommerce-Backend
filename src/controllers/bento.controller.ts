@@ -16,9 +16,19 @@ export class BentoController {
   static async upsertBentoConfig(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const data = req.body as IBentoConfigCreateDTO;
-      console.log(data);
-      const imageFiles = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
       
+      const imageFiles: { [fieldname: string]: Express.Multer.File[] } = {};
+      if (Array.isArray(req.files)) {
+        req.files.forEach((file: Express.Multer.File) => {
+          if (!imageFiles[file.fieldname]) {
+            imageFiles[file.fieldname] = [];
+          }
+          imageFiles[file.fieldname].push(file);
+        });
+      } else if (req.files && typeof req.files === 'object') {
+        Object.assign(imageFiles, req.files);
+      }
+
       const config = await BentoService.upsertBentoConfig(
         req.models!, 
         req.tenant?.slug as string, 

@@ -68,4 +68,31 @@ export class ProviderService {
       );
     }
   }
+
+  static async deleteProvider(models: TenantModels, id: string) {
+    if (!id) throw new AppError('Provider ID is required', 'El ID del proveedor es requerido', 400);
+
+    const provider = await models.Provider.findById(id);
+    if (!provider) throw new AppError('Provider not found', 'Proveedor no encontrado', 404);
+
+    const productsCount = await models.Product.countDocuments({ provider: id });
+    if (productsCount > 0) {
+      throw new AppError(
+        'Provider has associated products',
+        `No se puede eliminar el proveedor "${provider.name}" porque tiene ${productsCount} producto(s) asociado(s). Reasigna o elimina los productos primero.`,
+        400
+      );
+    }
+
+    try {
+      await models.Provider.findByIdAndDelete(id);
+      return { success: true, message: 'Proveedor eliminado con éxito' };
+    } catch (error) {
+      throw new AppError(
+        'Failed to delete provider',
+        'Error al intentar eliminar el proveedor',
+        500
+      );
+    }
+  }
 }

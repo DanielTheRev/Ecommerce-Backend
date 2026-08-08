@@ -85,6 +85,7 @@ export const CreateProductSchema = z.object({
 	body: z.object({
 		productType: z.enum(ProductType),
 		provider: z.string().optional(),
+		linkProductProvider: z.string().optional(),
 		brand: z.string().min(1, 'Brand is required').max(200),
 		model: z.string().min(1, 'Model is required').max(200),
 		category: z.string(),
@@ -130,6 +131,8 @@ export const CreateProductSchema = z.object({
 			metaDescription: z.string().optional(),
 			metaTitle: z.string().optional(),
 		})).optional(),
+		isActive: z.string().or(z.boolean()).transform(v => v === 'true' || v === true).optional(),
+		isFeatured: z.string().or(z.boolean()).transform(v => v === 'true' || v === true).optional(),
 	}).superRefine((data, ctx) => {
 		const cost = data.providerCost ?? data.price;
 		if (cost === undefined || cost <= 0 || isNaN(cost)) {
@@ -166,6 +169,7 @@ export const UpdateProductSchema = z.object({
 	body: z.object({
 		productType: z.enum(ProductType).optional(),
 		provider: z.string().optional(),
+		linkProductProvider: z.string().optional(),
 		brand: z.string().max(200).optional(),
 		model: z.string().max(200).optional(),
 		category: z.string().optional(),

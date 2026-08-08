@@ -25,6 +25,7 @@ router.patch('/:id', protect, adminOnly, multerConfig, validateSchema(UpdateProd
 router.delete('/:id', protect, adminOnly, ProductController.deleteProduct); // Eliminar producto
 
 // Rutas públicas (sin autenticación)
+router.get('/public-export/:tenantSlug', ProductController.getPublicExportProducts); // Exportación pública protegida por token temporal (5 min)
 router.get('/search', ProductController.searchProducts); // Buscar productos
 router.get('/metadata', ProductController.getMetadata); // Metadatos (marcas, categorías, tags)
 router.get('/slugs', ProductController.getAllSlugs); // Obtener todos los slugs para SSR

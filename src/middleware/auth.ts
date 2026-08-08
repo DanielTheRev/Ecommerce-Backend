@@ -51,8 +51,8 @@ export const protect = async (
 
 		next();
 	} catch (error) {
-		console.error('Error en middleware de autenticación:', error);
 		if (error instanceof AppError) throw error;
+		console.error('Error en middleware de autenticación:', error);
 		throw new AppError('Failed to login user', 'Error al intentar iniciar sesión', 500);
 	}
 };

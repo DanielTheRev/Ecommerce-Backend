@@ -29,11 +29,17 @@ import notificationRoutes from './routes/notification.routes';
 import couponRoutes from './routes/coupon.routes';
 import newsletterRoutes from './routes/newsletter.routes';
 
-// Cargar variables de entorno
-dotenv.config();
+// Cargar variables de entorno según el entorno (development vs production)
+const currentEnv = process.env.NODE_ENV || 'development';
+dotenv.config(); // Base .env
+dotenv.config({ path: `.env.${currentEnv}`, override: true });
+dotenv.config({ path: `.env.${currentEnv}.local`, override: true });
+
+console.log(`🌱 Entorno activo: [${currentEnv}] | Puerto: [${process.env.PORT || 3000}]`);
 
 // Crear aplicación Express
 const app: Application = express();
+app.set('trust proxy', true);
 const PORT = process.env.PORT || 3000;
 
 // Middlewares de seguridad
@@ -45,6 +51,7 @@ const defaultOrigins = [
 	'http://localhost:4200',
 	'http://localhost:4300',
 	'http://localhost:4000',
+	'http://localhost:4900',
 	'https://vura.com.ar',
 	'https://www.vura.com.ar',
 	'https://dashboard.vura.com.ar',

@@ -7,13 +7,15 @@ export const BentoBlockSchema = new Schema(
     link: { type: String, required: true },
     imageDesktop: {
       url: { type: String, required: true },
-      public_id: { type: String, required: true }
+      public_id: { type: String, required: false, default: '' }
     },
     imageMobile: {
       url: { type: String, required: false },
-      public_id: { type: String, required: false }
+      public_id: { type: String, required: false, default: '' }
     },
-    isActive: { type: Boolean, default: false }
+    gridSpan: { type: String, required: false, default: 'main' },
+    order: { type: Number, required: false, default: 0 },
+    isActive: { type: Boolean, default: true }
   },
-  { _id: false } // No necesitamos un _id para los subdocumentos de los bloques
+  { _id: true }
 );

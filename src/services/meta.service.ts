@@ -104,6 +104,55 @@ export class MetaService {
   }
 
   /**
+   * Helper to extract Meta UserData (IP, UserAgent, fbc, fbp, externalId) directly from Express Request
+   */
+  public static extractUserDataFromReq(req: any): ITrackEventInput['userData'] {
+    if (!req) return {};
+
+    // 1. IP extraction (Cloudflare Tunnel / reverse proxy friendly)
+    const cfIp = req.headers ? req.headers['cf-connecting-ip'] : undefined;
+    const forwarded = req.headers ? req.headers['x-forwarded-for'] : undefined;
+    let clientIp = (cfIp && typeof cfIp === 'string') ? cfIp.trim() : undefined;
+
+    if (!clientIp && forwarded) {
+      const ips = typeof forwarded === 'string' ? forwarded.split(',') : forwarded;
+      if (ips.length > 0 && ips[0].trim()) {
+        clientIp = ips[0].trim();
+      }
+    }
+    if (!clientIp) {
+      clientIp = req.ip || req.socket?.remoteAddress;
+    }
+
+    // 2. User Agent
+    const clientUserAgent = req.get ? req.get('user-agent') : req.headers?.['user-agent'];
+
+    // 3. fbc & fbp cookies / headers / query params
+    const cookies = req.cookies || {};
+    let fbc = cookies['_fbc'] || req.headers?.['x-fbc'] || (req.query ? req.query['fbc'] : undefined);
+    const fbp = cookies['_fbp'] || req.headers?.['x-fbp'] || (req.query ? req.query['fbp'] : undefined);
+
+    // If fbc isn't set, check if fbclid was in query or referer
+    if (!fbc && req.query && req.query['fbclid']) {
+      fbc = `fb.1.${Date.now()}.${req.query['fbclid']}`;
+    }
+
+    // 4. Auth User External ID & email if logged in
+    const user = req.user;
+    const externalId = user ? (user._id ? user._id.toString() : user.toString()) : undefined;
+    const email = user?.email;
+
+    return {
+      clientIp,
+      clientUserAgent,
+      fbc,
+      fbp,
+      externalId,
+      email,
+    };
+  }
+
+  /**
    * Extract User Data from Order document
    */
   public static extractUserDataFromOrder(
@@ -169,6 +218,21 @@ export class MetaService {
     if (!pixel) {
       console.warn('[MetaService] Warning: META_PIXEL_ID is missing. Meta event not sent.');
       return { success: false, error: 'META_PIXEL_ID missing' };
+    }
+
+    if (process.env.NODE_ENV !== 'production' && !this.testEventCode) {
+      console.log('[MetaService] Skipping CAPI event in development mode (NODE_ENV !== production).');
+      return { success: true, data: 'Skipped in development' };
+    }
+
+    // 🛡️ Skip sending events if event_source_url contains localhost or 127.0.0.1 (unless META_TEST_EVENT_CODE is set)
+    const isLocalhostEvent = events.some(e =>
+      e.event_source_url && (e.event_source_url.includes('localhost') || e.event_source_url.includes('127.0.0.1'))
+    );
+
+    if (isLocalhostEvent && !this.testEventCode) {
+      console.log('[MetaService] Skipping CAPI event because event_source_url points to localhost / 127.0.0.1.');
+      return { success: true, data: 'Skipped localhost event' };
     }
 
     const payload: IMetaEventPayload = {
@@ -322,7 +386,7 @@ export class MetaService {
     return this.trackEvent(
       {
         eventName: 'ViewContent',
-        eventId: params.eventId,
+        eventId: params.eventId || (params.productId ? `vc_${params.productId}` : undefined),
         eventSourceUrl: params.eventSourceUrl,
         userData: params.userData,
         customData: {

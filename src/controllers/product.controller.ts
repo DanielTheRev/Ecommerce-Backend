@@ -6,7 +6,9 @@ import { getDolar } from '@/services/dolar.service';
 import { FinanceService } from '@/services/finance.service';
 import { ProductService } from '@/services/product.service';
 import { NextFunction, Response } from 'express';
+import jwt from 'jsonwebtoken';
 import { MetaService } from '@/services/meta.service';
+import { AppError } from '@/errors/app.error';
 
 export class ProductController {
 	// GET /api/products/list - Productos con precios completos (admin) - paginado
@@ -126,26 +128,25 @@ export class ProductController {
 			if (product) {
 				const prod = product as any;
 				const priceVal = prod.price?.cashTransferPrice || prod.price?.listPrice || 0;
+				const referer = req.get('referer') || req.get('origin');
+				const sourceUrl = referer || `${req.protocol}://${req.get('host')}/products/${slug}`;
+				const userData = MetaService.extractUserDataFromReq(req);
+
 				MetaService.trackViewContent({
 					productId: prod._id ? prod._id.toString() : slug,
 					productName: prod.model || prod.brand || slug,
 					category: typeof prod.category === 'object' ? prod.category?.name : prod.category,
 					value: priceVal,
 					currency: 'ARS',
-					userData: {
-						clientIp: req.ip,
-						clientUserAgent: req.get('user-agent'),
-					},
-					eventSourceUrl: `${req.protocol}://${req.get('host')}/products/${slug}`,
+					userData,
+					eventSourceUrl: sourceUrl,
+					eventId: `vc_${prod._id ? prod._id.toString() : slug}`,
 				}).catch(err => console.error('[Meta CAPI] Error tracking ViewContent:', err));
 
 				MetaService.trackEvent({
 					eventName: 'PageView',
-					userData: {
-						clientIp: req.ip,
-						clientUserAgent: req.get('user-agent'),
-					},
-					eventSourceUrl: `${req.protocol}://${req.get('host')}/products/${slug}`,
+					userData,
+					eventSourceUrl: sourceUrl,
 				}).catch(err => console.error('[Meta CAPI] Error tracking PageView:', err));
 			}
 		} catch (error) {
@@ -427,6 +428,39 @@ export class ProductController {
 			});
 
 			res.status(200).json(result);
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// GET /api/products/public-export/:tenantSlug?token=... - Obtener productos activos mediante token temporal (5 min)
+	static async getPublicExportProducts(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const token = (req.query.token as string) || (req.headers.authorization ? req.headers.authorization.split(' ')[1] : undefined);
+			if (!token) {
+				throw new AppError('Token required', 'Token de acceso no proporcionado', 401);
+			}
+
+			let decoded: any;
+			try {
+				decoded = jwt.verify(token, process.env.JWT_SECRET!);
+			} catch (err: any) {
+				throw new AppError('Invalid or expired token', 'El enlace ha expirado o el token es inválido', 401);
+			}
+
+			if (decoded.purpose !== 'public_export') {
+				throw new AppError('Invalid token purpose', 'Token no válido para exportación', 403);
+			}
+
+			const products = await ProductService.getPublicActiveProducts(req.models!);
+
+			res.status(200).json({
+				success: true,
+				tenant: req.tenant?.slug,
+				count: products.length,
+				expiresAt: new Date(decoded.exp * 1000).toISOString(),
+				data: products,
+			});
 		} catch (error) {
 			next(error);
 		}

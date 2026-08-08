@@ -8,16 +8,31 @@ export interface IBentoBlock {
   imageDesktop: IHeroImage;
   imageMobile?: IHeroImage;
   isActive: boolean;
+  gridSpan?: string;
+  order?: number;
+}
+
+export interface IBentoItem {
+  _id?: string;
+  title: string;
+  subtitle?: string;
+  link: string;
+  imageDesktop: IHeroImage;
+  imageMobile?: IHeroImage;
+  gridSpan?: string;
+  order?: number;
+  isActive?: boolean;
 }
 
 export interface IBentoConfigDocument extends Document {
   sectionTitle: string;
   sectionSubtitle: string;
-  blocks: {
-    mainBlock: IBentoBlock;
-    topRightBlock: IBentoBlock;
-    bottomRightBlock: IBentoBlock;
-    footerBlock: IBentoBlock;
+  items?: IBentoItem[];
+  blocks?: {
+    mainBlock?: IBentoBlock;
+    topRightBlock?: IBentoBlock;
+    bottomRightBlock?: IBentoBlock;
+    footerBlock?: IBentoBlock;
   };
 }
 
@@ -25,22 +40,19 @@ export interface IBentoConfig {
   _id: ObjectId;
   sectionTitle: string;
   sectionSubtitle: string;
-  blocks: {
-    mainBlock: IBentoBlock;
-    topRightBlock: IBentoBlock;
-    bottomRightBlock: IBentoBlock;
-    footerBlock: IBentoBlock;
+  items?: IBentoItem[];
+  blocks?: {
+    mainBlock?: IBentoBlock;
+    topRightBlock?: IBentoBlock;
+    bottomRightBlock?: IBentoBlock;
+    footerBlock?: IBentoBlock;
   };
 }
 
 export interface IBentoConfigCreateDTO {
-  sectionTitle: string;
-  sectionSubtitle: string;
-  blocks: string | {
-    mainBlock: Omit<IBentoBlock, 'imageDesktop' | 'imageMobile'> & { imageDesktop?: string | IHeroImage, imageMobile?: string | IHeroImage };
-    topRightBlock: Omit<IBentoBlock, 'imageDesktop' | 'imageMobile'> & { imageDesktop?: string | IHeroImage, imageMobile?: string | IHeroImage };
-    bottomRightBlock: Omit<IBentoBlock, 'imageDesktop' | 'imageMobile'> & { imageDesktop?: string | IHeroImage, imageMobile?: string | IHeroImage };
-    footerBlock: Omit<IBentoBlock, 'imageDesktop' | 'imageMobile'> & { imageDesktop?: string | IHeroImage, imageMobile?: string | IHeroImage };
-  };
+  sectionTitle?: string;
+  sectionSubtitle?: string;
+  items?: string | any[];
+  blocks?: string | any;
   imageFiles?: { [fieldname: string]: Express.Multer.File[] };
 }

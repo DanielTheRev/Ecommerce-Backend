@@ -134,6 +134,11 @@ const BaseProductSchema = new Schema(
 			type: Schema.Types.ObjectId,
 			ref: 'Provider',
 			select: false
+		},
+		linkProductProvider: {
+			type: String,
+			trim: true,
+			select: false
 		}
 	},
 	{

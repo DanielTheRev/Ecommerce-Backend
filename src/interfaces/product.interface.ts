@@ -60,6 +60,7 @@ export interface IProduct {
 	lowStockThreshold?: number;
 	isActive: boolean;
 	isFeatured: boolean;
+	linkProductProvider?: string;
 	seo: IProductSeo;
 }
 
@@ -223,6 +224,9 @@ export interface IProductCreateDTO {
 	features: string | string[];
 	specifications: string | IProductSpec[];
 	variants: string | IClothingVariant[] | ITechVariant[];
+	linkProductProvider?: string;
+	isActive?: boolean | string;
+	isFeatured?: boolean | string;
 	tags?: string | string[];
 
 	// Tech-specific (opcionales a nivel DTO, Mongoose valida por discriminator)
