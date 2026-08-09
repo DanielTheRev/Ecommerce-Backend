@@ -69,13 +69,18 @@ class ConnectionManager {
 		return this.baseConnection.useDb(dbName, { useCache: true });
 	}
 
-	/**
-	 * Busca un tenant por slug en la master_db.
-	 */
 	async getTenantBySlug(slug: string): Promise<ITenant | null> {
 		const masterDb = this.getMasterDb();
 		const TenantModel = masterDb.model<ITenant>('Tenant');
-		return TenantModel.findOne({ slug, isActive: true }).lean() as Promise<ITenant | null>;
+		const cleanSlug = (slug || '').trim().toLowerCase();
+		return TenantModel.findOne({
+			$or: [
+				{ slug: cleanSlug },
+				{ slug: slug },
+				{ slug: { $regex: new RegExp(`^${cleanSlug}$`, 'i') } }
+			],
+			isActive: true
+		}).lean() as Promise<ITenant | null>;
 	}
 
 	/**

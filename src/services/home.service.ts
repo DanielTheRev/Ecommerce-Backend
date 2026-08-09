@@ -49,25 +49,36 @@ export class HomeService {
 			// 2. Get all products to map them
 			const products = await ProductService.getAllProducts(models);
 
-			// 3. Group products by brand for O(1) access
+			// 3. Group products by normalized brand for case-insensitive matching
 			const brandProductsMap = new Map<string, IProduct[]>();
 			products.forEach((product) => {
-				const brand = product.brand;
-				if (!brandProductsMap.has(brand)) {
-					brandProductsMap.set(brand, []);
+				const brandKey = (product.brand || '').trim().toLowerCase();
+				if (brandKey) {
+					if (!brandProductsMap.has(brandKey)) {
+						brandProductsMap.set(brandKey, []);
+					}
+					brandProductsMap.get(brandKey)!.push(product);
 				}
-				brandProductsMap.get(brand)!.push(product);
 			});
 
 			const brandSections: IBrandSection[] = [];
 
 			// 4. Iterate over active banners and build sections
 			for (const banner of activeBanners) {
-				const productsForBrand = brandProductsMap.get(banner.brandName) || [];
+				const bannerBrandKey = (banner.brandName || '').trim().toLowerCase();
+				let productsForBrand = brandProductsMap.get(bannerBrandKey) || [];
 
-				// Sort products by model as requested
-				const sortedProducts = productsForBrand.sort((a, b) =>
-					b.model!.localeCompare(a.model!)
+				if (productsForBrand.length === 0 && bannerBrandKey) {
+					// Fallback: Partial or case-insensitive match (e.g. "Xiaomi" matches "Xiaomi Smartphones")
+					productsForBrand = products.filter((p) => {
+						const pBrand = (p.brand || '').toLowerCase();
+						return pBrand.includes(bannerBrandKey) || bannerBrandKey.includes(pBrand);
+					});
+				}
+
+				// Sort products by model
+				const sortedProducts = [...productsForBrand].sort((a, b) =>
+					(b.model || '').localeCompare(a.model || '')
 				);
 
 				brandSections.push({

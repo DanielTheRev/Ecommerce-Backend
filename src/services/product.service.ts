@@ -74,7 +74,7 @@ export class ProductService {
 			const Model = this.getModel(models, productType);
 			const query: any = {};
 			if (isActive) {
-				query.isActive = true;
+				query.isActive = { $ne: false };
 			}
 			const products = (await Model.find(query).lean()) as unknown as IProduct[];
 			return products;
@@ -89,7 +89,7 @@ export class ProductService {
 		try {
 			const Model = this.getModel(models, productType);
 			const product = await Model.findById(id)
-				.select('+provider +finance')
+				.select('+provider +finance +linkProductProvider')
 				.populate('provider')
 				.lean() as unknown as IProduct;
 			return product;
@@ -101,7 +101,7 @@ export class ProductService {
 
 	static async getProductById(models: TenantModels, id: string): Promise<IProduct> {
 		try {
-			const product = (await models.Product.findById(id).lean()) as unknown as IProduct;
+			const product = (await models.Product.findById(id).select('+provider +finance +linkProductProvider').lean()) as unknown as IProduct;
 			if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
 			return product;
 		} catch (error) {
@@ -268,7 +268,7 @@ export class ProductService {
 	static async getAllProductSlugs(models: TenantModels): Promise<{ slug: string }[]> {
 		try {
 			// Explicitly exclude _id and the discriminator key (productType)
-			const products = await models.Product.find({ isActive: true }).select('slug -_id -productType').lean() as unknown as { slug: string }[];
+			const products = await models.Product.find({ isActive: { $ne: false } }).select('slug -_id -productType').lean() as unknown as { slug: string }[];
 			return products;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
@@ -279,7 +279,7 @@ export class ProductService {
 	static async getPaginatedProducts(models: TenantModels, page: number = 1, limit: number = 20, productType?: string, category?: string) {
 		try {
 			const Model = this.getModel(models, productType);
-			const query: any = { isActive: true };
+			const query: any = { isActive: { $ne: false } };
 			if (category) {
 				query.category = category;
 			}
@@ -358,7 +358,7 @@ export class ProductService {
 				page,
 				limit,
 				sort: { 'createdAt': -1 },
-				select: '+provider +finance',
+				select: '+provider +finance +linkProductProvider',
 				populate: {
 					path: 'provider',
 				}
@@ -372,7 +372,7 @@ export class ProductService {
 
 	static async getQualityAudit(models: TenantModels) {
 		try {
-			const products = (await models.Product.find({ isActive: true })
+			const products = (await models.Product.find({ isActive: { $ne: false } })
 				.select('_id brand model category slug productType seo sizeGuide images')
 				.lean()) as unknown as any[];
 
@@ -441,7 +441,7 @@ export class ProductService {
 
 	static async getProductBySlug(models: TenantModels, slug: string): Promise<IProduct> {
 		try {
-			const product = (await models.Product.findOne({ slug, isActive: true }).lean()) as unknown as IProduct;
+			const product = (await models.Product.findOne({ slug, isActive: { $ne: false } }).lean()) as unknown as IProduct;
 			if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
 			return product;
 		} catch (error) {
@@ -457,7 +457,7 @@ export class ProductService {
 	): Promise<IProduct[]> {
 		try {
 			// 1. Obtener producto origen
-			const sourceProduct = (await models.Product.findOne({ slug, isActive: true }).lean()) as unknown as IProduct;
+			const sourceProduct = (await models.Product.findOne({ slug, isActive: { $ne: false } }).lean()) as unknown as IProduct;
 			if (!sourceProduct) {
 				throw new AppError('Product not found', 'Producto no encontrado', 404);
 			}
@@ -487,7 +487,7 @@ export class ProductService {
 					if (matchedKey) {
 						targetCategories = DEFAULT_RECOMMENDATION_RULES[matchedKey];
 					} else {
-						const allCategories = (await models.Product.distinct('category', { isActive: true })) as string[];
+						const allCategories = (await models.Product.distinct('category', { isActive: { $ne: false } })) as string[];
 						targetCategories = allCategories.filter((c: string) => c !== sourceProduct.category);
 						targetCategories.push(sourceProduct.category);
 					}
@@ -516,7 +516,7 @@ export class ProductService {
 				const perCatLimit = Math.max(1, Math.ceil(remainingLimit / Math.max(1, remainingCategories)));
 
 				const query: any = {
-					isActive: true,
+					isActive: { $ne: false },
 					category: cat,
 					_id: { $nin: Array.from(selectedIdsSet).map(id => new Types.ObjectId(id)) },
 					...genderFilter
@@ -541,7 +541,7 @@ export class ProductService {
 			if (recommendations.length < limit) {
 				const remainingCount = limit - recommendations.length;
 				const fallbackQuery: any = {
-					isActive: true,
+					isActive: { $ne: false },
 					_id: { $nin: Array.from(selectedIdsSet).map(id => new Types.ObjectId(id)) },
 					productType: sourceProduct.productType,
 					...genderFilter
@@ -573,7 +573,7 @@ export class ProductService {
 		try {
 			const Model = this.getModel(models, productType);
 			const query = {
-				isActive: true,
+				isActive: { $ne: false },
 				$or: [
 					{ brand: { $regex: queryText, $options: 'i' } },
 					{ model: { $regex: queryText, $options: 'i' } }
@@ -631,16 +631,18 @@ export class ProductService {
 			const Model = this.getModel(models, productType);
 			const query: any = {};
 
-			query.isActive = true
+			query.isActive = { $ne: false };
 
 			if (filters.featured) {
 				query.isFeatured = filters.featured;
 			}
 
 			if (filters.q) {
+				const qRegex = new RegExp(filters.q.trim(), 'i');
 				query.$or = [
-					{ brand: { $regex: filters.q, $options: 'i' } },
-					{ model: { $regex: filters.q, $options: 'i' } }
+					{ brand: qRegex },
+					{ model: qRegex },
+					{ category: qRegex }
 				];
 			}
 
@@ -772,6 +774,7 @@ export class ProductService {
 			const baseData: any = {
 				slug,
 				provider: data.provider || '',
+				linkProductProvider: data.linkProductProvider || '',
 				brand: data.brand,
 				shortDescription: this.sanitizeDescription(data.shortDescription),
 				largeDescription: this.sanitizeDescription(data.largeDescription),
@@ -1046,6 +1049,7 @@ export class ProductService {
 			if (updateData.storage) updateData.storage = JSON.parse(updateData.storage as string);
 			if (updateData.features) updateData.features = JSON.parse(updateData.features as string);
 			if (updateData.provider) updateData.provider = updateData.provider;
+			if (updateData.linkProductProvider !== undefined) updateData.linkProductProvider = updateData.linkProductProvider;
 			if (updateData.variants) {
 				const parsedVariants = JSON.parse(updateData.variants as string);
 				let processedVariants = parsedVariants.map((v: any) => {
