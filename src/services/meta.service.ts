@@ -111,8 +111,13 @@ export class MetaService {
 
     // 1. IP extraction (Cloudflare Tunnel / reverse proxy friendly)
     const cfIp = req.headers ? req.headers['cf-connecting-ip'] : undefined;
+    const realIp = req.headers ? req.headers['x-real-ip'] : undefined;
     const forwarded = req.headers ? req.headers['x-forwarded-for'] : undefined;
     let clientIp = (cfIp && typeof cfIp === 'string') ? cfIp.trim() : undefined;
+
+    if (!clientIp && realIp && typeof realIp === 'string') {
+      clientIp = realIp.trim();
+    }
 
     if (!clientIp && forwarded) {
       const ips = typeof forwarded === 'string' ? forwarded.split(',') : forwarded;
@@ -122,6 +127,10 @@ export class MetaService {
     }
     if (!clientIp) {
       clientIp = req.ip || req.socket?.remoteAddress;
+    }
+
+    if (clientIp && clientIp.startsWith('::ffff:')) {
+      clientIp = clientIp.replace('::ffff:', '');
     }
 
     // 2. User Agent
@@ -137,10 +146,15 @@ export class MetaService {
       fbc = `fb.1.${Date.now()}.${req.query['fbclid']}`;
     }
 
-    // 4. Auth User External ID & email if logged in
+    // 4. Auth User External ID & email if logged in or passed via custom headers
     const user = req.user;
-    const externalId = user ? (user._id ? user._id.toString() : user.toString()) : undefined;
-    const email = user?.email;
+    const externalId = (req.headers && req.headers['x-external-id'] && typeof req.headers['x-external-id'] === 'string')
+      ? req.headers['x-external-id']
+      : (user ? (user._id ? user._id.toString() : user.toString()) : undefined);
+
+    const email = (req.headers && req.headers['x-user-email'] && typeof req.headers['x-user-email'] === 'string')
+      ? req.headers['x-user-email']
+      : user?.email;
 
     return {
       clientIp,
