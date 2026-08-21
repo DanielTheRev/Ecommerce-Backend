@@ -157,9 +157,9 @@ export class FinanceService {
 			priceTarget = baseMarkupPrice;
 		}
 
-		// Redondeos finales de cara al público
-		listPrice = Math.round(listPrice);
-		card_ticket1PayPrice = Math.round(card_ticket1PayPrice);
+		// Redondeos finales de cara al público (Charm Pricing .000, .500, .900)
+		listPrice = this.roundCharmPrice(listPrice);
+		card_ticket1PayPrice = this.roundCharmPrice(card_ticket1PayPrice);
 
 		// Distribución de cuotas sin interés basadas en el precio máster
 		const sixPaymentsAmount = Math.round(listPrice / 6);
@@ -287,7 +287,7 @@ export class FinanceService {
 			? Number(data.discountPercentageTransfer)
 			: Number(data.maxSafeDiscount);
 
-		const cashTransferPrice = Math.round(Number(data.listPrice) * (1 - discount / 100));
+		const cashTransferPrice = this.roundCharmPrice(Number(data.listPrice) * (1 - discount / 100));
 		const transferProfit = cashTransferPrice - Number(data.totalCostInARS);
 
 		return {
@@ -422,5 +422,29 @@ export class FinanceService {
 	static normalizePercentage(value: number): number {
 		if (!value) return 0;
 		return value >= 1 ? value / 100 : value;
+	}
+
+	/**
+	 * Redondea un precio de lista o transferencia a la terminación psicológica más atractiva (.000, .500 o .900)
+	 * Ejemplos:
+	 * 34082 -> 34000
+	 * 28384 -> 28500
+	 * 74698 -> 74900
+	 */
+	public static roundCharmPrice(price: number): number {
+		if (!price || price <= 0) return 0;
+		const rounded100 = Math.round(price / 100) * 100;
+		const remainder = rounded100 % 1000;
+
+		if (remainder >= 700) {
+			return Math.floor(rounded100 / 1000) * 1000 + 900;
+		}
+		if (remainder >= 300 && remainder <= 600) {
+			return Math.floor(rounded100 / 1000) * 1000 + 500;
+		}
+		if (remainder < 300 && rounded100 >= 1000) {
+			return Math.floor(rounded100 / 1000) * 1000;
+		}
+		return rounded100;
 	}
 }
