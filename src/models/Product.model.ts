@@ -18,6 +18,11 @@ const BaseProductSchema = new Schema(
 			trim: true,
 			maxlength: 200
 		},
+		subtitle: {
+			type: String,
+			trim: true,
+			maxlength: 200
+		},
 		category: {
 			type: String,
 			required: [true, 'La categoría es obligatoria'],
@@ -139,7 +144,18 @@ const BaseProductSchema = new Schema(
 			type: String,
 			trim: true,
 			select: false
-		}
+		},
+		recommendationsMode: {
+			type: String,
+			enum: ['auto', 'manual'],
+			default: 'auto'
+		},
+		manualRecommendations: [
+			{
+				type: Schema.Types.ObjectId,
+				ref: 'Product'
+			}
+		]
 	},
 	{
 		timestamps: true,

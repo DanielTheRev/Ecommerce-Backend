@@ -52,6 +52,7 @@ const defaultOrigins = [
 	'http://localhost:4300',
 	'http://localhost:4000',
 	'http://localhost:4900',
+	'http://localhost:5000',
 	'https://vura.com.ar',
 	'https://www.vura.com.ar',
 	'https://dashboard.vura.com.ar',

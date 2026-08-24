@@ -456,8 +456,11 @@ export class ProductService {
 		limitOverride?: number
 	): Promise<IProduct[]> {
 		try {
-			// 1. Obtener producto origen
-			const sourceProduct = (await models.Product.findOne({ slug, isActive: { $ne: false } }).lean()) as unknown as IProduct;
+			// 1. Obtener producto origen con provider y manualRecommendations
+			const sourceProduct = (await models.Product.findOne({ slug, isActive: { $ne: false } })
+				.select('+provider +manualRecommendations +recommendationsMode')
+				.lean()) as unknown as IProduct;
+
 			if (!sourceProduct) {
 				throw new AppError('Product not found', 'Producto no encontrado', 404);
 			}
@@ -466,9 +469,28 @@ export class ProductService {
 			const config = await EcommerceService.getConfig(models).catch(() => null);
 			const recommendationConfig = config?.recommendationConfig;
 			const limit = limitOverride || recommendationConfig?.limit || 8;
-			const customRules = recommendationConfig?.rules || {};
 
-			// 3. Determinar categorías objetivo
+			// 3. Caso MANUAL: Si el producto tiene configurado modo manual y posee recomendaciones
+			const rawSource = sourceProduct as any;
+			if (
+				rawSource.recommendationsMode === 'manual' &&
+				Array.isArray(rawSource.manualRecommendations) &&
+				rawSource.manualRecommendations.length > 0
+			) {
+				const manualProducts = (await models.Product.find({
+					_id: { $in: rawSource.manualRecommendations.map((id: any) => new Types.ObjectId(id)) },
+					isActive: { $ne: false }
+				})
+					.limit(limit)
+					.lean()) as unknown as IProduct[];
+
+				if (manualProducts.length > 0) {
+					return manualProducts;
+				}
+			}
+
+			// 4. Caso AUTOMÁTICO INTELIGENTE (Outfit & Combo Builder con Afinidad de Proveedor)
+			const customRules = recommendationConfig?.rules || {};
 			let targetCategories: string[] = [];
 
 			if (customRules[sourceProduct.category] && Array.isArray(customRules[sourceProduct.category]) && customRules[sourceProduct.category].length > 0) {
@@ -494,9 +516,8 @@ export class ProductService {
 				}
 			}
 
-			// 4. Construir filtro por Género (para indumentaria)
+			// 5. Filtro por Género (para indumentaria)
 			const genderFilter: any = {};
-			const rawSource = sourceProduct as any;
 			if (sourceProduct.productType === ProductType.CLOTHING && rawSource.gender) {
 				if (rawSource.gender !== ClothingGender.Unisex) {
 					genderFilter.gender = { $in: [rawSource.gender, ClothingGender.Unisex] };
@@ -506,8 +527,39 @@ export class ProductService {
 			const excludeIds = [sourceProduct._id.toString()];
 			const recommendations: IProduct[] = [];
 			const selectedIdsSet = new Set<string>(excludeIds);
+			const providerId = rawSource.provider ? (rawSource.provider._id ? rawSource.provider._id.toString() : rawSource.provider.toString()) : null;
 
-			// 5. Intercalar productos entre las categorías objetivo para máxima variedad
+			// 6. Slots de Categorías con prioridad de MISMO PROVEEDOR
+			// PASO A: Llenar cada slot de categoría buscando primero productos del mismo proveedor
+			for (const cat of targetCategories) {
+				if (recommendations.length >= limit) break;
+
+				if (providerId) {
+					const sameProviderQuery: any = {
+						isActive: { $ne: false },
+						category: cat,
+						provider: new Types.ObjectId(providerId),
+						_id: { $nin: Array.from(selectedIdsSet).map(id => new Types.ObjectId(id)) },
+						...genderFilter
+					};
+
+					const sameProviderProducts = (await models.Product.find(sameProviderQuery)
+						.sort({ isFeatured: -1, 'price.cashTransferPrice': -1 })
+						.limit(1)
+						.lean()) as unknown as IProduct[];
+
+					for (const p of sameProviderProducts) {
+						if (recommendations.length >= limit) break;
+						const pId = p._id.toString();
+						if (!selectedIdsSet.has(pId)) {
+							selectedIdsSet.add(pId);
+							recommendations.push(p);
+						}
+					}
+				}
+			}
+
+			// PASO B: Si faltan items para el límite, completar los slots con otros proveedores
 			for (const cat of targetCategories) {
 				if (recommendations.length >= limit) break;
 
@@ -515,19 +567,19 @@ export class ProductService {
 				const remainingCategories = targetCategories.length - targetCategories.indexOf(cat);
 				const perCatLimit = Math.max(1, Math.ceil(remainingLimit / Math.max(1, remainingCategories)));
 
-				const query: any = {
+				const otherProviderQuery: any = {
 					isActive: { $ne: false },
 					category: cat,
 					_id: { $nin: Array.from(selectedIdsSet).map(id => new Types.ObjectId(id)) },
 					...genderFilter
 				};
 
-				const catProducts = (await models.Product.find(query)
+				const otherProducts = (await models.Product.find(otherProviderQuery)
 					.sort({ isFeatured: -1, 'price.cashTransferPrice': -1 })
 					.limit(perCatLimit)
 					.lean()) as unknown as IProduct[];
 
-				for (const p of catProducts) {
+				for (const p of otherProducts) {
 					if (recommendations.length >= limit) break;
 					const pId = p._id.toString();
 					if (!selectedIdsSet.has(pId)) {
@@ -537,7 +589,7 @@ export class ProductService {
 				}
 			}
 
-			// 6. Fallback final si faltan productos para completar el limit
+			// PASO C: Fallback final en caso de que aún falten items
 			if (recommendations.length < limit) {
 				const remainingCount = limit - recommendations.length;
 				const fallbackQuery: any = {

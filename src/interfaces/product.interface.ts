@@ -47,6 +47,7 @@ export interface IProduct {
 	largeDescription: string;
 	brand: string;
 	model: string;
+	subtitle?: string;
 	price: IProductPrices;
 	finance: IProductFinance;
 	discount: number;
@@ -62,6 +63,8 @@ export interface IProduct {
 	isFeatured: boolean;
 	linkProductProvider?: string;
 	seo: IProductSeo;
+	recommendationsMode?: 'auto' | 'manual';
+	manualRecommendations?: string[] | IProduct[];
 }
 
 // ============ TYPE-SPECIFIC PRODUCTS ============
