@@ -8,10 +8,10 @@ import { AppError } from '@/errors/app.error';
 import { AuthRequest } from '@/middleware/auth';
 
 /* Function to send response with token */
-const sendTokenResponse = (statusCode: number, res: Response, user: ISecureUser) => {
+const sendTokenResponse = (statusCode: number, res: Response, user: ISecureUser, tenantSlug?: string) => {
 	if (!user) throw new AppError('SendTokenResponseError: Not found user', 'User not found', 401);
 
-	const token = AuthService.generateToken(user._id);
+	const token = AuthService.generateToken(user._id, tenantSlug, user.role);
 	const cookiePath = 'token_b';
 	return res
 		.status(statusCode)
@@ -19,7 +19,8 @@ const sendTokenResponse = (statusCode: number, res: Response, user: ISecureUser)
 		.json({
 			success: true,
 			message: statusCode === 201 ? 'Usuario registrado exitosamente' : 'Login exitoso',
-			user: user
+			user: user,
+			tenantSlug: tenantSlug
 		});
 };
 
@@ -34,14 +35,14 @@ export const loginUser = async (req: AuthRequest, res: Response, next: NextFunct
 			email,
 			password
 		});
-		return sendTokenResponse(201, res, user as unknown as ISecureUser);
+		return sendTokenResponse(201, res, user as unknown as ISecureUser, req.tenant?.slug);
 	} catch (error) {
 		return next(error);
 	}
 };
 
 export const LoginAdmin = async (req: AuthRequest, res: Response, next: NextFunction) => {
-	const data = req.body as { email: string; password: string };
+	const data = req.body as { email: string; password: string; tenantSlug?: string };
 	const { email, password } = data;
 
 	try {
@@ -49,7 +50,7 @@ export const LoginAdmin = async (req: AuthRequest, res: Response, next: NextFunc
 			email,
 			password
 		});
-		return sendTokenResponse(200, res, user as ISecureUser);
+		return sendTokenResponse(200, res, user as ISecureUser, req.tenant?.slug || data.tenantSlug);
 	} catch (error) {
 		return next(error);
 	}
@@ -58,11 +59,17 @@ export const LoginAdmin = async (req: AuthRequest, res: Response, next: NextFunc
 // @desc get user profile
 // @route GET /api/auth/getUser
 export const getUserProfile = async (req: AuthRequest, res: Response) => {
-	const { token_b: token } = req.cookies as { token_b: string };
+	let token: string | undefined;
+	const authHeader = req.headers.authorization;
+	if (authHeader && authHeader.startsWith('Bearer ')) {
+		token = authHeader.split(' ')[1];
+	} else if (req.cookies && req.cookies.token_b && req.cookies.token_b !== 'none') {
+		token = req.cookies.token_b;
+	}
 
 	if (!token) return res.status(401).json({ message: 'no token provided' });
 	try {
-		const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userID: string };
+		const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userID: string; tenantSlug?: string };
 		const user = await UserService.getUserByID(req.models!, decoded.userID);
 		if (!user) return res.status(404).json({ message: 'User not found' });
 		return res.json(user);
@@ -77,7 +84,12 @@ export const getUserProfile = async (req: AuthRequest, res: Response) => {
 // @access  Private
 export const logout = async (req: AuthRequest, res: Response) => {
 	try {
-		res.cookie('token_b', 'none', AuthService.cookieOptions);
+		res.cookie('token_b', 'none', {
+			...AuthService.cookieOptions,
+			expires: new Date(0),
+			maxAge: 0
+		});
+		res.clearCookie('token_b', AuthService.cookieOptions);
 
 		return res.status(200).json({
 			success: true,

@@ -56,7 +56,8 @@ const defaultOrigins = [
 	'https://vura.com.ar',
 	'https://www.vura.com.ar',
 	'https://dashboard.vura.com.ar',
-	'https://admin.vura.com.ar'
+	'https://admin.vura.com.ar',
+	"https://control-panel-50s.pages.dev/"
 ];
 
 // Cache de origins por tenant para no consultar la DB en cada request
@@ -93,8 +94,13 @@ function isOriginAllowed(origin: string | undefined): boolean {
 	const allowed = getAllAllowedOrigins();
 	if (allowed.includes(origin)) return true;
 
-	// Permitir automáticamente cualquier variante o subdominio de vura.com.ar
-	if (origin === 'https://vura.com.ar' || origin === 'https://www.vura.com.ar' || origin.endsWith('.vura.com.ar')) {
+	// Permitir automáticamente cualquier variante o subdominio de vura.com.ar o Cloudflare Pages
+	if (
+		origin === 'https://vura.com.ar' ||
+		origin === 'https://www.vura.com.ar' ||
+		origin.endsWith('.vura.com.ar') ||
+		origin.endsWith('.pages.dev')
+	) {
 		return true;
 	}
 
@@ -134,30 +140,31 @@ app.get('/health', (req: Request, res: Response) => {
 
 import cashRegisterRoutes from './routes/cashRegisterRoutes.routes';
 
-// ============================
-// RUTAS MULTI-TENANT
-// Todas las rutas de negocio pasan primero por resolveTenant
-// que identifica el tenant y prepara req.models
-// ============================
-app.use('/api/products', resolveTenant, productRoutes);
-app.use('/api/auth', resolveTenant, authRoutes);
-app.use('/api/orders', resolveTenant, orderRoutes);
-app.use('/api/shipping', resolveTenant, shippingRoutes);
-app.use('/api/home', resolveTenant, homeRoutes);
-app.use('/api/payment-methods', resolveTenant, paymentMethodRoutes);
-app.use('/api/hero', resolveTenant, heroRoutes);
-app.use('/api/bento', resolveTenant, bentoRoutes);
-app.use('/api/config', resolveTenant, ecommerceConfigRoutes);
-app.use('/api/cash-register', resolveTenant, cashRegisterRoutes);
-app.use('/api/shop-the-look', resolveTenant, shopTheLookRoutes);
-app.use('/api/provider', resolveTenant, providerRoutes);
-app.use('/api/addresses', resolveTenant, addressRoutes);
-app.use('/api/favorites', resolveTenant, favoritesRoutes);
-app.use('/api/users', resolveTenant, userRoutes);
-app.use('/api/cart', resolveTenant, cartRoutes);
-app.use('/api/notifications', resolveTenant, notificationRoutes);
-app.use('/api/coupons', resolveTenant, couponRoutes);
-app.use('/api/newsletter', resolveTenant, newsletterRoutes);
+const registerRoutes = (prefix: string) => {
+	app.use(`${prefix}/products`, resolveTenant, productRoutes);
+	app.use(`${prefix}/auth`, resolveTenant, authRoutes);
+	app.use(`${prefix}/orders`, resolveTenant, orderRoutes);
+	app.use(`${prefix}/shipping`, resolveTenant, shippingRoutes);
+	app.use(`${prefix}/home`, resolveTenant, homeRoutes);
+	app.use(`${prefix}/payment-methods`, resolveTenant, paymentMethodRoutes);
+	app.use(`${prefix}/hero`, resolveTenant, heroRoutes);
+	app.use(`${prefix}/bento`, resolveTenant, bentoRoutes);
+	app.use(`${prefix}/config`, resolveTenant, ecommerceConfigRoutes);
+	app.use(`${prefix}/cash-register`, resolveTenant, cashRegisterRoutes);
+	app.use(`${prefix}/shop-the-look`, resolveTenant, shopTheLookRoutes);
+	app.use(`${prefix}/provider`, resolveTenant, providerRoutes);
+	app.use(`${prefix}/addresses`, resolveTenant, addressRoutes);
+	app.use(`${prefix}/favorites`, resolveTenant, favoritesRoutes);
+	app.use(`${prefix}/users`, resolveTenant, userRoutes);
+	app.use(`${prefix}/cart`, resolveTenant, cartRoutes);
+	app.use(`${prefix}/notifications`, resolveTenant, notificationRoutes);
+	app.use(`${prefix}/coupons`, resolveTenant, couponRoutes);
+	app.use(`${prefix}/newsletter`, resolveTenant, newsletterRoutes);
+};
+
+// Soportar tanto /api/... como /... (compatible con api.vura.com.ar)
+registerRoutes('/api');
+registerRoutes('');
 
 // Error handler middleware
 app.use(errorMiddleware);

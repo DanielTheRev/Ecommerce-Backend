@@ -14,9 +14,9 @@ export class AuthService {
 	private static readonly CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 	static readonly cookieOptions = {
 		expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 días
-		httpOnly: true,
-		secure: true,
-		sameSite: process.env.NODE_ENV === 'production' ? ('strict' as const) : ('none' as const)
+		httpOnly: true, // 🔒 Inaccesible por JavaScript (protección contra XSS)
+		secure: true,   // 🔒 Solo se transmite por HTTPS
+		sameSite: 'none' as const // 🔒 Compatible con subdominios y Cloudflare Pages
 	};
 
 	private static getGoogleClient() {
@@ -46,8 +46,12 @@ export class AuthService {
 		}
 	}
 
-	static generateToken(userID: string): string {
-		return jwt.sign({ userID }, process.env.JWT_SECRET!, {
+	static generateToken(userID: string, tenantSlug?: string, role?: string): string {
+		const payload: Record<string, any> = { userID };
+		if (tenantSlug) payload.tenantSlug = tenantSlug;
+		if (role) payload.role = role;
+
+		return jwt.sign(payload, process.env.JWT_SECRET!, {
 			expiresIn: '7d'
 		});
 	}

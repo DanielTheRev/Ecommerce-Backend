@@ -17,6 +17,8 @@ export interface Auth0MercadoPago extends TenantRequest {
 
 interface JwtPayload {
 	userID: string;
+	tenantSlug?: string;
+	role?: string;
 	iat: number;
 	exp: number;
 }
@@ -32,9 +34,16 @@ export const protect = async (
 	next: NextFunction
 ): Promise<Response | void> => {
 	try {
-		let token: string | undefined = req.cookies.token_b;
+		let token: string | undefined;
+		const authHeader = req.headers.authorization;
+		if (authHeader && authHeader.startsWith('Bearer ')) {
+			token = authHeader.split(' ')[1];
+		} else if (req.cookies && req.cookies.token_b && req.cookies.token_b !== 'none') {
+			token = req.cookies.token_b;
+		}
+
 		// Verificar que existe el token
-		if (!token) throw new AppError('Token not found', 'No se proporciono token', 401);
+		if (!token) throw new AppError('Token not found', 'No se proporcionó token de autenticación', 401);
 		// Verificar token
 		const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
 
@@ -53,7 +62,7 @@ export const protect = async (
 	} catch (error) {
 		if (error instanceof AppError) throw error;
 		console.error('Error en middleware de autenticación:', error);
-		throw new AppError('Failed to login user', 'Error al intentar iniciar sesión', 500);
+		throw new AppError('Failed to authenticate', 'Sesión inválida o expirada', 401);
 	}
 };
 

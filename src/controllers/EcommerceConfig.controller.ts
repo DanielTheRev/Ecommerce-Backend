@@ -26,38 +26,23 @@ export class EcommerceConfigController {
 
 	static handleMercadoPagoCallback = async (req: Auth0MercadoPago, res: Response) => {
 		const { code, state } = req.query;
-		console.log('MercadoPago Callback');
-		console.log(code);
-		console.log(state);
+		console.log('MercadoPago Callback:', { code, state });
+
+		const panelBase = process.env.PANEL_URL || 'https://control-panel-50s.pages.dev';
 
 		try {
-			// Validamos a nivel HTTP que vengan los datos básicos
 			if (!code || typeof code !== 'string') {
 				throw new Error('Código de autorización no proporcionado');
 			}
 
-			// Delegamos toda la lógica pesada al servicio
-			// req.models existe seguro porque pasamos por el middleware resolveTenant
 			await EcommerceService.handleMercadoPagoOAuth(req.models!, code);
 
-			// Si todo sale bien, redirigimos al éxito
-			// const frontendUrl = process.env.NODE_ENV === 'production'
-			// 	? `https://dashboard.${state}.com.ar/settings?mp_success=true`
-			// 	: `http://localhost:4200/settings?mp_success=true`;
-			const frontendURL = 'https://dashboard.vura.com.ar/home/settings?mp_success=true';
-
+			const frontendURL = `${panelBase}/home/settings?mp_success=true`;
 			return res.redirect(frontendURL);
 
 		} catch (error) {
 			console.error('Error en el controlador al vincular MP:', error);
-
-			// Si el servicio falla y tira un error, el controlador lo ataja acá 
-			// y redirige con la flag de error para que el frontend lo maneje
-			// const errorUrl = process.env.NODE_ENV === 'production'
-			// 	? `https://dashboard.${state}.com.ar/home/settings?mp_error=true`
-			// 	: `http://localhost:4200/home/settings?mp_error=true`;
-			const errorUrl = 'https://dashboard.vura.com.ar/home/settings?mp_error=true';
-
+			const errorUrl = `${panelBase}/home/settings?mp_error=true`;
 			return res.redirect(errorUrl);
 		}
 	};
