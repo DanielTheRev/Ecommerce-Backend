@@ -1,32 +1,30 @@
 import { Schema } from 'mongoose';
 
-const TechVariantColorSchema = new Schema({
+const VariantColorSchema = new Schema({
 	name: { type: String, required: true },
 	hex: { type: String, required: true }
 }, { _id: false });
 
-const TechVariantAttributeSchema = new Schema({
-	key: { type: String, required: true },
-	value: { type: String, required: true }
-}, { _id: false });
-
-export const TechVariantSchema = new Schema({
+export const GeneralVariantSchema = new Schema({
 	sku: {
 		type: String,
 		required: true,
 		trim: true,
 		uppercase: true
 	},
-	// Atributos flexibles opcionales: RAM, almacenamiento, conectividad, etc.
-	// Ej: [{ key: "RAM", value: "16GB" }, { key: "Almacenamiento", value: "512GB" }]
-	attributes: {
-		type: [TechVariantAttributeSchema],
-		required: false,
-		default: []
-	},
 	color: {
-		type: TechVariantColorSchema,
+		type: VariantColorSchema,
 		required: false
+	},
+	size: {
+		type: String,
+		required: false,
+		trim: true
+	},
+	volume: {
+		type: String,
+		required: false,
+		trim: true
 	},
 	stock: {
 		type: Number,
@@ -46,6 +44,11 @@ export const TechVariantSchema = new Schema({
 	imageReference: {
 		url: { type: String, required: false },
 		public_id: { type: String, required: false }
+	},
+	imageIndex: {
+		type: Number,
+		required: false,
+		default: 0
 	},
 	barcode: {
 		type: String,

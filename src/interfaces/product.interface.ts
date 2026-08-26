@@ -7,7 +7,9 @@ import { PricingMethod } from './ecommerce.interface';
 
 export enum ProductType {
 	TECH = 'TechProduct',
-	CLOTHING = 'ClothingProduct'
+	CLOTHING = 'ClothingProduct',
+	BEAUTY = 'BeautyProduct',
+	GENERAL = 'GeneralProduct'
 }
 
 export enum ClothingGender {
@@ -91,6 +93,28 @@ export interface IClothingProduct extends IProduct {
 	careInstructions?: string[];
 	season?: string;
 	variants: IClothingVariant[];
+}
+
+export interface IBeautyProduct extends IProduct {
+	productType: ProductType.BEAUTY;
+	volume?: string;
+	concentration?: string;
+	fragranceFamily?: string;
+	gender?: string;
+	scentNotes?: {
+		top?: string;
+		heart?: string;
+		base?: string;
+	};
+	applicationArea?: string;
+	variants: IVariant[];
+}
+
+export interface IGeneralProduct extends IProduct {
+	productType: ProductType.GENERAL;
+	unit?: string;
+	weight?: string;
+	variants: IVariant[];
 }
 
 // ============ SIZE GUIDE ============
@@ -190,6 +214,7 @@ export interface IProductPrices {
 	card_ticket1PayPrice: number; // 🚀 Agregado: Precio para Débito / Crédito 1 pago
 	cashTransferPrice: number; // El precio final con descuento por transferencia
 	discountPercentageTransfer: number;
+	updatedAt?: Date;
 	installments: {
 		threePaymentsAmount: number;
 		sixPaymentsAmount: number;
@@ -226,7 +251,7 @@ export interface IProductCreateDTO {
 	category: string;
 	features: string | string[];
 	specifications: string | IProductSpec[];
-	variants: string | IClothingVariant[] | ITechVariant[];
+	variants: string | IClothingVariant[] | ITechVariant[] | IVariant[];
 	linkProductProvider?: string;
 	isActive?: boolean | string;
 	isFeatured?: boolean | string;
@@ -247,8 +272,20 @@ export interface IProductCreateDTO {
 	sizeType?: string;
 	sizeGuide?: string | ISizeGuide;
 	careInstructions?: string | string[];
-	seo?: Partial<IProductSeo>;
 	season?: string;
+
+	// Beauty-specific (opcionales a nivel DTO)
+	volume?: string;
+	concentration?: string;
+	fragranceFamily?: string;
+	scentNotes?: string | { top?: string; heart?: string; base?: string };
+	applicationArea?: string;
+
+	// General-specific (opcionales a nivel DTO)
+	unit?: string;
+	weight?: string;
+
+	seo?: Partial<IProductSeo>;
 }
 
 export interface IProductUpdateDTO extends Partial<IProductCreateDTO> {

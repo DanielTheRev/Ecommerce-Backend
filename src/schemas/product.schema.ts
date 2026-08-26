@@ -58,16 +58,16 @@ const ClothingVariantZodSchema = z.object({
 		public_id: z.string()
 	}).optional(),
 	barcode: z.string().optional(),
-	imageIndex: z.number().int().min(0).optional().nullable(),
+	imageIndex: z.coerce.number().int().min(0).optional().nullable(),
 });
 
-// Tech Variant Schema (Electromix) — attributes requerido, sin size
+// Tech Variant Schema (Electromix) — attributes opcional, sin size
 const TechVariantZodSchema = z.object({
 	sku: z.string().optional(),
 	attributes: z.array(z.object({
 		key: z.string().min(1),
 		value: z.string().min(1)
-	})).min(1, 'Al menos un atributo es requerido por variante tech'),
+	})).default([]),
 	color: VariantColorSchema.optional(),
 	stock: z.number().int().min(0).default(0),
 	reservedStock: z.number().int().min(0).default(0),
@@ -77,7 +77,25 @@ const TechVariantZodSchema = z.object({
 		public_id: z.string()
 	}).optional(),
 	barcode: z.string().optional(),
-	imageIndex: z.number().int().min(0).optional().nullable(),
+	imageIndex: z.coerce.number().int().min(0).optional().nullable(),
+});
+
+// General / Beauty Variant Schema
+const GeneralVariantZodSchema = z.object({
+	_id: z.string().optional(),
+	sku: z.string().optional(),
+	size: z.string().optional(),
+	volume: z.string().optional(),
+	color: VariantColorSchema.optional(),
+	stock: z.coerce.number().int().min(0).default(0),
+	reservedStock: z.coerce.number().int().min(0).default(0),
+	isActive: z.coerce.boolean().default(true),
+	imageReference: z.object({
+		url: z.string(),
+		public_id: z.string()
+	}).optional(),
+	barcode: z.string().optional(),
+	imageIndex: z.coerce.number().int().min(0).optional().nullable(),
 });
 
 // Create Product Schema
@@ -103,7 +121,7 @@ export const CreateProductSchema = z.object({
 		features: jsonString.pipe(z.array(z.string())),
 		specifications: jsonString.pipe(z.array(SpecSchema)),
 		variants: jsonString.pipe(
-			z.array(z.union([ClothingVariantZodSchema, TechVariantZodSchema]))
+			z.array(z.union([ClothingVariantZodSchema, TechVariantZodSchema, GeneralVariantZodSchema]))
 		).default([]),
 		tags: jsonString.pipe(z.array(z.string())).optional(),
 
@@ -115,7 +133,7 @@ export const CreateProductSchema = z.object({
 		os: z.string().optional(),
 
 		// Clothing-specific (opcionales)
-		gender: z.enum(genderValues).optional(),
+		gender: z.string().optional(),
 		fit: z.string().optional(),
 		material: z.string().optional(),
 		sizeType: z.enum(sizeTypeValues).optional(),
@@ -125,6 +143,25 @@ export const CreateProductSchema = z.object({
 		}))).optional(),
 		sizeGuide: jsonString.pipe(SizeGuideZodSchema).optional(),
 		careInstructions: jsonString.pipe(z.array(z.string())).optional(),
+
+		// Beauty-specific (opcionales)
+		volume: z.string().optional(),
+		concentration: z.string().optional(),
+		fragranceFamily: z.string().optional(),
+		scentNotes: jsonString.pipe(z.object({
+			top: z.string().optional(),
+			heart: z.string().optional(),
+			base: z.string().optional()
+		})).optional().or(z.object({
+			top: z.string().optional(),
+			heart: z.string().optional(),
+			base: z.string().optional()
+		})).optional(),
+		applicationArea: z.string().optional(),
+
+		// General-specific (opcionales)
+		unit: z.string().optional(),
+		weight: z.string().optional(),
 
 		// SEO (og_image llega como archivo separado, no se valida aquí)
 		seo: jsonString.pipe(z.object({
@@ -149,15 +186,6 @@ export const CreateProductSchema = z.object({
 					code: 'custom',
 					path: ['variants', i, 'size'],
 					message: 'El talle (size) es requerido para productos de indumentaria'
-				});
-			});
-		}
-		if (data.productType === 'TechProduct' && Array.isArray(data.variants)) {
-			data.variants.forEach((v: any, i: number) => {
-				if (!v.attributes?.length) ctx.addIssue({
-					code: 'custom',
-					path: ['variants', i, 'attributes'],
-					message: 'Los atributos son requeridos para productos tech'
 				});
 			});
 		}
@@ -188,7 +216,7 @@ export const UpdateProductSchema = z.object({
 		features: jsonString.pipe(z.array(z.string())).optional(),
 		specifications: jsonString.pipe(z.array(SpecSchema)).optional(),
 		variants: jsonString.pipe(
-			z.array(z.union([ClothingVariantZodSchema, TechVariantZodSchema]))
+			z.array(z.union([ClothingVariantZodSchema, TechVariantZodSchema, GeneralVariantZodSchema]))
 		).optional(),
 		tags: jsonString.pipe(z.array(z.string())).optional(),
 
@@ -200,7 +228,7 @@ export const UpdateProductSchema = z.object({
 		os: z.string().optional(),
 
 		// Clothing-specific
-		gender: z.enum(genderValues).optional(),
+		gender: z.string().optional(),
 		fit: z.string().optional(),
 		material: z.string().optional(),
 		sizeType: z.enum(sizeTypeValues).optional(),
@@ -211,6 +239,25 @@ export const UpdateProductSchema = z.object({
 		sizeGuide: jsonString.pipe(SizeGuideZodSchema.nullable()).optional(),
 		careInstructions: jsonString.pipe(z.array(z.string())).optional(),
 		season: z.string().optional(),
+
+		// Beauty-specific
+		volume: z.string().optional(),
+		concentration: z.string().optional(),
+		fragranceFamily: z.string().optional(),
+		scentNotes: jsonString.pipe(z.object({
+			top: z.string().optional(),
+			heart: z.string().optional(),
+			base: z.string().optional()
+		})).optional().or(z.object({
+			top: z.string().optional(),
+			heart: z.string().optional(),
+			base: z.string().optional()
+		})).optional(),
+		applicationArea: z.string().optional(),
+
+		// General-specific
+		unit: z.string().optional(),
+		weight: z.string().optional(),
 
 		// SEO (og_image llega como archivo separado, no se valida aquí)
 		seo: jsonString.pipe(z.object({
@@ -244,15 +291,6 @@ export const UpdateProductSchema = z.object({
 					code: 'custom',
 					path: ['variants', i, 'size'],
 					message: 'El talle (size) es requerido para productos de indumentaria'
-				});
-			});
-		}
-		if (data.productType === 'TechProduct' && Array.isArray(data.variants)) {
-			data.variants.forEach((v: any, i: number) => {
-				if (!v.attributes?.length) ctx.addIssue({
-					code: 'custom',
-					path: ['variants', i, 'attributes'],
-					message: 'Los atributos son requeridos para productos tech'
 				});
 			});
 		}

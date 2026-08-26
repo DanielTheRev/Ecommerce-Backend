@@ -12,14 +12,16 @@ export class CouponController {
 		const models = req.models;
 		if (!models) throw new AppError('Tenant Error', 'Modelos no disponibles', 500);
 
-		const { code, subtotal, email } = req.body;
+		const { code, subtotal, email, paymentMethod, items } = req.body;
 		const userId = req.user?._id ? String(req.user._id) : undefined;
 
 		const result = await CouponService.validateCoupon(models, {
 			code,
 			subtotal: Number(subtotal) || 0,
 			email,
-			userId
+			userId,
+			paymentMethod,
+			items
 		});
 
 		res.status(200).json(result);

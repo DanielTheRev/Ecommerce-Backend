@@ -270,7 +270,7 @@ export class OrderService {
 				};
 			});
 
-			const { venta: dolarVenta } = await getDolar();
+			const { venta: dolarVenta } = await getDolar(config.dollarQuoteType || 'oficial', config.customDollarRate || 0);
 			const isARS = config.costCurrency === 'ARS';
 
 			// Aplicar descuento por cupón o primera compra automática
@@ -713,7 +713,7 @@ export class OrderService {
 				const earningsVal = Math.max(0, realEarnings);
 				order.finance.earnings = earningsVal;
 
-				const dolarVenta = order.finance.exchangeRateSnapshot || (await getDolar()).venta;
+				const dolarVenta = order.finance.exchangeRateSnapshot || (await getDolar(config.dollarQuoteType || 'oficial', config.customDollarRate || 0)).venta;
 				const isARS = config.costCurrency === 'ARS';
 				order.finance.earningsOppositeCurrency = isARS ? earningsVal / dolarVenta : earningsVal * dolarVenta;
 			}
@@ -732,7 +732,7 @@ export class OrderService {
 			// Trigger emails & Meta CAPI Purchase
 			if (order.paymentInfo.status === PaymentStatus.APPROVED && oldPaymentStatus !== PaymentStatus.APPROVED) {
 				await ResendService.sendOrderConfirmationEmail(order.toObject() as unknown as IOrder, models);
-				MetaService.trackPurchaseFromOrder(order.toObject())
+				MetaService.trackPurchaseFromOrder(order.toObject(), undefined, undefined, undefined, models)
 					.catch(err => console.error('[Meta CAPI] Error enviando Purchase event:', err));
 			} else if (order.paymentInfo.status === PaymentStatus.PENDING && isFirstPaymentUpdate) {
 				await ResendService.sendPaymentInProcessEmail(order.toObject() as unknown as IOrder, models);
@@ -1535,7 +1535,7 @@ export class OrderService {
 			// 5. Descontar stock
 			await ProductService.reduceVariantStock(models, variantItems);
 
-			const { venta: dolarVenta } = await getDolar();
+			const { venta: dolarVenta } = await getDolar(config.dollarQuoteType || 'oficial', config.customDollarRate || 0);
 			const totalOppositeCurrency = isARS ? totalCost / dolarVenta : totalCost * dolarVenta;
 			const earningsOppositeCurrency = isARS ? totalEarnings / dolarVenta : totalEarnings * dolarVenta;
 

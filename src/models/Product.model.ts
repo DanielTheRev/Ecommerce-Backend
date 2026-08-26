@@ -43,6 +43,7 @@ const BaseProductSchema = new Schema(
 			card_ticket1PayPrice: { type: Number, required: true, default: 0 },
 			cashTransferPrice: { type: Number, required: true, default: 0 },
 			discountPercentageTransfer: { type: Number, required: true, default: 0 },
+			updatedAt: { type: Date, default: Date.now },
 			installments: {
 				threePaymentsAmount: { type: Number, required: true, default: 0 },
 				sixPaymentsAmount: { type: Number, required: true, default: 0 },

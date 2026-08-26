@@ -2,8 +2,10 @@ import { Document } from 'mongoose';
 
 // Shipping types Enum
 export enum ShippingType {
-	PICKUP = 'Punto de encuentro',
-	HOME_DELIVERY = 'Envío a domicilio'
+	HOME_DELIVERY = 'Envío a domicilio',
+	BRANCH_PICKUP = 'Retiro en sucursal',
+	STORE_PICKUP = 'Retiro en local',
+	PICKUP = 'Punto de encuentro'
 }
 
 // IPickupPoint Interface
@@ -23,6 +25,9 @@ export interface IShippingOption {
 	type: ShippingType;
 	name: string;
 	cost: number;
+	carrier?: string;
+	estimatedDelivery?: string;
+	instructions?: string;
 	pickupPoints?: IPickupPoint[];
 	isActive: boolean;
 	isDefaultForCash: boolean;
@@ -38,6 +43,9 @@ export interface IShippingOptionDoc extends Document {
 	type: ShippingType;
 	name: string;
 	cost: number;
+	carrier?: string;
+	estimatedDelivery?: string;
+	instructions?: string;
 	pickupPoints?: IPickupPoint[];
 	isActive: boolean;
 	isDefaultForCash: boolean;

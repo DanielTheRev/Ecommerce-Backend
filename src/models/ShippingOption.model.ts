@@ -27,6 +27,20 @@ const shippingOptionSchema = new Schema<IShippingOption>(
 			type: Number,
 			required: true
 		},
+		carrier: {
+			type: String,
+			required: false,
+			trim: true
+		},
+		estimatedDelivery: {
+			type: String,
+			required: false,
+			trim: true
+		},
+		instructions: {
+			type: String,
+			required: false
+		},
 		pickupPoints: [pickupPointSchema],
 		isActive: {
 			type: Boolean,

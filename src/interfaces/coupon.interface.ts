@@ -1,12 +1,21 @@
 import { Document } from 'mongoose';
 
 export type CouponDiscountType = 'percentage' | 'fixed';
+export type CouponPaymentMethodRestriction = 'ALL' | 'TRANSFER' | 'CARD';
 
 export interface ICouponUsedBy {
 	email?: string;
 	userId?: string;
 	orderId?: string;
 	usedAt: Date;
+}
+
+export interface ICouponCartItem {
+	productId: string;
+	category?: string;
+	productType?: string;
+	price: number;
+	quantity: number;
 }
 
 export interface ICoupon {
@@ -18,6 +27,10 @@ export interface ICoupon {
 	usedCount: number; // Number of times used
 	usedBy: ICouponUsedBy[];
 	isFirstPurchaseOnly?: boolean; // True if coupon is strictly for 1st-time buyers
+	paymentMethodRestriction?: CouponPaymentMethodRestriction; // 'ALL' | 'TRANSFER' | 'CARD'
+	applicableProductTypes?: string[]; // 'TechProduct' | 'ClothingProduct' | 'BeautyProduct' | 'GeneralProduct'
+	applicableCategories?: string[]; // Category names or IDs
+	applicableProducts?: string[]; // Product IDs
 	assignedUserEmail?: string; // Optional: Link coupon exclusively to specific buyer email
 	assignedUserId?: string; // Optional: Link coupon exclusively to specific userId
 	expiresAt?: Date; // Optional expiration date
@@ -33,6 +46,8 @@ export interface ValidateCouponDTO {
 	subtotal: number;
 	email?: string;
 	userId?: string;
+	paymentMethod?: 'TRANSFER' | 'CARD' | 'MERCADOPAGO' | string;
+	items?: ICouponCartItem[];
 }
 
 export interface ValidateCouponResult {

@@ -16,6 +16,7 @@ router.get('/public', EcommerceConfigController.getPublicConfig);
 // Todas las rutas de configuración requieren autenticación de administrador
 router.use(protect, adminOnly);
 
+router.get('/dolares', EcommerceConfigController.getDolares);
 router.get('/mercadopago-methods', EcommerceConfigController.getMercadoPagoMethods);
 router.get('/recommendations', EcommerceConfigController.getRecommendationsConfig);
 router.put('/recommendations', EcommerceConfigController.updateRecommendationsConfig);

@@ -36,6 +36,41 @@ const EcommerceSchema = new Schema(
 			absorbInstallments: {
 				type: Boolean,
 				default: true
+			},
+			maxInstallmentsToAbsorb: {
+				type: Number,
+				default: 3
+			},
+			transferDiscountPercentage: {
+				type: Number,
+				default: 0
+			},
+			cashDiscountPercentage: {
+				type: Number,
+				default: 0
+			}
+		},
+		// Integraciones de Marketing, Analytics, Auth y Emails por Tenant
+		integrations: {
+			metaPixel: {
+				active: { type: Boolean, default: false },
+				pixelId: { type: String, default: '' },
+				accessToken: { type: String, default: '', select: false },
+				testEventCode: { type: String, default: '' }
+			},
+			googleAnalytics: {
+				active: { type: Boolean, default: false },
+				measurementId: { type: String, default: '' }
+			},
+			googleAuth: {
+				active: { type: Boolean, default: true },
+				clientId: { type: String, default: '' }
+			},
+			resend: {
+				active: { type: Boolean, default: false },
+				apiKey: { type: String, default: '', select: false },
+				fromEmail: { type: String, default: '' },
+				fromName: { type: String, default: '' }
 			}
 		},
 		firstPurchaseDiscount: {
@@ -46,6 +81,15 @@ const EcommerceSchema = new Schema(
 			type: String,
 			enum: ['USD', 'ARS'],
 			default: 'USD'
+		},
+		dollarQuoteType: {
+			type: String,
+			enum: ['oficial', 'blue', 'bolsa', 'ccl', 'tarjeta', 'mayorista', 'cripto', 'custom'],
+			default: 'oficial'
+		},
+		customDollarRate: {
+			type: Number,
+			default: 0
 		},
 		// Pasarelas de Pago
 		paymentGateways: {
@@ -96,7 +140,8 @@ const EcommerceSchema = new Schema(
 		contact: {
 			email: { type: String, default: '' },
 			phone: { type: String, default: '' },
-			address: { type: String, default: '' }
+			address: { type: String, default: '' },
+			whatsapp: { type: String, default: '' }
 		},
 		// Social Networks
 		social: {

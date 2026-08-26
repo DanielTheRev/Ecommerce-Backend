@@ -489,23 +489,51 @@ export class MetaService {
     order: any,
     reqIp?: string,
     reqUserAgent?: string,
-    eventSourceUrl?: string
+    eventSourceUrl?: string,
+    models?: any
   ) {
     try {
+      let customAccessToken: string | undefined;
+      let customPixelId: string | undefined;
+
+      if (models) {
+        try {
+          const { EcommerceService } = await import('./ecommerce.service');
+          const config = await EcommerceService.getConfig(models);
+          if (config.integrations?.metaPixel?.active && config.integrations.metaPixel.pixelId && config.integrations.metaPixel.accessToken) {
+            customPixelId = config.integrations.metaPixel.pixelId;
+            customAccessToken = config.integrations.metaPixel.accessToken;
+          } else {
+            // Si la tienda no tiene Meta Pixel activo o configurado, omitir silenciosamente (no usar .env global)
+            return { success: true, skipped: true };
+          }
+        } catch (e) {
+          console.error('[MetaService] Could not load tenant config for Meta Pixel:', e);
+          return { success: false, error: 'Tenant config error' };
+        }
+      } else {
+        // Sin contexto de tenant, omitir por seguridad
+        return { success: true, skipped: true };
+      }
+
       const orderId = order._id ? order._id.toString() : order.id;
       const contents = this.extractContentsFromOrder(order);
       const userData = this.extractUserDataFromOrder(order, reqIp, reqUserAgent);
       const total = order.finance?.total || order.paymentInfo?.amount || 0;
 
-      return await this.trackPurchase({
-        orderId,
-        eventId: `purchase_${orderId}`,
-        eventSourceUrl,
-        value: total,
-        currency: 'ARS',
-        contents,
-        userData,
-      });
+      return await this.trackPurchase(
+        {
+          orderId,
+          eventId: `purchase_${orderId}`,
+          eventSourceUrl,
+          value: total,
+          currency: 'ARS',
+          contents,
+          userData,
+        },
+        customAccessToken,
+        customPixelId
+      );
     } catch (err: any) {
       console.error('[MetaService] Error tracking Purchase from order:', err);
       return { success: false, error: err?.message || 'Unknown error' };

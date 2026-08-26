@@ -5,6 +5,8 @@ import { BannerSchema } from '@/models/Banner.model';
 import { cashRegisterSchema } from '@/models/CashRegister.model';
 import { ClothingProductSchema } from '@/models/discriminators/ClothingProduct.discriminator';
 import { TechProductSchema } from '@/models/discriminators/TechProduct.discriminator';
+import { BeautyProductSchema } from '@/models/discriminators/BeautyProduct.discriminator';
+import { GeneralProductSchema } from '@/models/discriminators/GeneralProduct.discriminator';
 import { EcommerceSchema } from '@/models/Ecommerce.model';
 import { HeroSlideSchema } from '@/models/HeroSlide.model';
 import { orderSchema } from '@/models/Order.model';
@@ -49,6 +51,8 @@ export interface TenantModels {
 	Product: Model<IProductDocument>;
 	TechProduct: Model<IProductDocument>;
 	ClothingProduct: Model<IProductDocument>;
+	BeautyProduct: Model<IProductDocument>;
+	GeneralProduct: Model<IProductDocument>;
 	User: Model<IUser>;
 	Order: IOrderModel;
 	EcommerceConfig: Model<any>;
@@ -83,6 +87,14 @@ export function getModelsForConnection(db: Connection): TenantModels {
 	const ClothingProductModel = db.models.ClothingProduct
 		? (db.model('ClothingProduct') as Model<IProductDocument>)
 		: ProductModel.discriminator<IProductDocument>('ClothingProduct', ClothingProductSchema);
+
+	const BeautyProductModel = db.models.BeautyProduct
+		? (db.model('BeautyProduct') as Model<IProductDocument>)
+		: ProductModel.discriminator<IProductDocument>('BeautyProduct', BeautyProductSchema);
+
+	const GeneralProductModel = db.models.GeneralProduct
+		? (db.model('GeneralProduct') as Model<IProductDocument>)
+		: ProductModel.discriminator<IProductDocument>('GeneralProduct', GeneralProductSchema);
 
 	// User
 	const UserModel = db.models.User
@@ -178,6 +190,8 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		Product: ProductModel,
 		TechProduct: TechProductModel,
 		ClothingProduct: ClothingProductModel,
+		BeautyProduct: BeautyProductModel,
+		GeneralProduct: GeneralProductModel,
 		User: UserModel,
 		Order: OrderModel as IOrderModel,
 		EcommerceConfig: EcommerceConfigModel,

@@ -5,6 +5,9 @@ export const CreateShippingOptionSchema = z.object({
   body: z.object({
     type: z.enum(ShippingType),
     name: z.string().min(1, 'Name is required'),
+    carrier: z.string().optional(),
+    estimatedDelivery: z.string().optional(),
+    instructions: z.string().optional(),
     pickupPoints: z.array(z.object({
       name: z.string().min(1, 'Name is required'),
       address: z.string().min(1, 'Address is required'),
@@ -20,6 +23,9 @@ export const UpdateShippingOptionSchema = z.object({
   body: z.object({
     type: z.enum(ShippingType).optional(),
     name: z.string().optional(),
+    carrier: z.string().optional(),
+    estimatedDelivery: z.string().optional(),
+    instructions: z.string().optional(),
     pickupPoints: z.array(z.object({
       name: z.string().min(1, 'Name is required'),
       address: z.string().min(1, 'Address is required'),

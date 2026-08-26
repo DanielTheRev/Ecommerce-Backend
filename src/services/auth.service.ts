@@ -27,13 +27,30 @@ export class AuthService {
 		return client;
 	}
 
-	// get payload from Google token
-	private static async getDataFromGoogleToken(token: string) {
+	// get payload from Google token with tenant fallback
+	private static async getDataFromGoogleToken(token: string, models?: TenantModels) {
 		try {
-			const client = this.getGoogleClient();
+			let tenantClientId = this.CLIENT_ID;
+			if (models) {
+				try {
+					const { EcommerceService } = await import('./ecommerce.service');
+					const config = await EcommerceService.getConfig(models);
+					if (config?.integrations?.googleAuth?.clientId) {
+						tenantClientId = config.integrations.googleAuth.clientId;
+					}
+				} catch (e) {
+					console.warn('Could not fetch tenant googleAuth clientId, fallback to env:', e);
+				}
+			}
+
+			if (!tenantClientId) {
+				throw new Error('Google Client ID is not defined');
+			}
+
+			const client = new OAuth2Client(tenantClientId);
 			const ticket = await client.verifyIdToken({
 				idToken: token,
-				audience: this.CLIENT_ID
+				audience: tenantClientId
 			});
 			const payload = ticket.getPayload();
 			if (!payload) {
@@ -42,7 +59,7 @@ export class AuthService {
 			return payload;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
-			throw new AppError('google token or implementation error', 'Usuario no encontrado', 500);
+			throw new AppError('google token or implementation error', 'Error al verificar sesión de Google', 500);
 		}
 	}
 
@@ -77,7 +94,7 @@ export class AuthService {
 	private static async loginWithGoogle(models: TenantModels, role: Role, googleToken: string) {
 		if (!googleToken) throw new AppError('no token provided', 'No se proporcionó token', 500);
 		try {
-			const userData = await AuthService.getDataFromGoogleToken(googleToken);
+			const userData = await AuthService.getDataFromGoogleToken(googleToken, models);
 			if (!userData) {
 				throw new AuthError(
 					'Invalid Google token or no user valid',

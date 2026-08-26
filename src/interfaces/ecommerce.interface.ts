@@ -1,5 +1,36 @@
 export type PricingMethod = 'markup' | 'margin';
 
+export interface IMetaPixelConfig {
+	active: boolean;
+	pixelId: string;
+	accessToken: string;
+	testEventCode?: string;
+}
+
+export interface IGoogleAnalyticsConfig {
+	active: boolean;
+	measurementId: string;
+}
+
+export interface IGoogleAuthConfig {
+	active: boolean;
+	clientId: string;
+}
+
+export interface IResendConfig {
+	active: boolean;
+	apiKey?: string;
+	fromEmail?: string;
+	fromName?: string;
+}
+
+export interface IEcommerceIntegrations {
+	metaPixel?: IMetaPixelConfig;
+	googleAnalytics?: IGoogleAnalyticsConfig;
+	googleAuth?: IGoogleAuthConfig;
+	resend?: IResendConfig;
+}
+
 export interface IPricingStrategy {
 	/** 'markup' = sobre el costo (default), 'margin' = sobre el precio de venta */
 	method: PricingMethod;
@@ -7,6 +38,12 @@ export interface IPricingStrategy {
 	transferGrossUp: boolean;
 	/** Si true, el vendedor absorbe el CFT de cuotas (cuotas sin interés). Si false, no ofrece cuotas. */
 	absorbInstallments: boolean;
+	/** Hasta cuántas cuotas absorbe el vendedor (ej. 3, 6, 12) */
+	maxInstallmentsToAbsorb?: number;
+	/** Porcentaje de descuento por pago con Transferencia (ej. 10 para 10%) */
+	transferDiscountPercentage?: number;
+	/** Porcentaje de descuento por pago en Efectivo (ej. 10 para 10%) */
+	cashDiscountPercentage?: number;
 }
 
 export interface IRecommendationConfig {
@@ -25,6 +62,8 @@ export interface IEcommerceConfig {
 	/** Margen global para cuotas */
 	profitInstallments?: number;
 	costCurrency?: 'USD' | 'ARS';
+	dollarQuoteType?: 'oficial' | 'blue' | 'bolsa' | 'ccl' | 'tarjeta' | 'mayorista' | 'cripto' | 'custom';
+	customDollarRate?: number;
 	taxes: {
 		iva: number;
 	};
@@ -34,6 +73,7 @@ export interface IEcommerceConfig {
 	};
 	pricingStrategy: IPricingStrategy;
 	paymentGateways: IEcommercePaymentGateway;
+	integrations?: IEcommerceIntegrations;
 	callbackURLs: {
 		success: string;
 		fail: string;
@@ -43,6 +83,7 @@ export interface IEcommerceConfig {
 		email: string;
 		phone: string;
 		address: string;
+		whatsapp?: string;
 	};
 	social?: {
 		instagram: string;
@@ -115,11 +156,13 @@ export interface IWorkingHoursConfig {
 }
 
 export interface IEcommerceConfigPublic {
+	name?: string;
 	logo?: string;
 	contact: {
 		email: string;
 		phone: string;
 		address: string;
+		whatsapp?: string;
 	};
 	social: {
 		instagram: string;
@@ -136,6 +179,31 @@ export interface IEcommerceConfigPublic {
 	workingHours?: IWorkingHoursConfig;
 	/** El e-commerce necesita saber si se ofrecen cuotas sin interés */
 	absorbInstallments: boolean;
+	pricingStrategy?: {
+		absorbInstallments: boolean;
+		maxInstallmentsToAbsorb?: number;
+		transferDiscountPercentage?: number;
+		cashDiscountPercentage?: number;
+	};
+	integrations?: {
+		metaPixel?: {
+			active: boolean;
+			pixelId: string;
+		};
+		googleAnalytics?: {
+			active: boolean;
+			measurementId: string;
+		};
+		googleAuth?: {
+			active: boolean;
+			clientId: string;
+		};
+		resend?: {
+			active: boolean;
+			fromEmail?: string;
+			fromName?: string;
+		};
+	};
 	paymentGateways: {
 		mercadopago: {
 			publicKey: string;

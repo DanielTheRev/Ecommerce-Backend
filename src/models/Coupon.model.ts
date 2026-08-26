@@ -49,6 +49,23 @@ export const CouponSchema = new Schema<ICouponDocument>(
 			type: Boolean,
 			default: false
 		},
+		paymentMethodRestriction: {
+			type: String,
+			enum: ['ALL', 'TRANSFER', 'CARD'],
+			default: 'ALL'
+		},
+		applicableProductTypes: [{
+			type: String,
+			enum: ['TechProduct', 'ClothingProduct', 'BeautyProduct', 'GeneralProduct']
+		}],
+		applicableCategories: [{
+			type: String,
+			trim: true
+		}],
+		applicableProducts: [{
+			type: Schema.Types.ObjectId,
+			ref: 'Product'
+		}],
 		assignedUserEmail: {
 			type: String,
 			lowercase: true,

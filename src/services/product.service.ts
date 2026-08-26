@@ -63,6 +63,8 @@ export class ProductService {
 		switch (type) {
 			case ProductType.TECH: return models.TechProduct;
 			case ProductType.CLOTHING: return models.ClothingProduct;
+			case ProductType.BEAUTY: return models.BeautyProduct;
+			case ProductType.GENERAL: return models.GeneralProduct;
 			default: return models.Product;
 		}
 	}
@@ -748,7 +750,8 @@ export class ProductService {
 	static async createProduct(models: TenantModels, data: IProductCreateDTO, imagesDTO: Express.Multer.File[], ogImageFile: Express.Multer.File | null, tenantSlug: string = 'general'): Promise<IProduct> {
 		try {
 			const slug = this.generateSlug(data.brand, data.model);
-			const { venta } = await getDolar();
+			const config = await EcommerceService.getConfig(models);
+			const { venta } = await getDolar(config.dollarQuoteType || 'oficial', config.customDollarRate || 0);
 
 			const additionalCosts = typeof data.additionalCosts === 'string'
 				? JSON.parse(data.additionalCosts)
@@ -864,6 +867,22 @@ export class ProductService {
 				if (data.season) baseData.season = data.season;
 			}
 
+			// Campos específicos de belleza / perfumería
+			if (data.productType === ProductType.BEAUTY) {
+				if (data.volume) baseData.volume = data.volume;
+				if (data.concentration) baseData.concentration = data.concentration;
+				if (data.fragranceFamily) baseData.fragranceFamily = data.fragranceFamily;
+				if (data.gender) baseData.gender = data.gender;
+				if (data.scentNotes) baseData.scentNotes = typeof data.scentNotes === 'string' ? JSON.parse(data.scentNotes) : data.scentNotes;
+				if (data.applicationArea) baseData.applicationArea = data.applicationArea;
+			}
+
+			// Campos específicos de general
+			if (data.productType === ProductType.GENERAL) {
+				if (data.unit) baseData.unit = data.unit;
+				if (data.weight) baseData.weight = data.weight;
+			}
+
 			const newProduct = await Model.create(baseData)
 			await newProduct.populate('provider');
 			return newProduct.toObject() as unknown as IProduct;
@@ -893,7 +912,7 @@ export class ProductService {
 				return;
 			}
 
-			const { venta: dolarVenta } = await getDolar();
+			const { venta: dolarVenta } = await getDolar(config.dollarQuoteType || 'oficial', config.customDollarRate || 0);
 			const isARS = config.costCurrency === 'ARS';
 			const bulkOps = [];
 
@@ -1057,12 +1076,12 @@ export class ProductService {
 				updateData.additionalCosts !== undefined ||
 				updateData.discountPercentageTransfer !== undefined
 			) {
-				const { venta } = await getDolar();
+				const config = await EcommerceService.getConfig(models);
+				const { venta } = await getDolar(config.dollarQuoteType || 'oficial', config.customDollarRate || 0);
 				const currentCustomProfitMargin = updateData.customProfitMargin !== undefined ? updateData.customProfitMargin : product.finance?.pricingStrategy?.targetProfit;
 
 				// Attempt to get the current base price. If updateData.providerCost or updateData.price is provided, use it.
 				// Otherwise try temporary product.price. As a final fallback, safely cast the stored base price cost
-				const config = await EcommerceService.getConfig(models);
 				const isARS = config.costCurrency === 'ARS';
 				const currentPrice = updateData.providerCost !== undefined
 					? updateData.providerCost
@@ -1240,9 +1259,7 @@ export class ProductService {
 			console.log(fieldsToSelect);
 			console.log('Parsed data');
 			console.log(updateData);
-			const TargetModel = product.productType === ProductType.TECH
-				? (models.TechProduct || models.Product.discriminators?.[ProductType.TECH])
-				: (models.ClothingProduct || models.Product.discriminators?.[ProductType.CLOTHING]);
+			const TargetModel = this.getModel(models, product.productType);
 
 			if (!TargetModel) {
 				throw new AppError('Internal Server Error', 'No se encontró el modelo discriminador', 500);

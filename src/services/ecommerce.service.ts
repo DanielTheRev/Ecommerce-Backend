@@ -7,7 +7,7 @@ import { MercadoPagoService } from './mercadopago.service';
 import { ProductService } from './product.service';
 
 export class EcommerceService {
-	private static readonly SENSITIVE_FIELDS_SELECT = '+paymentGateways.uala.credentials.userName +paymentGateways.uala.credentials.clientId +paymentGateways.uala.credentials.clientSecret +paymentGateways.mercadopago.accessToken +paymentGateways.mercadopago.webhookSecret';
+	private static readonly SENSITIVE_FIELDS_SELECT = '+paymentGateways.uala.credentials.userName +paymentGateways.uala.credentials.clientId +paymentGateways.uala.credentials.clientSecret +paymentGateways.mercadopago.accessToken +paymentGateways.mercadopago.webhookSecret +integrations.metaPixel.accessToken';
 
 	private constructor() { }
 
@@ -73,11 +73,13 @@ export class EcommerceService {
 			}
 
 			const data: IEcommerceConfigPublic = {
+				name: publicConfig.name || 'Mi Tienda',
 				logo: publicConfig.logo || '',
-				contact: publicConfig.contact!,
-				social: publicConfig.social!,
-				brands: publicConfig.brands,
-				categories: publicConfig.categories,
+				contact: publicConfig.contact || { email: '', phone: '', address: '', whatsapp: '' },
+				social: publicConfig.social || { instagram: '', facebook: '', twitter: '', tiktok: '' },
+				brands: publicConfig.brands || [],
+				categories: publicConfig.categories || [],
+				clothingFits: publicConfig.clothingFits,
 				shippingConfig: publicConfig.shippingConfig,
 				workingHours: publicConfig.workingHours || {
 					weekdayStart: '10:00',
@@ -87,6 +89,31 @@ export class EcommerceService {
 					noticeText: 'Lun a Sáb 10-20h / Dom 10-15h'
 				},
 				absorbInstallments: publicConfig.pricingStrategy?.absorbInstallments ?? true,
+				pricingStrategy: {
+					absorbInstallments: publicConfig.pricingStrategy?.absorbInstallments ?? true,
+					maxInstallmentsToAbsorb: publicConfig.pricingStrategy?.maxInstallmentsToAbsorb || 3,
+					transferDiscountPercentage: publicConfig.pricingStrategy?.transferDiscountPercentage || 0,
+					cashDiscountPercentage: publicConfig.pricingStrategy?.cashDiscountPercentage || 0
+				},
+				integrations: {
+					metaPixel: {
+						active: publicConfig.integrations?.metaPixel?.active || false,
+						pixelId: publicConfig.integrations?.metaPixel?.pixelId || ''
+					},
+					googleAnalytics: {
+						active: publicConfig.integrations?.googleAnalytics?.active || false,
+						measurementId: publicConfig.integrations?.googleAnalytics?.measurementId || ''
+					},
+					googleAuth: {
+						active: publicConfig.integrations?.googleAuth?.active ?? true,
+						clientId: publicConfig.integrations?.googleAuth?.clientId || ''
+					},
+					resend: {
+						active: publicConfig.integrations?.resend?.active || false,
+						fromEmail: publicConfig.integrations?.resend?.fromEmail || '',
+						fromName: publicConfig.integrations?.resend?.fromName || ''
+					}
+				},
 				paymentGateways: {
 					mercadopago: {
 						publicKey: publicConfig.paymentGateways?.mercadopago?.publicKey || '',
@@ -102,7 +129,7 @@ export class EcommerceService {
 						titular: publicConfig.paymentGateways?.transfer?.titular || ''
 					}
 				}
-			}
+			};
 
 			return data;
 		} catch (error) {
@@ -290,6 +317,9 @@ export class EcommerceService {
 				if (mp.webhookSecret) mp.webhookSecret = JSON.stringify(encrypt(mp.webhookSecret));
 			}
 		}
+		if (configObj.integrations?.metaPixel?.accessToken) {
+			configObj.integrations.metaPixel.accessToken = JSON.stringify(encrypt(configObj.integrations.metaPixel.accessToken));
+		}
 	}
 
 	private static decryptEcommerceConfig(config: IEcommerceConfig): IEcommerceConfig {
@@ -326,6 +356,13 @@ export class EcommerceService {
 						console.error('Error al desencriptar webhookSecret de MercadoPago:', e);
 					}
 				}
+			}
+		}
+		if (configObj.integrations?.metaPixel?.accessToken) {
+			try {
+				configObj.integrations.metaPixel.accessToken = decrypt(JSON.parse(configObj.integrations.metaPixel.accessToken));
+			} catch (e) {
+				// No encriptado previamente
 			}
 		}
 		return configObj;

@@ -4,6 +4,7 @@ import { IClothingVariant, ITechVariant } from '@/interfaces/variant.interface';
 import { AuthRequest } from '@/middleware/auth';
 import { getDolar } from '@/services/dolar.service';
 import { FinanceService } from '@/services/finance.service';
+import { EcommerceService } from '@/services/ecommerce.service';
 import { ProductService } from '@/services/product.service';
 import { NextFunction, Response } from 'express';
 import jwt from 'jsonwebtoken';
@@ -236,7 +237,8 @@ export class ProductController {
 				pricingMethodChoice,
 				calculate
 			} = req.body;
-			const { venta } = await getDolar();
+			const config = await EcommerceService.getConfig(req.models!);
+			const { venta } = await getDolar(config.dollarQuoteType || 'oficial', config.customDollarRate || 0);
 			if (calculate === 'list_price') {
 				const response = await FinanceService.CalculateListPrice({
 					dolar: venta,
@@ -415,7 +417,8 @@ export class ProductController {
 				customProfitMargin,
 				pricingMethodChoice,
 			} = req.body;
-			const { venta } = await getDolar();
+			const config = await EcommerceService.getConfig(req.models!);
+			const { venta } = await getDolar(config.dollarQuoteType || 'oficial', config.customDollarRate || 0);
 			const result = await FinanceService.CalculatePrices({
 				providerCost: costPrice,
 				additionalCosts: additionalCosts || [],

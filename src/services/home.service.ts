@@ -62,35 +62,54 @@ export class HomeService {
 			});
 
 			const brandSections: IBrandSection[] = [];
+			const productsMap = new Map<string, IProduct>();
+			products.forEach(p => productsMap.set(p._id.toString(), p));
 
 			// 4. Iterate over active banners and build sections
 			for (const banner of activeBanners) {
-				const bannerBrandKey = (banner.brandName || '').trim().toLowerCase();
-				let productsForBrand = brandProductsMap.get(bannerBrandKey) || [];
+				let matchingProducts: IProduct[] = [];
 
-				if (productsForBrand.length === 0 && bannerBrandKey) {
-					// Fallback: Partial or case-insensitive match (e.g. "Xiaomi" matches "Xiaomi Smartphones")
-					productsForBrand = products.filter((p) => {
-						const pBrand = (p.brand || '').toLowerCase();
-						return pBrand.includes(bannerBrandKey) || bannerBrandKey.includes(pBrand);
-					});
+				if (banner.showProducts) {
+					const count = banner.productsCount || 4;
+					const source = banner.productSource || (banner.brandName ? 'brand' : 'recent');
+					const sourceVal = (banner.productSourceValue || banner.brandName || '').trim().toLowerCase();
+
+					if (source === 'category' && sourceVal) {
+						matchingProducts = products.filter(p => (p.category || '').toLowerCase().includes(sourceVal));
+					} else if (source === 'collection' && sourceVal) {
+						matchingProducts = products.filter(p => {
+							const tags = (p as any).tags || (p as any).collections || [];
+							return tags.some((t: string) => t.toLowerCase().includes(sourceVal)) || (p.category || '').toLowerCase().includes(sourceVal);
+						});
+					} else if (source === 'brand' && sourceVal) {
+						matchingProducts = brandProductsMap.get(sourceVal) || products.filter(p => (p.brand || '').toLowerCase().includes(sourceVal));
+					} else if (source === 'manual' && banner.manualProductIds && banner.manualProductIds.length > 0) {
+						matchingProducts = banner.manualProductIds
+							.map((id: any) => productsMap.get(id.toString()))
+							.filter((p): p is IProduct => !!p);
+					} else {
+						// Recent products
+						matchingProducts = products;
+					}
+
+					matchingProducts = matchingProducts.slice(0, count);
 				}
 
-				// Sort products by model
-				const sortedProducts = [...productsForBrand].sort((a, b) =>
-					(b.model || '').localeCompare(a.model || '')
-				);
-
 				brandSections.push({
-					brandName: banner.brandName,
-					title: banner.title,
-					subtitle: banner.subtitle,
-					description: banner.description,
+					name: banner.name || banner.title || banner.brandName || 'Banner',
+					brandName: banner.brandName || '',
+					title: banner.title || '',
+					subtitle: banner.subtitle || '',
+					description: banner.description || '',
 					image: banner.image,
-					textClass: banner.textClass,
-					buttonClass: banner.buttonClass,
-					icon: banner.icon,
-					products: sortedProducts.slice(0, 4)
+					imageMobile: banner.imageMobile || '',
+					linkType: banner.linkType || (banner.brandName ? 'brand' : 'none'),
+					linkValue: banner.linkValue || banner.brandName || '',
+					showProducts: banner.showProducts ?? (matchingProducts.length > 0),
+					textClass: banner.textClass || 'text-white',
+					buttonClass: banner.buttonClass || 'bg-white text-black',
+					icon: banner.icon || 'Smartphone',
+					products: matchingProducts
 				});
 			}
 

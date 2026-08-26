@@ -166,15 +166,15 @@ export class FinanceService {
 		const threePaymentsAmount = Math.round(listPrice / 3);
 
 		// =========================================================
-		// GANANCIAS NETAS EN ARS
+		// GANANCIAS NETAS REALES EN ARS (Cobrando Precio de Lista)
 		// =========================================================
 		const card_ticket1PayProfit =
-			card_ticket1PayPrice - totalCostInARS - card_ticket1PayPrice * totalTasa1;
+			listPrice - totalCostInARS - listPrice * totalTasa1;
 		const card3InstallmentsProfit = listPrice - totalCostInARS - listPrice * totalTasa3;
 		const card6InstallmentsProfit = listPrice - totalCostInARS - listPrice * totalTasa6;
 
-		const maxSafeDiscount =
-			listPrice > 0 ? Math.round(((listPrice - priceTarget) / listPrice) * 100) : 0;
+		// El Descuento Máximo Seguro es exactamente la tasa de pasarela absorbida en el Precio de Lista
+		const maxSafeDiscount = Math.round(worstCaseTasa * 100);
 
 		// =========================================================
 		// DESGLOSE ESTRATÉGICO PARA LOS BLOQUES DE LA UI
@@ -221,6 +221,7 @@ export class FinanceService {
 		const result = {
 			listPrice,
 			one_pay: card_ticket1PayPrice,
+			maxInstallments,
 			installments: {
 				threePaymentsAmount,
 				sixPaymentsAmount
@@ -346,6 +347,7 @@ export class FinanceService {
 				card_ticket1PayPrice: listResult.one_pay,
 				cashTransferPrice: transferResult.cashTransferPrice,
 				discountPercentageTransfer: transferResult.discountPercentageTransfer,
+				updatedAt: new Date(),
 				installments: {
 					threePaymentsAmount: listResult.installments.threePaymentsAmount,
 					sixPaymentsAmount: listResult.installments.sixPaymentsAmount,

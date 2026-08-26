@@ -6,6 +6,18 @@ import { AppError } from '@/errors/app.error';
 
 export class EcommerceConfigController {
 
+	// GET /api/Ecommerce/config/dolares - Obtener todas las cotizaciones de DolarAPI
+	static async getDolares(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { getAllDolares } = await import('@/services/dolar.service');
+			const force = req.query.refresh === 'true';
+			const dolares = await getAllDolares(force);
+			res.status(200).json(dolares);
+		} catch (error) {
+			next(error);
+		}
+	}
+
 	// GET /api/Ecommerce/config/mercadopago-methods - Obtener métodos de MP disponibles
 	static async getMercadoPagoMethods(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {

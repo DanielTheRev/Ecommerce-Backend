@@ -12,6 +12,21 @@ export class ResendService {
 	static readonly DEFAULT_LOGO_URL =
 		'https://res.cloudinary.com/dmdwze9lj/image/upload/v1775017539/vura/vura_logo_cfrpou.webp';
 
+	private static async getStoreDetails(models: TenantModels): Promise<{ name: string; logoUrl: string; websiteUrl: string; fromEmail: string }> {
+		try {
+			const { EcommerceService } = await import('./ecommerce.service');
+			const config = await EcommerceService.getConfig(models);
+			const name = config.name || 'Mi Tienda';
+			const logoUrl = config.logo || this.DEFAULT_LOGO_URL;
+			const fromEmail = 'ordenes@vura.com.ar';
+			const websiteUrl = 'https://vura.com.ar';
+			return { name, logoUrl, websiteUrl, fromEmail };
+		} catch (error) {
+			console.error('Error fetching store details for email:', error);
+			return { name: 'Mi Tienda', logoUrl: this.DEFAULT_LOGO_URL, websiteUrl: 'https://vura.com.ar', fromEmail: 'ordenes@vura.com.ar' };
+		}
+	}
+
 	private static async getLogoUrl(models: TenantModels): Promise<string> {
 		try {
 			const { EcommerceService } = await import('./ecommerce.service');

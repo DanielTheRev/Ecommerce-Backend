@@ -306,12 +306,76 @@ export class CouponService {
 			};
 		}
 
-		// Calcular monto del descuento
+		// Validar restricción de Medio de Pago
+		const paymentMethod = (dto.paymentMethod || '').toUpperCase();
+		if (coupon.paymentMethodRestriction === 'TRANSFER') {
+			if (paymentMethod && paymentMethod !== 'TRANSFER' && paymentMethod !== 'CASH') {
+				return {
+					isValid: false,
+					code: rawCode,
+					discountType: coupon.discountType,
+					discountValue: coupon.discountValue,
+					discountAmount: 0,
+					finalTotal: dto.subtotal,
+					message: 'Este cupón es exclusivo para pagos por Transferencia Bancaria o Efectivo.'
+				};
+			}
+		} else if (coupon.paymentMethodRestriction === 'CARD') {
+			if (paymentMethod && (paymentMethod === 'TRANSFER' || paymentMethod === 'CASH')) {
+				return {
+					isValid: false,
+					code: rawCode,
+					discountType: coupon.discountType,
+					discountValue: coupon.discountValue,
+					discountAmount: 0,
+					finalTotal: dto.subtotal,
+					message: 'Este cupón es exclusivo para pagos con Tarjetas de Crédito / Débito.'
+				};
+			}
+		}
+
+		// Validar restricciones de Productos, Categorías y Tipos de Producto
+		const hasProductRestriction = Boolean(coupon.applicableProducts && coupon.applicableProducts.length > 0);
+		const hasCategoryRestriction = Boolean(coupon.applicableCategories && coupon.applicableCategories.length > 0);
+		const hasTypeRestriction = Boolean(coupon.applicableProductTypes && coupon.applicableProductTypes.length > 0);
+
+		let eligibleSubtotal = dto.subtotal;
+
+		if (dto.items && dto.items.length > 0 && (hasProductRestriction || hasCategoryRestriction || hasTypeRestriction)) {
+			const matchingItems = dto.items.filter((item) => {
+				if (hasProductRestriction && coupon.applicableProducts!.map(String).includes(String(item.productId))) {
+					return true;
+				}
+				if (hasCategoryRestriction && item.category && coupon.applicableCategories!.includes(item.category)) {
+					return true;
+				}
+				if (hasTypeRestriction && item.productType && coupon.applicableProductTypes!.includes(item.productType)) {
+					return true;
+				}
+				return false;
+			});
+
+			if (matchingItems.length === 0) {
+				return {
+					isValid: false,
+					code: rawCode,
+					discountType: coupon.discountType,
+					discountValue: coupon.discountValue,
+					discountAmount: 0,
+					finalTotal: dto.subtotal,
+					message: 'El cupón no aplica a ninguno de los productos o categorías de tu bolsa.'
+				};
+			}
+
+			eligibleSubtotal = matchingItems.reduce((acc, it) => acc + (it.price * it.quantity), 0);
+		}
+
+		// Calcular monto del descuento sobre el subtotal elegible
 		let discountAmount = 0;
 		if (coupon.discountType === 'percentage') {
-			discountAmount = Math.round(dto.subtotal * (coupon.discountValue / 100));
+			discountAmount = Math.round(eligibleSubtotal * (coupon.discountValue / 100));
 		} else {
-			discountAmount = Math.min(dto.subtotal, coupon.discountValue);
+			discountAmount = Math.min(eligibleSubtotal, coupon.discountValue);
 		}
 
 		return {
