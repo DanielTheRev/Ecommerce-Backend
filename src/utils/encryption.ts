@@ -52,3 +52,47 @@ export const decrypt = (hash: EncryptedData): string => {
     
     return decrypted.toString();
 };
+
+/**
+ * Desencripta de forma segura un string JSON con formato { iv, content }.
+ * Si el string es texto plano, no está encriptado o falla la desencriptación
+ * (por ejemplo si cambió la clave ENCRYPTION_KEY/JWT_SECRET en el .env),
+ * maneja el error de forma segura sin romper la ejecución ni ensuciar los logs con stack traces.
+ */
+export const safeDecryptString = (value?: string): string => {
+    if (!value || value === 'no asignado') return value || '';
+    
+    const trimmed = value.trim();
+    if (!trimmed.startsWith('{') || !trimmed.includes('"iv"') || !trimmed.includes('"content"')) {
+        return value;
+    }
+
+    try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === 'object' && parsed.iv && parsed.content) {
+            return decrypt(parsed);
+        }
+        return value;
+    } catch {
+        return '';
+    }
+};
+
+/**
+ * Encripta un string solo si no está ya encriptado.
+ */
+export const safeEncryptString = (value?: string): string => {
+    if (!value || value === 'no asignado') return value || '';
+    
+    const trimmed = value.trim();
+    if (trimmed.startsWith('{') && trimmed.includes('"iv"') && trimmed.includes('"content"')) {
+        try {
+            const parsed = JSON.parse(trimmed);
+            if (parsed && parsed.iv && parsed.content) {
+                return value;
+            }
+        } catch {}
+    }
+    return JSON.stringify(encrypt(value));
+};
+

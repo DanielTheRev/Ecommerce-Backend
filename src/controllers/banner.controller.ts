@@ -17,7 +17,7 @@ export class BannerController {
   static async getAllBanners(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       if (req.query.active === 'true') {
-        const banners = await BannerService.getActiveBanners(req.models!);
+        const banners = await BannerService.getActiveBanners(req.models!, req.tenant?.slug);
         return res.status(200).json(banners);
       }
 
@@ -53,7 +53,7 @@ export class BannerController {
   static async deleteBanner(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      await BannerService.deleteBanner(req.models!, id);
+      await BannerService.deleteBanner(req.models!, id, req.tenant?.slug);
       res.status(200).json({
         success: true,
         message: 'Banner deleted successfully'

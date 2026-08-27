@@ -38,6 +38,7 @@ export class SkuService {
 		const prefix = this.getCategoryPrefix(category);
 		const sequence = existingSequence ?? await this.getNextSequence(models, category);
 		const seqStr = String(sequence).padStart(3, '0');
+		const usedSkus = new Set<string>(variants.filter(v => v.sku).map(v => v.sku));
 
 		return variants.map(v => {
 			if (v.sku) return v; // Mantener SKU existente
@@ -46,7 +47,7 @@ export class SkuService {
 
 			if (productType === ProductType.CLOTHING) {
 				// Clothing → PREFIX-SEQ-SIZE-COLOR
-				if (v.size) parts.push(v.size.toUpperCase());
+				if (v.size) parts.push(this.sanitizeForSku(v.size));
 			} else if (productType === ProductType.TECH) {
 				// Tech → PREFIX-SEQ-ATTRS…-BRAND-COLOR
 				if (v.attributes && Array.isArray(v.attributes)) {
@@ -60,12 +61,20 @@ export class SkuService {
 				if (brand) parts.push(this.abbreviate(brand));
 			}
 
-			// Color (últimas 3 letras del nombre, sin acentos)
+			// Color (abreviación inteligente de 3 letras, sin acentos)
 			if (v.color?.name) {
-				parts.push(this.abbreviate(v.color.name));
+				parts.push(this.abbreviateColor(v.color.name));
 			}
 
-			v.sku = parts.join('-');
+			let finalSku = parts.join('-');
+			let counter = 2;
+			while (usedSkus.has(finalSku)) {
+				finalSku = `${parts.join('-')}-${counter}`;
+				counter++;
+			}
+
+			usedSkus.add(finalSku);
+			v.sku = finalSku;
 			return v;
 		});
 	}
@@ -112,6 +121,26 @@ export class SkuService {
 	}
 
 	/**
+	 * Abrevia un nombre de color de forma inteligente:
+	 * Para nombres compuestos ("Gris Ceniza" → "GCE", "Gris Oscuro" → "GOS", "Azul Marino" → "AZM")
+	 * Para nombres simples ("Negro" → "NEG", "Blanco" → "BLA")
+	 */
+	private static abbreviateColor(name: string): string {
+		const clean = this.normalizeText(name).trim();
+		const words = clean.split(/\s+/).filter(Boolean);
+		if (words.length >= 2) {
+			const w1 = words[0].toUpperCase();
+			const w2 = words[1].toUpperCase();
+			if (w1 === 'AZUL' && w2.startsWith('M')) return 'AZM';
+			if (w1 === 'AZUL' && w2.startsWith('F')) return 'AZF';
+			if (w1.length >= 1 && w2.length >= 2) {
+				return (w1.charAt(0) + w2.substring(0, 2)).toUpperCase();
+			}
+		}
+		return clean.substring(0, 3).toUpperCase();
+	}
+
+	/**
 	 * Abrevia un nombre a sus primeras N letras (default 3), sin acentos, en mayúsculas.
 	 */
 	private static abbreviate(name: string, maxLen: number = 3): string {
@@ -130,6 +159,6 @@ export class SkuService {
 	 * Sanitiza un valor para uso en SKU: elimina caracteres especiales, uppercase.
 	 */
 	private static sanitizeForSku(value: string): string {
-		return value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+		return this.normalizeText(value).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
 	}
 }

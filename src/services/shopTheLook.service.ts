@@ -4,8 +4,15 @@ import { IShopTheLookDocument, IShopTheLook } from '@/interfaces/shopTheLook.int
 import { ImageService } from '@/services/images.service';
 
 export class ShopTheLookService {
-	static async getActiveLooks(models: TenantModels): Promise<IShopTheLookDocument[]> {
+	static async getActiveLooks(models: TenantModels, tenantSlug?: string): Promise<IShopTheLookDocument[]> {
 		try {
+			const cacheKey = 'shopthelook:active';
+			if (tenantSlug) {
+				const { CacheService } = await import('@/services/cache.service');
+				const cached = CacheService.get<IShopTheLookDocument[]>(tenantSlug, cacheKey);
+				if (cached) return cached;
+			}
+
 			const looks = await models.ShopTheLook.find()
 				.populate({
 					path: 'looks.hotspots.product',
@@ -23,7 +30,14 @@ export class ShopTheLookService {
 				}
 			});
 
-			return looks as unknown as IShopTheLookDocument[];
+			const result = looks as unknown as IShopTheLookDocument[];
+
+			if (tenantSlug) {
+				const { CacheService } = await import('@/services/cache.service');
+				CacheService.set(tenantSlug, cacheKey, result, 10 * 60 * 1000);
+			}
+
+			return result;
 		} catch (error) {
 			throw new AppError('Error fetching Shop The Look items', 'Error al obtener las campañas', 500);
 		}
@@ -56,16 +70,23 @@ export class ShopTheLookService {
 		}
 	}
 
-	static async createLook(models: TenantModels, data: IShopTheLook): Promise<IShopTheLookDocument> {
+	static async createLook(models: TenantModels, data: IShopTheLook, tenantSlug?: string): Promise<IShopTheLookDocument> {
 		try {
 			const newLook = await models.ShopTheLook.create(data);
+
+			if (tenantSlug) {
+				const { CacheService } = await import('@/services/cache.service');
+				CacheService.invalidatePrefix(tenantSlug, 'shopthelook');
+				CacheService.invalidatePrefix(tenantSlug, 'home');
+			}
+
 			return newLook;
 		} catch (error) {
 			throw new AppError('Error creating Shop The Look item', 'Error al crear la campaña', 400);
 		}
 	}
 
-	static async updateLook(models: TenantModels, lookId: string, data: Partial<IShopTheLook>): Promise<IShopTheLookDocument> {
+	static async updateLook(models: TenantModels, lookId: string, data: Partial<IShopTheLook>, tenantSlug?: string): Promise<IShopTheLookDocument> {
 		try {
 			const currentLook = await models.ShopTheLook.findById(lookId).lean() as unknown as IShopTheLookDocument;
 			if (!currentLook) {
@@ -91,6 +112,12 @@ export class ShopTheLookService {
 				{ new: true, runValidators: true }
 			).populate('looks.hotspots.product');
 
+			if (tenantSlug) {
+				const { CacheService } = await import('@/services/cache.service');
+				CacheService.invalidatePrefix(tenantSlug, 'shopthelook');
+				CacheService.invalidatePrefix(tenantSlug, 'home');
+			}
+
 			return updatedLook as IShopTheLookDocument;
 		} catch (error) {
 			console.log(error);
@@ -99,7 +126,7 @@ export class ShopTheLookService {
 		}
 	}
 
-	static async deleteLook(models: TenantModels, lookId: string): Promise<void> {
+	static async deleteLook(models: TenantModels, lookId: string, tenantSlug?: string): Promise<void> {
 		try {
 			const currentLook = await models.ShopTheLook.findById(lookId).lean() as unknown as IShopTheLookDocument;
 			if (!currentLook) {
@@ -112,6 +139,12 @@ export class ShopTheLookService {
 			}
 
 			await models.ShopTheLook.findByIdAndDelete(lookId);
+
+			if (tenantSlug) {
+				const { CacheService } = await import('@/services/cache.service');
+				CacheService.invalidatePrefix(tenantSlug, 'shopthelook');
+				CacheService.invalidatePrefix(tenantSlug, 'home');
+			}
 		} catch (error) {
 			if (error instanceof AppError) throw error;
 			throw new AppError('Error deleting Shop The Look item', 'Error al eliminar la campaña', 400);

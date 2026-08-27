@@ -216,6 +216,13 @@ export class ProductController {
 				ogImageFile,
 				req.tenant?.slug
 			);
+
+			if (req.tenant?.slug) {
+				const { CacheService } = await import('@/services/cache.service');
+				CacheService.invalidatePrefix(req.tenant.slug, 'home');
+				CacheService.invalidatePrefix(req.tenant.slug, 'products');
+			}
+
 			res.status(201).json(newProduct);
 		} catch (error) {
 			next(error);
@@ -274,6 +281,13 @@ export class ProductController {
 				ogImageFile,
 				req.tenant?.slug
 			);
+
+			if (req.tenant?.slug) {
+				const { CacheService } = await import('@/services/cache.service');
+				CacheService.invalidatePrefix(req.tenant.slug, 'home');
+				CacheService.invalidatePrefix(req.tenant.slug, 'products');
+			}
+
 			res.status(200).json(updatedProduct);
 		} catch (error) {
 			next(error);
@@ -293,6 +307,13 @@ export class ProductController {
 				return;
 			}
 			await ProductService.bulkUpdateStatus(req.models!, ids, isActive);
+
+			if (req.tenant?.slug) {
+				const { CacheService } = await import('@/services/cache.service');
+				CacheService.invalidatePrefix(req.tenant.slug, 'home');
+				CacheService.invalidatePrefix(req.tenant.slug, 'products');
+			}
+
 			res.status(200).json({
 				success: true,
 				message: `Productos ${isActive ? 'activados' : 'desactivados'} exitosamente`
@@ -307,6 +328,12 @@ export class ProductController {
 		try {
 			const { id } = req.params;
 			const product = await ProductService.deleteProduct(req.models!, id);
+
+			if (req.tenant?.slug) {
+				const { CacheService } = await import('@/services/cache.service');
+				CacheService.invalidatePrefix(req.tenant.slug, 'home');
+				CacheService.invalidatePrefix(req.tenant.slug, 'products');
+			}
 
 			res.status(200).json({
 				success: true,

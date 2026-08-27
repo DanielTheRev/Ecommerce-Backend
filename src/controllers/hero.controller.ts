@@ -49,7 +49,7 @@ export class HeroController {
   static async delete(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      await HeroService.delete(req.models!, id);
+      await HeroService.delete(req.models!, id, req.tenant?.slug);
       return res.json({ message: 'Slide deleted successfully' });
     } catch (error) {
       return next(error);

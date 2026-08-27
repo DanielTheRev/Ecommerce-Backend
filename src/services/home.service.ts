@@ -123,12 +123,18 @@ export class HomeService {
 		}
 	}
 
-	static async getHomeConfig(models: TenantModels): Promise<IHomeConfig> {
+	static async getHomeConfig(models: TenantModels, tenantSlug?: string): Promise<IHomeConfig> {
+		const cacheKey = 'home:full';
+		if (tenantSlug) {
+			const cached = (await import('./cache.service')).CacheService.get<IHomeConfig>(tenantSlug, cacheKey);
+			if (cached) return cached;
+		}
+
 		const productByBrand = await this.getProductsGroupByBrand(models);
 		// Fetch Hero Slides
-		const heroSlides = await HeroService.getActiveSlides(models);
-		const bentoConfig = await BentoService.getBentoConfig(models);
-		const ShopTheLooks = await ShopTheLookService.getActiveLooks(models);
+		const heroSlides = await HeroService.getActiveSlides(models, tenantSlug);
+		const bentoConfig = await BentoService.getBentoConfig(models, tenantSlug);
+		const ShopTheLooks = await ShopTheLookService.getActiveLooks(models, tenantSlug);
 
 		const config = await EcommerceService.getConfig(models);
 		const maxInstallments = config?.paymentGateways?.mercadopago?.maxInstallments ?? 1;
@@ -168,7 +174,7 @@ export class HomeService {
 			limit: 8
 		})).data as unknown as IProduct[];
 
-		return {
+		const result: IHomeConfig = {
 			heroSlides,
 			offers: dynamicOffers,
 			productByBrand,
@@ -177,5 +183,12 @@ export class HomeService {
 			news,
 			mostSales
 		};
+
+		if (tenantSlug) {
+			const { CacheService } = await import('./cache.service');
+			CacheService.set(tenantSlug, cacheKey, result, 10 * 60 * 1000);
+		}
+
+		return result;
 	}
 }

@@ -6,7 +6,7 @@ import { IBentoConfigCreateDTO } from '@/interfaces/bento.interface';
 export class BentoController {
   static async getBentoConfig(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const config = await BentoService.getBentoConfig(req.models!);
+      const config = await BentoService.getBentoConfig(req.models!, req.tenant?.slug);
       return res.status(200).json(config);
     } catch (error) {
       return next(error);

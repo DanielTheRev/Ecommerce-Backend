@@ -1,13 +1,13 @@
 import { AppError } from '@/errors/app.error';
 import { EcommercePaymentProviders, IEcommerceConfig, IEcommerceConfigPublic } from '@/interfaces/ecommerce.interface';
 import { TenantModels } from '@/config/modelRegistry';
-import { decrypt, encrypt } from '@/utils/encryption';
+import { decrypt, encrypt, safeDecryptString, safeEncryptString } from '@/utils/encryption';
 import { flattenObject } from '@/utils/object.util';
 import { MercadoPagoService } from './mercadopago.service';
 import { ProductService } from './product.service';
 
 export class EcommerceService {
-	private static readonly SENSITIVE_FIELDS_SELECT = '+paymentGateways.uala.credentials.userName +paymentGateways.uala.credentials.clientId +paymentGateways.uala.credentials.clientSecret +paymentGateways.mercadopago.accessToken +paymentGateways.mercadopago.webhookSecret +integrations.metaPixel.accessToken';
+	private static readonly SENSITIVE_FIELDS_SELECT = '+paymentGateways.uala.credentials.userName +paymentGateways.uala.credentials.clientId +paymentGateways.uala.credentials.clientSecret +paymentGateways.mercadopago.accessToken +paymentGateways.mercadopago.webhookSecret +integrations.metaPixel.accessToken +integrations.resend.apiKey +integrations.googleAuth.clientId';
 
 	private constructor() { }
 
@@ -51,10 +51,19 @@ export class EcommerceService {
 		}
 	};
 
-	static getPublicConfig = async (models: TenantModels): Promise<Partial<IEcommerceConfigPublic>> => {
+	static getPublicConfig = async (models: TenantModels, tenantSlug?: string): Promise<Partial<IEcommerceConfigPublic>> => {
 		try {
+			const cacheKey = 'config:public';
+			if (tenantSlug) {
+				const { CacheService } = await import('./cache.service');
+				const cached = CacheService.get<Partial<IEcommerceConfigPublic>>(tenantSlug, cacheKey);
+				if (cached) return cached;
+			}
+
 			// Los campos sensibles tienen select: false en el esquema, por lo que findOne no los trae por defecto.
-			const publicConfig = await models.EcommerceConfig.findOne({ key: 'global_config' }).lean() as unknown as IEcommerceConfig;
+			const publicConfig = await models.EcommerceConfig.findOne({ key: 'global_config' })
+				.select('+integrations.googleAuth.clientId')
+				.lean() as unknown as IEcommerceConfig;
 
 			if (!publicConfig)
 				throw new AppError(
@@ -65,11 +74,12 @@ export class EcommerceService {
 
 			// Desencriptar publicKey (ya que es guardada encriptada y sí es necesaria públicamente para inicializar MP)
 			if (publicConfig.paymentGateways?.mercadopago?.publicKey && publicConfig.paymentGateways.mercadopago.publicKey !== 'no asignado') {
-				try {
-					publicConfig.paymentGateways.mercadopago.publicKey = decrypt(JSON.parse(publicConfig.paymentGateways.mercadopago.publicKey));
-				} catch (e) {
-					console.error('Error al desencriptar publicKey de MercadoPago en configuración pública:', e);
-				}
+				publicConfig.paymentGateways.mercadopago.publicKey = safeDecryptString(publicConfig.paymentGateways.mercadopago.publicKey);
+			}
+
+			// Desencriptar googleAuth clientId si existe
+			if (publicConfig.integrations?.googleAuth?.clientId) {
+				publicConfig.integrations.googleAuth.clientId = safeDecryptString(publicConfig.integrations.googleAuth.clientId);
 			}
 
 			const data: IEcommerceConfigPublic = {
@@ -116,6 +126,7 @@ export class EcommerceService {
 				},
 				paymentGateways: {
 					mercadopago: {
+						active: publicConfig.paymentGateways?.mercadopago?.active ?? false,
 						publicKey: publicConfig.paymentGateways?.mercadopago?.publicKey || '',
 						maxInstallments: publicConfig.paymentGateways?.mercadopago?.maxInstallments || 1,
 						excludedPaymentMethods: publicConfig.paymentGateways?.mercadopago?.excludedPaymentMethods || [],
@@ -130,6 +141,11 @@ export class EcommerceService {
 					}
 				}
 			};
+
+			if (tenantSlug) {
+				const { CacheService } = await import('./cache.service');
+				CacheService.set(tenantSlug, cacheKey, data, 10 * 60 * 1000);
+			}
 
 			return data;
 		} catch (error) {
@@ -172,12 +188,21 @@ export class EcommerceService {
 		}
 	};
 
-	static updateConfig = async (models: TenantModels, data: IEcommerceConfig, userId?: string): Promise<{ config: IEcommerceConfig; shouldRecalculate: boolean }> => {
+	static updateConfig = async (models: TenantModels, data: IEcommerceConfig, userId?: string, tenantSlug?: string): Promise<{ config: IEcommerceConfig; shouldRecalculate: boolean }> => {
 		try {
 			// 1. Obtenemos la configuración antigua antes de actualizar
 			const oldConfig = await models.EcommerceConfig.findOne({ key: 'global_config' }).lean() as unknown as IEcommerceConfig;
 
 			this.encryptEcommerceConfig(data);
+
+			// Exclusividad de pasarela fintech (Solo 1 activa a la vez: Mercado Pago vs Ualá Bis)
+			if (data.paymentGateways?.mercadopago?.active === true) {
+				if (!data.paymentGateways.uala) data.paymentGateways.uala = {} as any;
+				data.paymentGateways.uala.active = false;
+			} else if (data.paymentGateways?.uala?.active === true) {
+				if (!data.paymentGateways.mercadopago) data.paymentGateways.mercadopago = {} as any;
+				data.paymentGateways.mercadopago.active = false;
+			}
 
 			if (userId) {
 				// @ts-ignore
@@ -202,6 +227,13 @@ export class EcommerceService {
 
 			const finalConfig = this.decryptEcommerceConfig(updatedConfig);
 
+			// Invalidar caché instantáneamente (Purge on Mutation)
+			if (tenantSlug) {
+				const { CacheService } = await import('./cache.service');
+				CacheService.invalidatePrefix(tenantSlug, 'config');
+				CacheService.invalidatePrefix(tenantSlug, 'home');
+			}
+
 			// 2. Detectamos si algo que afecta precios cambió — devolvemos flag al frontend
 			// El vendedor decide si quiere recalcular (via modal de confirmación)
 			let shouldRecalculate = false;
@@ -214,10 +246,11 @@ export class EcommerceService {
 				const pricingMethodChanged = oldConfig.pricingStrategy?.method !== finalConfig.pricingStrategy?.method;
 				const grossUpChanged = oldConfig.pricingStrategy?.transferGrossUp !== finalConfig.pricingStrategy?.transferGrossUp;
 				const absorbChanged = oldConfig.pricingStrategy?.absorbInstallments !== finalConfig.pricingStrategy?.absorbInstallments;
+				const card1PayDiscountChanged = oldConfig.pricingStrategy?.card1PayDiscount !== finalConfig.pricingStrategy?.card1PayDiscount;
 
 				shouldRecalculate = costCurrencyChanged || profitChanged || profit1PayChanged
 					|| profitInstallmentsChanged || ivaChanged || pricingMethodChanged
-					|| grossUpChanged || absorbChanged;
+					|| grossUpChanged || absorbChanged || card1PayDiscountChanged;
 			}
 
 			return { config: finalConfig, shouldRecalculate };
@@ -306,19 +339,25 @@ export class EcommerceService {
 		if (configObj.paymentGateways) {
 			if (configObj.paymentGateways.uala?.credentials) {
 				const creds = configObj.paymentGateways.uala.credentials;
-				if (creds.userName) creds.userName = JSON.stringify(encrypt(creds.userName));
-				if (creds.clientId) creds.clientId = JSON.stringify(encrypt(creds.clientId));
-				if (creds.clientSecret) creds.clientSecret = JSON.stringify(encrypt(creds.clientSecret));
+				if (creds.userName) creds.userName = safeEncryptString(creds.userName);
+				if (creds.clientId) creds.clientId = safeEncryptString(creds.clientId);
+				if (creds.clientSecret) creds.clientSecret = safeEncryptString(creds.clientSecret);
 			}
 			if (configObj.paymentGateways.mercadopago) {
 				const mp = configObj.paymentGateways.mercadopago;
-				if (mp.accessToken) mp.accessToken = JSON.stringify(encrypt(mp.accessToken));
-				if (mp.publicKey) mp.publicKey = JSON.stringify(encrypt(mp.publicKey));
-				if (mp.webhookSecret) mp.webhookSecret = JSON.stringify(encrypt(mp.webhookSecret));
+				if (mp.accessToken) mp.accessToken = safeEncryptString(mp.accessToken);
+				if (mp.publicKey) mp.publicKey = safeEncryptString(mp.publicKey);
+				if (mp.webhookSecret) mp.webhookSecret = safeEncryptString(mp.webhookSecret);
 			}
 		}
 		if (configObj.integrations?.metaPixel?.accessToken) {
-			configObj.integrations.metaPixel.accessToken = JSON.stringify(encrypt(configObj.integrations.metaPixel.accessToken));
+			configObj.integrations.metaPixel.accessToken = safeEncryptString(configObj.integrations.metaPixel.accessToken);
+		}
+		if (configObj.integrations?.resend?.apiKey) {
+			configObj.integrations.resend.apiKey = safeEncryptString(configObj.integrations.resend.apiKey);
+		}
+		if (configObj.integrations?.googleAuth?.clientId) {
+			configObj.integrations.googleAuth.clientId = safeEncryptString(configObj.integrations.googleAuth.clientId);
 		}
 	}
 
@@ -328,45 +367,34 @@ export class EcommerceService {
 			// Uala
 			if (configObj.paymentGateways.uala?.credentials) {
 				const creds = configObj.paymentGateways.uala.credentials;
-				if (creds.userName) creds.userName = decrypt(JSON.parse(creds.userName));
-				if (creds.clientId) creds.clientId = decrypt(JSON.parse(creds.clientId));
-				if (creds.clientSecret) creds.clientSecret = decrypt(JSON.parse(creds.clientSecret));
+				if (creds.userName) creds.userName = safeDecryptString(creds.userName);
+				if (creds.clientId) creds.clientId = safeDecryptString(creds.clientId);
+				if (creds.clientSecret) creds.clientSecret = safeDecryptString(creds.clientSecret);
 			}
 			// MercadoPago
 			if (configObj.paymentGateways.mercadopago) {
 				const mp = configObj.paymentGateways.mercadopago;
 				if (mp.accessToken && mp.accessToken !== 'no asignado') {
-					try {
-						mp.accessToken = decrypt(JSON.parse(mp.accessToken));
-					} catch (e) {
-						// Si falla es porque tal vez no estaba encriptado (legacy o default)
-					}
+					mp.accessToken = safeDecryptString(mp.accessToken);
 				}
 				if (mp.publicKey && mp.publicKey !== 'no asignado') {
-					try {
-						mp.publicKey = decrypt(JSON.parse(mp.publicKey));
-					} catch (e) {
-						console.error('Error al desencriptar publicKey de MercadoPago:', e);
-					}
+					mp.publicKey = safeDecryptString(mp.publicKey);
 				}
 				if (mp.webhookSecret && mp.webhookSecret !== 'no asignado') {
-					try {
-						mp.webhookSecret = decrypt(JSON.parse(mp.webhookSecret));
-					} catch (e) {
-						console.error('Error al desencriptar webhookSecret de MercadoPago:', e);
-					}
+					mp.webhookSecret = safeDecryptString(mp.webhookSecret);
 				}
 			}
 		}
 		if (configObj.integrations?.metaPixel?.accessToken) {
-			try {
-				configObj.integrations.metaPixel.accessToken = decrypt(JSON.parse(configObj.integrations.metaPixel.accessToken));
-			} catch (e) {
-				// No encriptado previamente
-			}
+			configObj.integrations.metaPixel.accessToken = safeDecryptString(configObj.integrations.metaPixel.accessToken);
+		}
+		if (configObj.integrations?.resend?.apiKey) {
+			configObj.integrations.resend.apiKey = safeDecryptString(configObj.integrations.resend.apiKey);
+		}
+		if (configObj.integrations?.googleAuth?.clientId) {
+			configObj.integrations.googleAuth.clientId = safeDecryptString(configObj.integrations.googleAuth.clientId);
 		}
 		return configObj;
-
 	}
 
 	static handleMercadoPagoOAuth = async (models: TenantModels, code: string): Promise<void> => {

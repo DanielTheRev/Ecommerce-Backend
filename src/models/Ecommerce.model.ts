@@ -48,6 +48,10 @@ const EcommerceSchema = new Schema(
 			cashDiscountPercentage: {
 				type: Number,
 				default: 0
+			},
+			card1PayDiscount: {
+				type: Boolean,
+				default: false
 			}
 		},
 		// Integraciones de Marketing, Analytics, Auth y Emails por Tenant
@@ -64,7 +68,7 @@ const EcommerceSchema = new Schema(
 			},
 			googleAuth: {
 				active: { type: Boolean, default: true },
-				clientId: { type: String, default: '' }
+				clientId: { type: String, default: '', select: false }
 			},
 			resend: {
 				active: { type: Boolean, default: false },
@@ -171,6 +175,113 @@ const EcommerceSchema = new Schema(
 		recommendationConfig: {
 			limit: { type: Number, default: 8, min: 1, max: 24 },
 			rules: { type: Schema.Types.Mixed, default: {} }
+		},
+		emailTemplates: {
+			branding: {
+				primaryColor: { type: String, default: '#111827' },
+				footerText: { type: String, default: '' },
+				showSocialLinks: { type: Boolean, default: true },
+				showStoreLogo: { type: Boolean, default: true }
+			},
+			orderConfirmation: {
+				enabled: { type: Boolean, default: true },
+				subject: { type: String, default: '¡Tu pedido #{{numero_orden}} está confirmado! 🎉' },
+				heading: { type: String, default: '¡Gracias por tu compra, {{cliente_nombre}}!' },
+				message: { type: String, default: 'Recibimos tu pedido correctamente y ya lo estamos preparando para vos.' },
+				extraInstructions: { type: String, default: '' },
+				buttonText: { type: String, default: 'Ver Estado del Pedido' },
+				fromName: { type: String, default: '' },
+				fromEmail: { type: String, default: '' },
+				replyTo: { type: String, default: '' }
+			},
+			bankTransfer: {
+				enabled: { type: Boolean, default: true },
+				subject: { type: String, default: 'Instrucciones de pago para tu pedido #{{numero_orden}} 💳' },
+				heading: { type: String, default: 'Completá tu pago por transferencia' },
+				message: { type: String, default: 'Hola {{cliente_nombre}}, tu pedido fue reservado. Realizá la transferencia bancaria con los siguientes datos y subí el comprobante para que podamos despacharlo.' },
+				extraInstructions: { type: String, default: 'Recordá que tenés 24hs para transferir y subir tu comprobante antes de que se libere el stock.' },
+				buttonText: { type: String, default: 'Subir Comprobante de Pago' },
+				fromName: { type: String, default: '' },
+				fromEmail: { type: String, default: '' },
+				replyTo: { type: String, default: '' }
+			},
+			cashPayment: {
+				enabled: { type: Boolean, default: true },
+				subject: { type: String, default: 'Tu pedido #{{numero_orden}} fue registrado con éxito 💵' },
+				heading: { type: String, default: '¡Pedido registrado, {{cliente_nombre}}!' },
+				message: { type: String, default: 'Tu pedido ya fue cargado en nuestro sistema para pago en efectivo.' },
+				extraInstructions: { type: String, default: 'Podés abonar al momento de retirar en el local o coordinar con nuestro equipo.' },
+				buttonText: { type: String, default: 'Ver Detalle del Pedido' },
+				fromName: { type: String, default: '' },
+				fromEmail: { type: String, default: '' },
+				replyTo: { type: String, default: '' }
+			},
+			paymentReceived: {
+				enabled: { type: Boolean, default: true },
+				subject: { type: String, default: '¡Pago acreditado! Tu pedido #{{numero_orden}} está listo para empaquetar 📦' },
+				heading: { type: String, default: '¡Pago acreditado con éxito!' },
+				message: { type: String, default: 'Hola {{cliente_nombre}}, verificamos tu pago de {{total_orden}}. Tu orden ya pasó a preparación.' },
+				extraInstructions: { type: String, default: '' },
+				buttonText: { type: String, default: 'Seguir Mi Pedido' },
+				fromName: { type: String, default: '' },
+				fromEmail: { type: String, default: '' },
+				replyTo: { type: String, default: '' }
+			},
+			paymentPending: {
+				enabled: { type: Boolean, default: true },
+				subject: { type: String, default: 'Estamos procesando tu pago del pedido #{{numero_orden}} ⏳' },
+				heading: { type: String, default: 'Tu pago está en revisión' },
+				message: { type: String, default: 'Hola {{cliente_nombre}}, la pasarela de pagos está validando la transacción. Te avisaremos apenas se confirme.' },
+				extraInstructions: { type: String, default: '' },
+				buttonText: { type: String, default: 'Ver Pedido' },
+				fromName: { type: String, default: '' },
+				fromEmail: { type: String, default: '' },
+				replyTo: { type: String, default: '' }
+			},
+			orderShipped: {
+				enabled: { type: Boolean, default: true },
+				subject: { type: String, default: '¡Tu pedido #{{numero_orden}} va en camino! 🚚' },
+				heading: { type: String, default: '¡Tu pedido ya fue despachado!' },
+				message: { type: String, default: 'Hola {{cliente_nombre}}, tu paquete ya está en manos del correo o logística para la entrega.' },
+				extraInstructions: { type: String, default: 'Podés hacer el seguimiento de tu envío en tiempo real con el código provisto.' },
+				buttonText: { type: String, default: 'Rastrear Envío' },
+				fromName: { type: String, default: '' },
+				fromEmail: { type: String, default: '' },
+				replyTo: { type: String, default: '' }
+			},
+			orderDelivered: {
+				enabled: { type: Boolean, default: true },
+				subject: { type: String, default: '¡Tu pedido #{{numero_orden}} fue entregado! 🛍️' },
+				heading: { type: String, default: '¡Esperamos que disfrutes tu compra!' },
+				message: { type: String, default: 'Hola {{cliente_nombre}}, tu pedido figura como entregado. ¡Gracias por confiar en {{nombre_tienda}}!' },
+				extraInstructions: { type: String, default: 'Si te gustó tu producto, nos encantaría que nos dejes tu reseña o nos etiquetes en redes.' },
+				buttonText: { type: String, default: 'Volver a la Tienda' },
+				fromName: { type: String, default: '' },
+				fromEmail: { type: String, default: '' },
+				replyTo: { type: String, default: '' }
+			},
+			abandonedCart: {
+				enabled: { type: Boolean, default: true },
+				subject: { type: String, default: '¿Olvidaste algo? Tu carrito te espera en {{nombre_tienda}} 🛒' },
+				heading: { type: String, default: '¡No dejes escapar tus favoritos!' },
+				message: { type: String, default: 'Hola {{cliente_nombre}}, guardamos los productos que dejaste en tu carrito para que no te quedes sin stock.' },
+				extraInstructions: { type: String, default: '' },
+				buttonText: { type: String, default: 'Recuperar Mi Carrito' },
+				fromName: { type: String, default: '' },
+				fromEmail: { type: String, default: '' },
+				replyTo: { type: String, default: '' }
+			},
+			backInStock: {
+				enabled: { type: Boolean, default: true },
+				subject: { type: String, default: '¡Buenas noticias! {{producto_nombre}} volvió a tener stock ✨' },
+				heading: { type: String, default: '¡El producto que querías está de vuelta!' },
+				message: { type: String, default: 'Hola {{cliente_nombre}}, te avisamos que {{producto_nombre}} ya tiene stock disponible nuevamente.' },
+				extraInstructions: { type: String, default: '¡Apurate antes de que se agoten las unidades!' },
+				buttonText: { type: String, default: 'Comprar Ahora' },
+				fromName: { type: String, default: '' },
+				fromEmail: { type: String, default: '' },
+				replyTo: { type: String, default: '' }
+			}
 		},
 		// Metadata para el CMS
 		lastModifiedBy: { type: Schema.Types.ObjectId, ref: 'User', required: false }

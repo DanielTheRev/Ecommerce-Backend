@@ -1869,8 +1869,8 @@ export class OrderService {
 			const order = await models.Order.findById(orderId);
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
 
-			// Subir archivo a Cloudinary en la carpeta vura/receipts
-			const uploadResult = await ImageService.UploadImage(file, `receipt-${order.orderNumber || orderId}`, 'vura/receipts');
+			// Subir archivo a Cloudinary en la carpeta receipts
+			const uploadResult = await ImageService.UploadImage(file, `receipt-${order.orderNumber || orderId}`, 'receipts');
 
 			// Actualizar datos de comprobante
 			order.paymentInfo.receiptUrl = uploadResult.secure_url;

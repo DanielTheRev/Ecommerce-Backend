@@ -36,7 +36,7 @@ export class NewsletterService {
 			await user.save();
 		}
 
-		return { message: '¡Suscripción exitosa! Bienvenido al Club Vura.', subscriber, user };
+		return { message: '¡Suscripción exitosa! Bienvenido al club de beneficios.', subscriber, user };
 	}
 
 	static async getAllSubscribers(models: TenantModels) {

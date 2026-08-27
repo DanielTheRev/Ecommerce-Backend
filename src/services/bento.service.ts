@@ -8,8 +8,15 @@ export class BentoService {
   /**
    * Obtiene la configuración de Bento
    */
-  static async getBentoConfig(models: TenantModels): Promise<IBentoConfig | null> {
+  static async getBentoConfig(models: TenantModels, tenantSlug?: string): Promise<IBentoConfig | null> {
     try {
+      const cacheKey = 'bento:config';
+      if (tenantSlug) {
+        const { CacheService } = await import('./cache.service');
+        const cached = CacheService.get<IBentoConfig>(tenantSlug, cacheKey);
+        if (cached) return cached;
+      }
+
       let config = await models.BentoConfig.findOne().lean() as unknown as IBentoConfig | null;
 
       if (!config) {
@@ -43,6 +50,11 @@ export class BentoService {
           items.push({ ...config.blocks.footerBlock, gridSpan: 'full-width', order: 4 });
         }
         config.items = items;
+      }
+
+      if (tenantSlug && config) {
+        const { CacheService } = await import('./cache.service');
+        CacheService.set(tenantSlug, cacheKey, config, 10 * 60 * 1000);
       }
 
       return config;
@@ -206,12 +218,19 @@ export class BentoService {
       items: itemsFromBlocks
     };
 
+    let result: any;
     if (currentConfig) {
-      const updatedConfig = await models.BentoConfig.findByIdAndUpdate(currentConfig._id, configPayload, { new: true, runValidators: true }).lean();
-      return updatedConfig;
+      result = await models.BentoConfig.findByIdAndUpdate(currentConfig._id, configPayload, { new: true, runValidators: true }).lean();
     } else {
-      const newConfig = await models.BentoConfig.create(configPayload);
-      return newConfig;
+      result = await models.BentoConfig.create(configPayload);
     }
+
+    if (tenantSlug) {
+      const { CacheService } = await import('./cache.service');
+      CacheService.invalidatePrefix(tenantSlug, 'bento');
+      CacheService.invalidatePrefix(tenantSlug, 'home');
+    }
+
+    return result;
   }
 }

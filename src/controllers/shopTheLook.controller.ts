@@ -8,7 +8,7 @@ import { IShopTheLook } from '@/interfaces/shopTheLook.interface';
 export class ShopTheLookController {
 	static async getActiveLooks(req: AuthRequest, res: Response, next: NextFunction) {
 		try {
-			const looks = await ShopTheLookService.getActiveLooks(req.models!);
+			const looks = await ShopTheLookService.getActiveLooks(req.models!, req.tenant?.slug);
 			return res.status(200).json(looks);
 		} catch (error) {
 			return next(error);
@@ -65,7 +65,7 @@ export class ShopTheLookController {
 				looks: parsedLooks
 			};
 
-			const newLook = await ShopTheLookService.createLook(req.models!, data);
+			const newLook = await ShopTheLookService.createLook(req.models!, data, tenantSlug);
 			return res.status(201).json(newLook);
 		} catch (error) {
 			return next(error);
@@ -112,7 +112,7 @@ export class ShopTheLookController {
 				updateData.looks = parsedLooks;
 			}
 
-			const updatedLook = await ShopTheLookService.updateLook(req.models!, id, updateData);
+			const updatedLook = await ShopTheLookService.updateLook(req.models!, id, updateData, tenantSlug);
 
 			return res.status(200).json(updatedLook);
 		} catch (error) {
@@ -124,7 +124,7 @@ export class ShopTheLookController {
 		try {
 			const { id } = req.params;
 
-			await ShopTheLookService.deleteLook(req.models!, id);
+			await ShopTheLookService.deleteLook(req.models!, id, req.tenant?.slug);
 
 			return res.status(200).json({ message: 'Look eliminado correctamente' });
 		} catch (error) {

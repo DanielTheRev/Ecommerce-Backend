@@ -69,27 +69,65 @@ class ConnectionManager {
 		return this.baseConnection.useDb(dbName, { useCache: true });
 	}
 
+	private tenantSlugCache = new Map<string, ITenant>();
+	private tenantDomainCache = new Map<string, ITenant>();
+
 	async getTenantBySlug(slug: string): Promise<ITenant | null> {
+		const cleanSlug = (slug || '').trim().toLowerCase();
+		if (!cleanSlug) return null;
+
+		const cached = this.tenantSlugCache.get(cleanSlug);
+		if (cached) return cached;
+
 		const masterDb = this.getMasterDb();
 		const TenantModel = masterDb.model<ITenant>('Tenant');
-		const cleanSlug = (slug || '').trim().toLowerCase();
-		return TenantModel.findOne({
+		const tenant = await TenantModel.findOne({
 			$or: [
 				{ slug: cleanSlug },
 				{ slug: slug },
 				{ slug: { $regex: new RegExp(`^${cleanSlug}$`, 'i') } }
 			],
 			isActive: true
-		}).lean() as Promise<ITenant | null>;
+		}).lean() as ITenant | null;
+
+		if (tenant) {
+			this.tenantSlugCache.set(cleanSlug, tenant);
+		}
+		return tenant;
 	}
 
 	/**
 	 * Busca un tenant por dominio (para resolución por subdominio/dominio).
 	 */
 	async getTenantByDomain(domain: string): Promise<ITenant | null> {
+		const cleanDomain = (domain || '').trim().toLowerCase();
+		if (!cleanDomain) return null;
+
+		const cached = this.tenantDomainCache.get(cleanDomain);
+		if (cached) return cached;
+
 		const masterDb = this.getMasterDb();
 		const TenantModel = masterDb.model<ITenant>('Tenant');
-		return TenantModel.findOne({ domain, isActive: true }).lean() as Promise<ITenant | null>;
+		const tenant = await TenantModel.findOne({ domain: cleanDomain, isActive: true }).lean() as ITenant | null;
+
+		if (tenant) {
+			this.tenantDomainCache.set(cleanDomain, tenant);
+		}
+		return tenant;
+	}
+
+	/**
+	 * Invalida el caché de tenants si se crea o modifica uno.
+	 */
+	invalidateTenantCache(slugOrDomain?: string): void {
+		if (slugOrDomain) {
+			const clean = slugOrDomain.trim().toLowerCase();
+			this.tenantSlugCache.delete(clean);
+			this.tenantDomainCache.delete(clean);
+		} else {
+			this.tenantSlugCache.clear();
+			this.tenantDomainCache.clear();
+		}
 	}
 
 	/**

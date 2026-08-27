@@ -25,6 +25,7 @@ router.post('/', EcommerceConfigController.createConfig);
 router.put('/', EcommerceConfigController.updateConfig);
 router.patch('/logo', upload.single('logo'), EcommerceConfigController.updateLogo);
 router.post('/recalculate-prices', EcommerceConfigController.triggerRecalculation);
+router.post('/test-email', EcommerceConfigController.sendTestEmail);
 router.delete('/', EcommerceConfigController.deleteConfig);
 
 export default router;

@@ -25,10 +25,51 @@ export class ProductService {
 	};
 
 	public static readonly CATEGORY_GROUPS: Record<string, string[]> = {
-		abrigos: ['Abrigos', 'Camperas', 'Poleras', 'Buzos', 'Sweaters', 'Chaquetas', 'Tapados', 'Parkas', 'Chalecos', 'Abrigo', 'Campera', 'Buzo', 'Polera', 'Sweater'],
-		pantalones: ['Pantalones', 'Denim', 'Jeans', 'Baggies', 'Bermudas', 'Shorts', 'Pantalón', 'Pantalon', 'Joggers', 'Cargo', 'Jean', 'Short', 'Baggy'],
-		remeras: ['Remeras', 'Remera', 'T-Shirts', 'T-Shirt', 'Tops', 'Top', 'Musculosas', 'Musculosa'],
-		calzado: ['Calzado', 'Zapatillas', 'Zapatos', 'Botas', 'Mule', 'Ojotas', 'Sandalias', 'Zapatilla', 'Zapato', 'Bota']
+		abrigos: [
+			'Abrigos', 'Abrigo',
+			'Camperas', 'Campera', 'Camperones', 'Camperón', 'Camperon',
+			'Poleras', 'Polera', 'Polerones', 'Polerón', 'Poleron', 'Media Polera', 'Medias Poleras',
+			'Buzos', 'Buzo', 'Hoodies', 'Hoodie',
+			'Sweaters', 'Sweater', 'Suéteres', 'Sueteres', 'Suéter', 'Sueter',
+			'Cardigans', 'Cardigan', 'Cárdigans', 'Cárdigan',
+			'Chaquetas', 'Chaqueta', 'Tapados', 'Tapado', 'Parkas', 'Parka',
+			'Chalecos', 'Chaleco', 'Sacos', 'Saco', 'Blazers', 'Blazer', 'Trench', 'Anoraks', 'Anorak', 'Camisaco', 'Camisacos'
+		],
+		sweaters: [
+			'Sweaters', 'Sweater', 'Suéteres', 'Sueteres', 'Suéter', 'Sueter',
+			'Cardigans', 'Cardigan', 'Cárdigans', 'Cárdigan'
+		],
+		sueteres: [
+			'Sweaters', 'Sweater', 'Suéteres', 'Sueteres', 'Suéter', 'Sueter',
+			'Cardigans', 'Cardigan', 'Cárdigans', 'Cárdigan'
+		],
+		sueter: [
+			'Sweaters', 'Sweater', 'Suéteres', 'Sueteres', 'Suéter', 'Sueter',
+			'Cardigans', 'Cardigan', 'Cárdigans', 'Cárdigan'
+		],
+		sweater: [
+			'Sweaters', 'Sweater', 'Suéteres', 'Sueteres', 'Suéter', 'Sueter',
+			'Cardigans', 'Cardigan', 'Cárdigans', 'Cárdigan'
+		],
+		buzos: ['Buzos', 'Buzo', 'Hoodies', 'Hoodie'],
+		poleras: ['Poleras', 'Polera', 'Polerones', 'Polerón', 'Poleron', 'Media Polera', 'Medias Poleras'],
+		camperas: ['Camperas', 'Campera', 'Camperones', 'Camperón', 'Camperon', 'Chaquetas', 'Chaqueta', 'Parkas', 'Parka', 'Tapados', 'Tapado', 'Chalecos', 'Chaleco', 'Anoraks', 'Anorak', 'Camisaco', 'Camisacos'],
+		pantalones: [
+			'Pantalones', 'Pantalón', 'Pantalon',
+			'Denim', 'Jeans', 'Jean',
+			'Baggies', 'Baggy', 'Bermudas', 'Bermuda', 'Shorts', 'Short',
+			'Joggers', 'Jogger', 'Cargo', 'Cargos', 'Calzas', 'Calza', 'Palazzo', 'Palazzos', 'Slacks'
+		],
+		remeras: [
+			'Remeras', 'Remera', 'T-Shirts', 'T-Shirt', 'Tshirts', 'Tshirt',
+			'Tops', 'Top', 'Crop Tops', 'Crop Top', 'Musculosas', 'Musculosa', 'Chombas', 'Chomba', 'Camisas', 'Camisa', 'Blusas', 'Blusa', 'Camisolas', 'Camisola'
+		],
+		camisas: ['Camisas', 'Camisa', 'Blusas', 'Blusa', 'Camisolas', 'Camisola', 'Chombas', 'Chomba'],
+		calzado: [
+			'Calzado', 'Calzados', 'Zapatillas', 'Zapatilla', 'Sneakers', 'Sneaker',
+			'Zapatos', 'Zapato', 'Botas', 'Bota', 'Botinetas', 'Botineta', 'Borseguies', 'Borcego', 'Borsegos',
+			'Mule', 'Mules', 'Ojotas', 'Ojota', 'Sandalias', 'Sandalia', 'Pantuflas', 'Pantufla'
+		]
 	};
 
 	public static buildCategoryQuery(categoryParam: string): any {
@@ -36,16 +77,20 @@ export class ProductService {
 		const expandedCategories = new Set<string>();
 
 		for (const cat of rawCategories) {
-			const lowerKey = cat.toLowerCase();
-			if (this.CATEGORY_GROUPS[lowerKey]) {
-				this.CATEGORY_GROUPS[lowerKey].forEach(c => expandedCategories.add(c));
+			const normalizedKey = cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+			const directKey = cat.toLowerCase();
+
+			if (this.CATEGORY_GROUPS[normalizedKey]) {
+				this.CATEGORY_GROUPS[normalizedKey].forEach(c => expandedCategories.add(c));
+			} else if (this.CATEGORY_GROUPS[directKey]) {
+				this.CATEGORY_GROUPS[directKey].forEach(c => expandedCategories.add(c));
 			} else {
 				expandedCategories.add(cat);
 			}
 		}
 
 		const catList = Array.from(expandedCategories);
-		const regexes = catList.map(c => new RegExp(`^${c}$`, 'i'));
+		const regexes = catList.map(c => new RegExp(`^${c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'));
 
 		if (regexes.length === 1) {
 			return regexes[0];
@@ -283,7 +328,11 @@ export class ProductService {
 			const Model = this.getModel(models, productType);
 			const query: any = { isActive: { $ne: false } };
 			if (category) {
-				query.category = category;
+				const catQuery = this.buildCategoryQuery(category);
+				query.$or = [
+					{ category: catQuery },
+					{ clothingType: catQuery }
+				];
 			}
 			const result = await paginate(Model, query, {
 				page,
@@ -691,13 +740,33 @@ export class ProductService {
 				query.isFeatured = filters.featured;
 			}
 
+			const andConditions: any[] = [];
+
 			if (filters.q) {
 				const qRegex = new RegExp(filters.q.trim(), 'i');
-				query.$or = [
-					{ brand: qRegex },
-					{ model: qRegex },
-					{ category: qRegex }
-				];
+				andConditions.push({
+					$or: [
+						{ brand: qRegex },
+						{ model: qRegex },
+						{ category: qRegex },
+						{ clothingType: qRegex },
+						{ tags: qRegex }
+					]
+				});
+			}
+
+			if (filters.category) {
+				const catQuery = ProductService.buildCategoryQuery(filters.category);
+				andConditions.push({
+					$or: [
+						{ category: catQuery },
+						{ clothingType: catQuery }
+					]
+				});
+			}
+
+			if (andConditions.length > 0) {
+				query.$and = andConditions;
 			}
 
 			if (filters.minPrice || filters.maxPrice) {
@@ -708,10 +777,6 @@ export class ProductService {
 
 			if (filters.minRating) {
 				query.rating = { $gte: filters.minRating };
-			}
-
-			if (filters.category) {
-				query.category = ProductService.buildCategoryQuery(filters.category);
 			}
 
 			if (filters.brand) {
@@ -1180,7 +1245,11 @@ export class ProductService {
 
 					if (match) {
 						v._id = match._id;
-						v.sku = match.sku;
+						if (!v.sku || typeof v.sku !== 'string' || v.sku.trim() === '') {
+							v.sku = match.sku;
+						} else {
+							v.sku = v.sku.trim();
+						}
 					}
 
 					return v;

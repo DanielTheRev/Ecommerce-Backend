@@ -62,7 +62,7 @@ export class EcommerceConfigController {
 	// GET /api/Ecommerce/config/public - Obtener la configuración pública
 	static async getPublicConfig(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
-			const configObj = await EcommerceService.getPublicConfig(req.models!);
+			const configObj = await EcommerceService.getPublicConfig(req.models!, req.tenant?.slug);
 			res.status(200).json(configObj);
 		} catch (error) {
 			next(error);
@@ -103,7 +103,7 @@ export class EcommerceConfigController {
 			const data = req.body;
 			const userId = req.user ? (req.user._id as string).toString() : undefined;
 
-			const { config: updatedConfig, shouldRecalculate } = await EcommerceService.updateConfig(req.models!, data, userId);
+			const { config: updatedConfig, shouldRecalculate } = await EcommerceService.updateConfig(req.models!, data, userId, req.tenant?.slug);
 
 			res.status(200).json({
 				success: true,
@@ -177,6 +177,26 @@ export class EcommerceConfigController {
 				success: true,
 				message: 'Configuración de recomendaciones actualizada exitosamente',
 				data
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// POST /api/Ecommerce/config/test-email - Enviar email de prueba
+	static async sendTestEmail(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { templateKey, recipientEmail } = req.body;
+			if (!recipientEmail) {
+				throw new AppError('Recipient email is required', 'El email destinatario es requerido', 400);
+			}
+
+			const { ResendService } = await import('@/services/resend.service');
+			await ResendService.sendTestEmail(templateKey || 'orderConfirmation', recipientEmail, req.models!);
+
+			res.status(200).json({
+				success: true,
+				message: `Email de prueba enviado exitosamente a ${recipientEmail}`
 			});
 		} catch (error) {
 			next(error);

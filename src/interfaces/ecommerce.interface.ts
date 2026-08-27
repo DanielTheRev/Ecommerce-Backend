@@ -24,6 +24,38 @@ export interface IResendConfig {
 	fromName?: string;
 }
 
+export interface IEmailTemplateItem {
+	enabled: boolean;
+	subject: string;
+	heading?: string;
+	message: string;
+	extraInstructions?: string;
+	buttonText?: string;
+	fromName?: string;
+	fromEmail?: string;
+	replyTo?: string;
+}
+
+export interface IEmailBrandingConfig {
+	primaryColor?: string;
+	footerText?: string;
+	showSocialLinks?: boolean;
+	showStoreLogo?: boolean;
+}
+
+export interface IEmailTemplatesConfig {
+	branding?: IEmailBrandingConfig;
+	orderConfirmation?: IEmailTemplateItem;
+	bankTransfer?: IEmailTemplateItem;
+	cashPayment?: IEmailTemplateItem;
+	paymentReceived?: IEmailTemplateItem;
+	paymentPending?: IEmailTemplateItem;
+	orderShipped?: IEmailTemplateItem;
+	orderDelivered?: IEmailTemplateItem;
+	abandonedCart?: IEmailTemplateItem;
+	backInStock?: IEmailTemplateItem;
+}
+
 export interface IEcommerceIntegrations {
 	metaPixel?: IMetaPixelConfig;
 	googleAnalytics?: IGoogleAnalyticsConfig;
@@ -44,6 +76,8 @@ export interface IPricingStrategy {
 	transferDiscountPercentage?: number;
 	/** Porcentaje de descuento por pago en Efectivo (ej. 10 para 10%) */
 	cashDiscountPercentage?: number;
+	/** Si true, el cliente que paga en 1 pago con tarjeta o débito paga el precio de oferta/transferencia. Si false (recomendado), paga el precio de lista. */
+	card1PayDiscount?: boolean;
 }
 
 export interface IRecommendationConfig {
@@ -99,6 +133,7 @@ export interface IEcommerceConfig {
 	};
 	workingHours?: IWorkingHoursConfig;
 	recommendationConfig?: IRecommendationConfig;
+	emailTemplates?: IEmailTemplatesConfig;
 }
 
 export interface IEcommercePaymentGateway {
@@ -206,6 +241,7 @@ export interface IEcommerceConfigPublic {
 	};
 	paymentGateways: {
 		mercadopago: {
+			active: boolean;
 			publicKey: string;
 			maxInstallments: number;
 			excludedPaymentMethods: string[];

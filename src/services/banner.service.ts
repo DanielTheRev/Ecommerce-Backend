@@ -22,6 +22,13 @@ export class BannerService {
       delete bannerPayload.imageFile;
 
       const banner = await models.Banner.create(bannerPayload);
+
+      if (tenantSlug) {
+        const { CacheService } = await import('./cache.service');
+        CacheService.invalidatePrefix(tenantSlug, 'banners');
+        CacheService.invalidatePrefix(tenantSlug, 'home');
+      }
+
       return banner;
     } catch (error: any) {
       console.log(error);
@@ -40,9 +47,23 @@ export class BannerService {
     }
   }
 
-  static async getActiveBanners(models: TenantModels): Promise<IBanner[]> {
+  static async getActiveBanners(models: TenantModels, tenantSlug?: string): Promise<IBanner[]> {
     try {
-      return await models.Banner.find({ isActive: true }).sort({ order: 1 });
+      const cacheKey = 'banners:active';
+      if (tenantSlug) {
+        const { CacheService } = await import('./cache.service');
+        const cached = CacheService.get<IBanner[]>(tenantSlug, cacheKey);
+        if (cached) return cached;
+      }
+
+      const banners = await models.Banner.find({ isActive: true }).sort({ order: 1 });
+
+      if (tenantSlug) {
+        const { CacheService } = await import('./cache.service');
+        CacheService.set(tenantSlug, cacheKey, banners, 10 * 60 * 1000);
+      }
+
+      return banners;
     } catch (error) {
       throw new AppError('Error fetching active banners', 'Error al obtener banners activos', 500);
     }
@@ -76,11 +97,16 @@ export class BannerService {
         bannerPayload.image = img_uploaded.secure_url;
       }
 
-      delete bannerPayload.imageFile;
-
       const fieldsToSelect = Object.keys(bannerPayload).join(' ');
       const banner = await models.Banner.findByIdAndUpdate(id, bannerPayload, { new: true, runValidators: true, select: fieldsToSelect }).lean();
       if (!banner) throw new AppError('Banner not found', 'Banner no encontrado', 404);
+
+      if (tenantSlug) {
+        const { CacheService } = await import('./cache.service');
+        CacheService.invalidatePrefix(tenantSlug, 'banners');
+        CacheService.invalidatePrefix(tenantSlug, 'home');
+      }
+
       return banner;
     } catch (error) {
       if (error instanceof AppError) throw error;
@@ -88,10 +114,17 @@ export class BannerService {
     }
   }
 
-  static async deleteBanner(models: TenantModels, id: string): Promise<IBanner> {
+  static async deleteBanner(models: TenantModels, id: string, tenantSlug?: string): Promise<IBanner> {
     try {
       const banner = await models.Banner.findByIdAndDelete(id);
       if (!banner) throw new AppError('Banner not found', 'Banner no encontrado', 404);
+
+      if (tenantSlug) {
+        const { CacheService } = await import('./cache.service');
+        CacheService.invalidatePrefix(tenantSlug, 'banners');
+        CacheService.invalidatePrefix(tenantSlug, 'home');
+      }
+
       return banner;
     } catch (error) {
       if (error instanceof AppError) throw error;

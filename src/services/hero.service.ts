@@ -40,9 +40,11 @@ export class HeroService {
       slidePayload[img.field] = uploadResults[index];
     });
 
-    delete slidePayload.imageFiles;
-
-    return await models.HeroSlide.create(slidePayload);
+    const created = await models.HeroSlide.create(slidePayload);
+    const { CacheService } = await import('./cache.service');
+    CacheService.invalidatePrefix(tenantSlug, 'hero');
+    CacheService.invalidatePrefix(tenantSlug, 'home');
+    return created;
   }
 
   static async getById(models: TenantModels, id: string): Promise<IHeroSlide> {
@@ -66,9 +68,22 @@ export class HeroService {
     }
   }
 
-  static async getActiveSlides(models: TenantModels) {
+  static async getActiveSlides(models: TenantModels, tenantSlug?: string) {
     try {
+      const cacheKey = 'hero:active';
+      if (tenantSlug) {
+        const { CacheService } = await import('./cache.service');
+        const cached = CacheService.get<IHeroSlide[]>(tenantSlug, cacheKey);
+        if (cached) return cached;
+      }
+
       const slides = await models.HeroSlide.find({ isActive: true }) as unknown as IHeroSlide[];
+
+      if (tenantSlug) {
+        const { CacheService } = await import('./cache.service');
+        CacheService.set(tenantSlug, cacheKey, slides, 10 * 60 * 1000);
+      }
+
       return slides;
     } catch (error) {
       throw new AppError('Error while getting slides', 'Error al obtener slides', 500);
@@ -124,13 +139,20 @@ export class HeroService {
       const fieldsToSelect = Object.keys(slidePayload).join(' ');
       const slide = await models.HeroSlide.findByIdAndUpdate(id, slidePayload, { new: true, runValidators: true, select: fieldsToSelect }).lean() as unknown as IHeroSlide;
       if (!slide) throw new AppError('slide not found', 'slide no encontrado', 404);
+
+      if (tenantSlug) {
+        const { CacheService } = await import('./cache.service');
+        CacheService.invalidatePrefix(tenantSlug, 'hero');
+        CacheService.invalidatePrefix(tenantSlug, 'home');
+      }
+
       return slide;
     } catch (error) {
       throw error;
     }
   }
 
-  static async delete(models: TenantModels, id: string) {
+  static async delete(models: TenantModels, id: string, tenantSlug?: string) {
     try {
       const slide = await models.HeroSlide.findById(id).lean() as unknown as IHeroSlide;
       if (!slide) throw new AppError('slide not found', 'slide no encontrado', 404);
@@ -144,6 +166,13 @@ export class HeroService {
       }
 
       await models.HeroSlide.findByIdAndDelete(id);
+
+      if (tenantSlug) {
+        const { CacheService } = await import('./cache.service');
+        CacheService.invalidatePrefix(tenantSlug, 'hero');
+        CacheService.invalidatePrefix(tenantSlug, 'home');
+      }
+
       return slide;
     } catch (error) {
       if (error instanceof AppError) throw error;
