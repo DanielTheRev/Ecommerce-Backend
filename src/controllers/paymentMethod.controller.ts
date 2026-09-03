@@ -54,19 +54,46 @@ export class PaymentMethodController {
 			
 			const gateWays = {
 				mercadopago: {
-					active: config.paymentGateways.mercadopago.active,
-					publicKey: config.paymentGateways.mercadopago.active ? config.paymentGateways.mercadopago.publicKey : undefined,
-					excludedPaymentMethods: config.paymentGateways.mercadopago.excludedPaymentMethods || [],
-					excludedPaymentTypes: config.paymentGateways.mercadopago.excludedPaymentTypes || []
+					active: config.paymentGateways.mercadopago?.active ?? false,
+					publicKey: config.paymentGateways.mercadopago?.active ? config.paymentGateways.mercadopago.publicKey : undefined,
+					checkoutMode: config.paymentGateways.mercadopago?.checkoutMode || 'transparent',
+					environment: config.paymentGateways.mercadopago?.environment || 'production',
+					maxInstallments: config.paymentGateways.mercadopago?.maxInstallments || 12,
+					absorbInstallments: config.pricingStrategy?.absorbInstallments ?? true,
+					maxInstallmentsToAbsorb: config.pricingStrategy?.maxInstallmentsToAbsorb || 3,
+					excludedPaymentMethods: config.paymentGateways.mercadopago?.excludedPaymentMethods || [],
+					excludedPaymentTypes: config.paymentGateways.mercadopago?.excludedPaymentTypes || []
+				},
+				getnet: {
+					active: config.paymentGateways.getnet?.active ?? false,
+					clientId: config.paymentGateways.getnet?.active ? config.paymentGateways.getnet.clientId : undefined,
+					environment: config.paymentGateways.getnet?.environment || 'sandbox',
+					checkoutMode: config.paymentGateways.getnet?.checkoutMode || 'redirect',
+					maxInstallments: config.paymentGateways.getnet?.maxInstallments || 6
 				},
 				uala: {
-					active: config.paymentGateways.uala.active
+					active: config.paymentGateways.uala?.active ?? false,
+					clientId: config.paymentGateways.uala?.active ? config.paymentGateways.uala.credentials?.clientId : undefined,
+					userName: config.paymentGateways.uala?.active ? config.paymentGateways.uala.credentials?.userName : undefined
+				},
+				transfer: {
+					active: config.paymentGateways.transfer?.active ?? true,
+					alias: config.paymentGateways.transfer?.alias || '',
+					cbuCvu: config.paymentGateways.transfer?.cbuCvu || '',
+					bankName: config.paymentGateways.transfer?.bankName || '',
+					titular: config.paymentGateways.transfer?.titular || ''
 				}
 			};
 
 			return res.json({
 				manualMethods,
-				gateWays
+				gateWays,
+				pricingStrategy: {
+					absorbInstallments: config.pricingStrategy?.absorbInstallments ?? true,
+					maxInstallmentsToAbsorb: config.pricingStrategy?.maxInstallmentsToAbsorb || 3,
+					transferDiscountPercentage: config.pricingStrategy?.transferDiscountPercentage || 0,
+					cashDiscountPercentage: config.pricingStrategy?.cashDiscountPercentage || 0
+				}
 			});
 		} catch (error) {
 			return next(error);

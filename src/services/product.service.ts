@@ -1,7 +1,7 @@
 import { TenantModels } from '@/config/modelRegistry';
 import { AppError } from '@/errors/app.error';
 import { EcommercePaymentProviders } from '@/interfaces/ecommerce.interface';
-import { ClothingGender, IProduct, IProductCreateDTO, IProductUpdateDTO, ISizeGuide, ProductType } from '@/interfaces/product.interface';
+import { ClothingGender, ClothingSizeType, IProduct, IProductCreateDTO, IProductUpdateDTO, ISizeGuide, ProductType } from '@/interfaces/product.interface';
 import { paginate } from '@/utils/pagination.util';
 import createDOMPurify from 'dompurify';
 import { JSDOM } from 'jsdom';
@@ -96,6 +96,256 @@ export class ProductService {
 			return regexes[0];
 		}
 		return { $in: regexes };
+	}
+
+	// ============ VISUAL MERCHANDISING / CADENCE INTERLEAVING ============
+
+	/**
+	 * Clasifica automáticamente la categoría de un producto en una zona corporal macro para indumentaria,
+	 * o retorna la categoría directa normalizada para otros rubros (Tech, Beauty, General).
+	 */
+	public static getApparelZone(category?: string, productType?: string): string {
+		if (!category) return 'other';
+		const normalized = category.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+		// Top / Parte Superior (Plano medio/torso)
+		const topKeywords = [
+			'remera', 'remeras', 't-shirt', 't-shirts', 'tshirt', 'tshirts',
+			'top', 'tops', 'crop top', 'crop tops', 'musculosa', 'musculosas',
+			'camisa', 'camisas', 'blusa', 'blusas', 'camisola', 'camisolas',
+			'chomba', 'chombas', 'body', 'bodys'
+		];
+		if (topKeywords.some(k => normalized === k || normalized.includes(k))) {
+			return 'top';
+		}
+
+		// Bottom / Parte Inferior (Plano entero / piernas)
+		const bottomKeywords = [
+			'pantalon', 'pantalones', 'jean', 'jeans', 'denim',
+			'short', 'shorts', 'bermuda', 'bermudas', 'baggy', 'baggies',
+			'jogger', 'joggers', 'cargo', 'cargos', 'calza', 'calzas',
+			'palazzo', 'palazzos', 'slack', 'slacks', 'falda', 'faldas',
+			'pollera', 'polleras', 'minifalda', 'minifaldas'
+		];
+		if (bottomKeywords.some(k => normalized === k || normalized.includes(k))) {
+			return 'bottom';
+		}
+
+		// Outerwear / Abrigo / Capas intermedias
+		const outerwearKeywords = [
+			'abrigo', 'abrigos', 'campera', 'camperas', 'camperon', 'camperones',
+			'sweater', 'sweaters', 'sueter', 'sueteres', 'cardigan', 'cardigans',
+			'buzo', 'buzos', 'hoodie', 'hoodies', 'polera', 'poleras', 'poleron', 'polerones',
+			'chaqueta', 'chaquetas', 'tapado', 'tapados', 'parka', 'parkas',
+			'chaleco', 'chalecos', 'saco', 'sacos', 'blazer', 'blazers',
+			'trench', 'anorak', 'anoraks', 'camisaco', 'camisacos'
+		];
+		if (outerwearKeywords.some(k => normalized === k || normalized.includes(k))) {
+			return 'outerwear';
+		}
+
+		// Full Body / Enteritos / Vestidos
+		const fullBodyKeywords = [
+			'vestido', 'vestidos', 'mono', 'monos', 'enterito', 'enteritos',
+			'jumpsuit', 'jumpsuits', 'traje', 'trajes'
+		];
+		if (fullBodyKeywords.some(k => normalized === k || normalized.includes(k))) {
+			return 'full_body';
+		}
+
+		// Calzado / Accesorios
+		const otherApparelKeywords = [
+			'calzado', 'calzados', 'zapatilla', 'zapatillas', 'sneaker', 'sneakers',
+			'zapato', 'zapatos', 'bota', 'botas', 'sandalia', 'sandalias', 'accesorio', 'accesorios'
+		];
+		if (otherApparelKeywords.some(k => normalized === k || normalized.includes(k))) {
+			return 'other';
+		}
+
+		// Si no es indumentaria (ej: Tech, Belleza) o no matchea palabras clave de ropa,
+		// retorna la categoría normalizada para permitir interleaving multirubro por categoría.
+		return normalized || 'other';
+	}
+
+	/**
+	 * Desdobla virtualmente los productos que tienen múltiples variantes de color
+	 * para que cada color se exponga como una tarjeta independiente en el catálogo.
+	 */
+	public static splitProductsByColor<T extends IProduct>(products: T[]): T[] {
+		if (!products || products.length === 0) return products;
+
+		const result: T[] = [];
+
+		for (const product of products) {
+			if (!product.variants || product.variants.length <= 1) {
+				result.push(product);
+				continue;
+			}
+
+			// Agrupar variantes activas por color
+			const colorGroups = new Map<string, { name: string; hex: string; imageRef?: any; variants: any[] }>();
+
+			for (const variant of product.variants) {
+				if (variant.isActive === false) continue;
+
+				let colorName = '';
+				let colorHex = '#000000';
+				let imageRef = (variant as any).imageReference;
+
+				if ((variant as any).color && (variant as any).color.name) {
+					colorName = String((variant as any).color.name).trim();
+					colorHex = (variant as any).color.hex || '#000000';
+				} else if ((variant as any).colorName) {
+					colorName = String((variant as any).colorName).trim();
+					colorHex = (variant as any).colorHex || '#000000';
+				}
+
+				if (!colorName) continue;
+
+				const key = colorName.toLowerCase();
+				if (!colorGroups.has(key)) {
+					colorGroups.set(key, { name: colorName, hex: colorHex, imageRef, variants: [] });
+				}
+				const group = colorGroups.get(key)!;
+				group.variants.push(variant);
+				if (!group.imageRef && imageRef) {
+					group.imageRef = imageRef;
+				}
+			}
+
+			// Si el producto no tiene colores definidos o tiene 1 solo color, lo dejamos intacto
+			if (colorGroups.size <= 1) {
+				result.push(product);
+				continue;
+			}
+
+			// Desdoblar en tarjetas virtuales por color
+			for (const group of colorGroups.values()) {
+				let productImages = product.images ? [...product.images] : [];
+				if (group.imageRef && group.imageRef.url) {
+					const matchingIdx = productImages.findIndex(
+						img => img.url === group.imageRef.url || img.public_id === group.imageRef.public_id
+					);
+					if (matchingIdx > 0) {
+						productImages = [
+							productImages[matchingIdx],
+							...productImages.slice(0, matchingIdx),
+							...productImages.slice(matchingIdx + 1)
+						];
+					} else if (matchingIdx === -1) {
+						productImages = [
+							{ url: group.imageRef.url, public_id: group.imageRef.public_id || 'variant-img' },
+							...productImages
+						];
+					}
+				}
+
+				const virtualProduct: any = {
+					...product,
+					_id: `${product._id}_c_${group.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+					parentProductId: String(product._id),
+					selectedColor: group.name,
+					selectedColorHex: group.hex,
+					images: productImages,
+					variants: group.variants,
+					virtualVariant: true
+				};
+
+				result.push(virtualProduct);
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * Algoritmo de Entrelazado y Cadencia Visual (Visual Merchandising Interleaving)
+	 * con soporte de Anti-Clustering (dispersión de variantes del mismo producto).
+	 * Alterna los productos en un patrón rítmico armónico [TOP -> BOTTOM -> OUTERWEAR -> BOTTOM...]
+	 * evitando que productos con el mismo ID padre queden pegados uno al lado del otro.
+	 */
+	public static interleaveProducts<T extends { _id?: any; parentProductId?: any; category?: string; productType?: string }>(
+		products: T[],
+		options: { antiClusterDistance?: number } = {}
+	): T[] {
+		if (!products || products.length <= 2) return products;
+
+		const antiClusterDistance = options.antiClusterDistance ?? 3;
+		const buckets: Record<string, T[]> = {};
+		const bucketKeysOrder: string[] = [];
+
+		for (const p of products) {
+			const zone = this.getApparelZone(p.category, p.productType);
+			if (!buckets[zone]) {
+				buckets[zone] = [];
+				bucketKeysOrder.push(zone);
+			}
+			buckets[zone].push(p);
+		}
+
+		// Si todos los productos pertenecen a una única categoría o zona, mantener buckets
+		const preferredOrder = ['top', 'bottom', 'outerwear', 'bottom', 'full_body', 'other'];
+		const activePreferred = preferredOrder.filter(z => buckets[z] && buckets[z].length > 0);
+		const remainingBuckets = bucketKeysOrder.filter(k => !preferredOrder.includes(k));
+		const sequencePattern = activePreferred.length > 0 ? [...activePreferred, ...remainingBuckets] : bucketKeysOrder;
+
+		if (sequencePattern.length === 0) {
+			return products;
+		}
+
+		const result: T[] = [];
+		let remainingCount = products.length;
+		let patternIndex = 0;
+
+		const getRootId = (item: T): string => {
+			if (item.parentProductId) return String(item.parentProductId);
+			const idStr = String(item._id || '');
+			return idStr.split('_')[0] || idStr;
+		};
+
+		const pickBestFromBucket = (bucket: T[]): T | null => {
+			if (bucket.length === 0) return null;
+			const recentRootIds = result.slice(-antiClusterDistance).map(getRootId);
+			const nonConflictingIndex = bucket.findIndex(item => !recentRootIds.includes(getRootId(item)));
+			if (nonConflictingIndex !== -1) {
+				return bucket.splice(nonConflictingIndex, 1)[0];
+			}
+			return bucket.shift()!;
+		};
+
+		while (remainingCount > 0) {
+			let addedInRound = false;
+			for (let i = 0; i < sequencePattern.length; i++) {
+				const currentKey = sequencePattern[(patternIndex + i) % sequencePattern.length];
+				const bucket = buckets[currentKey];
+				if (bucket && bucket.length > 0) {
+					const item = pickBestFromBucket(bucket);
+					if (item) {
+						result.push(item);
+						remainingCount--;
+						addedInRound = true;
+						patternIndex = (patternIndex + i + 1) % sequencePattern.length;
+						break;
+					}
+				}
+			}
+
+			// Fallback: Si ningún bucket en secuencia pudo agregar, buscar en cualquier bucket disponible
+			if (!addedInRound) {
+				for (const key of bucketKeysOrder) {
+					if (buckets[key] && buckets[key].length > 0) {
+						const item = pickBestFromBucket(buckets[key]);
+						if (item) {
+							result.push(item);
+							remainingCount--;
+							break;
+						}
+					}
+				}
+			}
+		}
+
+		return result;
 	}
 
 	// ============ DISCRIMINATOR HELPER ============
@@ -356,22 +606,57 @@ export class ProductService {
 		isActive?: boolean,
 		providerId?: string,
 		hasSizeGuide?: boolean,
-		hasSeoImage?: boolean
+		hasSeoImage?: boolean,
+		isFeatured?: boolean,
+		sortBy?: string
 	) {
 		try {
 			const Model = this.getModel(models, productType);
 
 			const query: any = {};
-			if (q) {
-				query.$or = [
-					{ brand: { $regex: q, $options: 'i' } },
-					{ model: { $regex: q, $options: 'i' } },
-					{ name: { $regex: q, $options: 'i' } }
-				];
+			const andConditions: any[] = [];
+
+			if (q && typeof q === 'string' && q.trim() !== '') {
+				// Soporte de búsqueda multi-término (ej: "Aura, Viena, Fiore" o "BLU-010, REM-540")
+				const terms = q.split(/[,;|]+/).map(t => t.trim()).filter(Boolean);
+				if (terms.length === 1) {
+					const regex = { $regex: terms[0], $options: 'i' };
+					andConditions.push({
+						$or: [
+							{ brand: regex },
+							{ model: regex },
+							{ subtitle: regex },
+							{ name: regex },
+							{ category: regex },
+							{ clothingType: regex },
+							{ tags: regex },
+							{ 'variants.sku': regex }
+						]
+					});
+				} else if (terms.length > 1) {
+					const orTerms = terms.map(term => {
+						const regex = { $regex: term, $options: 'i' };
+						return {
+							$or: [
+								{ brand: regex },
+								{ model: regex },
+								{ subtitle: regex },
+								{ name: regex },
+								{ category: regex },
+								{ clothingType: regex },
+								{ tags: regex },
+								{ 'variants.sku': regex }
+							]
+						};
+					});
+					andConditions.push({ $or: orTerms });
+				}
 			}
+
 			if (category) {
 				query.category = this.buildCategoryQuery(category);
 			}
+
 			if (isActive !== undefined) {
 				query.isActive = isActive;
 			}
@@ -384,11 +669,13 @@ export class ProductService {
 				if (hasSizeGuide) {
 					query['sizeGuide.rows.0'] = { $exists: true };
 				} else {
-					query.$or = [
-						{ sizeGuide: { $exists: false } },
-						{ 'sizeGuide.rows': { $size: 0 } },
-						{ 'sizeGuide.rows': { $exists: false } }
-					];
+					andConditions.push({
+						$or: [
+							{ sizeGuide: { $exists: false } },
+							{ 'sizeGuide.rows': { $size: 0 } },
+							{ 'sizeGuide.rows': { $exists: false } }
+						]
+					});
 				}
 			}
 
@@ -396,19 +683,44 @@ export class ProductService {
 				if (hasSeoImage) {
 					query['seo.metaImage.url'] = { $exists: true, $ne: '' };
 				} else {
-					query.$or = [
-						{ seo: { $exists: false } },
-						{ 'seo.metaImage': { $exists: false } },
-						{ 'seo.metaImage.url': { $exists: false } },
-						{ 'seo.metaImage.url': '' }
-					];
+					andConditions.push({
+						$or: [
+							{ seo: { $exists: false } },
+							{ 'seo.metaImage': { $exists: false } },
+							{ 'seo.metaImage.url': { $exists: false } },
+							{ 'seo.metaImage.url': '' }
+						]
+					});
 				}
+			}
+
+			if (isFeatured !== undefined) {
+				query.isFeatured = isFeatured;
+			}
+
+			if (andConditions.length > 0) {
+				query.$and = andConditions;
+			}
+
+			let sort: any = { createdAt: -1 };
+			if (sortBy === 'price_asc') {
+				sort = { 'price.cashTransferPrice': 1, 'price.listPrice': 1 };
+			} else if (sortBy === 'price_desc') {
+				sort = { 'price.cashTransferPrice': -1, 'price.listPrice': -1 };
+			} else if (sortBy === 'oldest') {
+				sort = { createdAt: 1 };
+			} else if (sortBy === 'name_asc') {
+				sort = { model: 1, brand: 1 };
+			} else if (sortBy === 'name_desc') {
+				sort = { model: -1, brand: -1 };
+			} else if (sortBy === 'featured') {
+				sort = { isFeatured: -1, createdAt: -1 };
 			}
 
 			const result = await paginate(Model, query, {
 				page,
 				limit,
-				sort: { 'createdAt': -1 },
+				sort,
 				select: '+provider +finance +linkProductProvider',
 				populate: {
 					path: 'provider',
@@ -464,7 +776,12 @@ export class ProductService {
 					brand: p.brand,
 					model: p.model,
 					category: p.category,
-					slug: p.slug
+					slug: p.slug,
+					sizeGuide: {
+						headers: p.sizeGuide?.headers || [],
+						rowCount: p.sizeGuide?.rows?.length || 0,
+						sizes: (p.sizeGuide?.rows || []).map((r: any) => r.size)
+					}
 				})),
 				withoutSeoImage: withoutSeoImage.map(p => ({
 					_id: p._id,
@@ -723,6 +1040,8 @@ export class ProductService {
 				featured?: boolean;
 				sortBy?: 'createdAt' | 'price' | string;
 				sortOrder?: 'asc' | 'desc' | string;
+				interleave?: boolean;
+				splitColors?: boolean;
 			},
 			page?: number,
 			limit?: number,
@@ -797,17 +1116,89 @@ export class ProductService {
 			const sortField = filters.sortBy === 'createdAt' ? 'createdAt' :
 				filters.sortBy === 'price' ? 'price.cashTransferPrice' :
 					'price.cashTransferPrice';
-			const sortDirection = filters.sortOrder === 'desc' ? 1 : -1;
+			const sortDirection = filters.sortOrder === 'asc' ? 1 : -1;
 			const result = await paginate(Model, query, {
 				page,
 				limit,
 				sort: { [sortField]: sortDirection }
 			});
+
+			// 1. Desdoblamiento virtual por color (si está habilitado)
+			if (filters.splitColors && Array.isArray(result.data) && result.data.length > 0) {
+				result.data = this.splitProductsByColor(result.data as unknown as IProduct[]) as any;
+			}
+
+			// 2. Cadencia visual / Interleaving con Anti-Clustering:
+			// Se activa automáticamente cuando no hay un filtro de categoría única y el usuario no está ordenando por precio estricto
+			const shouldInterleave = filters.interleave !== false &&
+				!filters.category &&
+				filters.sortBy !== 'price';
+
+			if (shouldInterleave && Array.isArray(result.data) && result.data.length > 2) {
+				result.data = this.interleaveProducts(result.data as unknown as IProduct[]) as any;
+			}
+
 			return result;
 
 		} catch (error) {
 			if (error instanceof AppError) throw error;
 			throw new AppError('Failed to search products', 'Error al buscar productos', 500);
+		}
+	}
+
+	/**
+	 * Novedades Inteligentes (Smart Fill):
+	 * 1. Prioriza los productos marcados como destacados (isFeatured: true), más recientes primero.
+	 * 2. Si hay menos del límite, rellena con los últimos productos creados (createdAt: -1) sin duplicar.
+	 * 3. NO repite productos ni desdobla por color por defecto (1 producto = 1 tarjeta).
+	 * 4. Aplica cadencia visual (interleaveProducts).
+	 */
+	static async getSmartNews(
+		models: TenantModels,
+		limit: number = 12,
+		splitColors: boolean = false
+	): Promise<IProduct[]> {
+		try {
+			// 1. Obtener destacados activos ordenados por fecha descendente
+			const featuredProducts = (await models.Product.find({
+				isActive: { $ne: false },
+				isFeatured: true
+			})
+				.sort({ createdAt: -1 })
+				.limit(limit)
+				.lean()) as unknown as IProduct[];
+
+			let combined = [...featuredProducts];
+
+			// 2. Si no alcanza el límite, rellenar con productos recientes no destacados
+			if (combined.length < limit) {
+				const needed = limit - combined.length;
+				const featuredIds = featuredProducts.map(p => p._id);
+				
+				const recentProducts = (await models.Product.find({
+					isActive: { $ne: false },
+					_id: { $nin: featuredIds }
+				})
+					.sort({ createdAt: -1 })
+					.limit(needed)
+					.lean()) as unknown as IProduct[];
+
+				combined = [...combined, ...recentProducts];
+			}
+
+			// 3. En novedades NO se repiten colores ni se duplican tarjetas salvo petición explícita
+			let processed = splitColors ? this.splitProductsByColor(combined) : combined;
+
+			// 4. Aplicar cadencia visual / anti-clustering
+			if (processed.length > 2) {
+				processed = this.interleaveProducts(processed);
+			}
+
+			// Límite estricto solicitado por el cliente/query
+			return processed.slice(0, limit);
+		} catch (error) {
+			console.error('Error fetching smart news:', error);
+			return [];
 		}
 	}
 
@@ -855,11 +1246,15 @@ export class ProductService {
 						};
 					}
 					delete v.imageIndex; // Lo borramos para que Mongoose no chille
-					delete v.sku; // Ignorar SKU del frontend — lo genera el backend
+					if (!v.sku || typeof v.sku !== 'string' || v.sku.trim() === '') {
+						delete v.sku; // Si no tiene SKU, SkuService lo auto-genera
+					} else {
+						v.sku = v.sku.trim();
+					}
 					return v;
 				});
 
-				// ── Auto-generar SKUs para todas las variantes ──
+				// ── Auto-generar SKUs para las variantes que no tengan ──
 				data.variants = await SkuService.generateSkusForVariants(
 					models,
 					data.variants as any[],
@@ -867,6 +1262,9 @@ export class ProductService {
 					data.productType,
 					data.brand
 				);
+
+				// ── Validar que ningún SKU colisione internamente ni con otro producto ──
+				await this.validateUniqueSkus(models, data.variants as any[]);
 			}
 
 			// Subir og_image a Cloudinary si se proporcionó
@@ -964,25 +1362,28 @@ export class ProductService {
 	 * Recalcula masivamente los precios de todos los productos basándose en una nueva configuración.
 	 * Utiliza bulkWrite para mayor eficiencia en la base de datos.
 	 */
-	static async recalculateAllProductsPrices(models: TenantModels, config: any): Promise<void> {
+	static async previewRecalculatePrices(models: TenantModels, config: any, onlyActive: boolean = true) {
 		try {
-			console.log('🔄 Iniciando recalculo masivo de precios...');
-			// Obtenemos todos los productos. Necesitamos los campos del precio base.
-			const products = await models.Product.find({})
+			const query = onlyActive ? { isActive: { $ne: false } } : {};
+			const products = await models.Product.find(query)
 				.select('+finance')
 				.lean() as unknown as IProduct[];
 
 			if (!products || products.length === 0) {
-				console.log('No hay productos para recalcular.');
-				return;
+				return {
+					totalProducts: 0,
+					onlyActive,
+					dolar: 0,
+					quoteType: config.dollarQuoteType || 'oficial',
+					items: []
+				};
 			}
 
 			const { venta: dolarVenta } = await getDolar(config.dollarQuoteType || 'oficial', config.customDollarRate || 0);
 			const isARS = config.costCurrency === 'ARS';
-			const bulkOps = [];
+			const items = [];
 
 			for (const product of products) {
-				// Buscar costo del proveedor anterior
 				let baseCost = 0;
 				let additionalCosts: any[] = [];
 				let customProfitMargin = undefined;
@@ -999,12 +1400,122 @@ export class ProductService {
 					pricingMethodChoice = product.finance.pricingStrategy?.method;
 					discountPercentageTransfer = product.price?.discountPercentageTransfer;
 				} else if (oldPrices) {
-					// Fallback a campos viejos de prices/price
 					baseCost = isARS 
 						? (oldPrices.costPrice?.inARS || oldPrices.providerCost?.inARS || 0) 
 						: (oldPrices.costPrice?.inUSD || oldPrices.providerCost?.inUSD || 0);
 
-					// Si el costo sigue siendo 0, tal vez el precio base era directo
+					if (baseCost === 0 && typeof oldPrices === 'number') {
+						baseCost = oldPrices;
+					}
+					pricingMethodChoice = oldPrices.customPricingMethod;
+					customProfitMargin = oldPrices.profitMargin;
+				}
+
+				if (!baseCost) continue;
+
+				const { price: newPrice } = await FinanceService.CalculatePrices({
+					providerCost: baseCost,
+					additionalCosts,
+					discountPercentageTransfer,
+					dolar: dolarVenta,
+					models,
+					config,
+					useCustomProfit: customProfitMargin !== undefined,
+					customProfitMargin,
+					pricingMethodChoice,
+				});
+
+				const oldCash = Number(product.price?.cashTransferPrice || 0);
+				const newCash = Number(newPrice?.cashTransferPrice || 0);
+				const oldCard = Number(product.price?.listPrice || (product.price as any)?.cardPrice || 0);
+				const newCard = Number(newPrice?.listPrice || (newPrice as any)?.cardPrice || 0);
+
+				const cashDiff = newCash - oldCash;
+				const cashDiffPercent = oldCash > 0 ? Number(((cashDiff / oldCash) * 100).toFixed(2)) : 0;
+
+				const cardDiff = newCard - oldCard;
+				const cardDiffPercent = oldCard > 0 ? Number(((cardDiff / oldCard) * 100).toFixed(2)) : 0;
+
+				const mainImage = Array.isArray(product.images) && product.images.length > 0 
+					? (typeof product.images[0] === 'string' ? product.images[0] : (product.images[0] as any).secure_url || (product.images[0] as any).url)
+					: '';
+
+				items.push({
+					_id: product._id,
+					model: product.model,
+					brand: product.brand,
+					image: mainImage,
+					isActive: product.isActive !== false,
+					oldPrice: {
+						cashTransferPrice: oldCash,
+						cardPrice: oldCard,
+						installments: product.price?.installments
+					},
+					newPrice: {
+						cashTransferPrice: newCash,
+						cardPrice: newCard,
+						installments: newPrice?.installments
+					},
+					diff: {
+						cashDiff,
+						cashDiffPercent,
+						cardDiff,
+						cardDiffPercent
+					}
+				});
+			}
+
+			return {
+				totalProducts: items.length,
+				onlyActive,
+				dolar: dolarVenta,
+				quoteType: config.dollarQuoteType || 'oficial',
+				items
+			};
+		} catch (error) {
+			console.error('Error in previewRecalculatePrices:', error);
+			throw error;
+		}
+	}
+
+	static async recalculateAllProductsPrices(models: TenantModels, config: any, onlyActive: boolean = true): Promise<{ updatedCount: number }> {
+		try {
+			console.log(`🔄 Iniciando recalculo masivo de precios (onlyActive: ${onlyActive})...`);
+			const query = onlyActive ? { isActive: { $ne: false } } : {};
+			const products = await models.Product.find(query)
+				.select('+finance')
+				.lean() as unknown as IProduct[];
+
+			if (!products || products.length === 0) {
+				console.log('No hay productos para recalcular.');
+				return { updatedCount: 0 };
+			}
+
+			const { venta: dolarVenta } = await getDolar(config.dollarQuoteType || 'oficial', config.customDollarRate || 0);
+			const isARS = config.costCurrency === 'ARS';
+			const bulkOps = [];
+
+			for (const product of products) {
+				let baseCost = 0;
+				let additionalCosts: any[] = [];
+				let customProfitMargin = undefined;
+				let pricingMethodChoice: any = undefined;
+				let discountPercentageTransfer: number | undefined = undefined;
+
+				const rawProduct = product as any;
+				const oldPrices = rawProduct.prices || rawProduct.price;
+
+				if (product.finance?.providerCost) {
+					baseCost = isARS ? product.finance.providerCost.inARS : product.finance.providerCost.inUSD;
+					additionalCosts = product.finance.additionalCosts || [];
+					customProfitMargin = product.finance.pricingStrategy?.targetProfit;
+					pricingMethodChoice = product.finance.pricingStrategy?.method;
+					discountPercentageTransfer = product.price?.discountPercentageTransfer;
+				} else if (oldPrices) {
+					baseCost = isARS 
+						? (oldPrices.costPrice?.inARS || oldPrices.providerCost?.inARS || 0) 
+						: (oldPrices.costPrice?.inUSD || oldPrices.providerCost?.inUSD || 0);
+
 					if (baseCost === 0 && typeof oldPrices === 'number') {
 						baseCost = oldPrices;
 					}
@@ -1013,24 +1524,21 @@ export class ProductService {
 				}
 
 				if (!baseCost) {
-					// Si de plano no tiene costo base, omitimos para evitar divisiones por cero
 					continue;
 				}
 
-				// Recalcular los precios usando la nueva configuración inyectada
 				const { price: calculatedPrice, finance: calculatedFinance } = await FinanceService.CalculatePrices({
 					providerCost: baseCost,
 					additionalCosts,
 					discountPercentageTransfer,
 					dolar: dolarVenta,
 					models,
-					config, // Pasamos la configuración para evitar múltiples queries
+					config,
 					useCustomProfit: customProfitMargin !== undefined,
 					customProfitMargin,
 					pricingMethodChoice,
 				});
 
-				// Preparar la operación de actualización para MongoDB (incluye el borrado del campo viejo prices)
 				bulkOps.push({
 					updateOne: {
 						filter: { _id: product._id },
@@ -1042,14 +1550,15 @@ export class ProductService {
 				});
 			}
 
-			// Ejecutar todas las actualizaciones de una vez
 			if (bulkOps.length > 0) {
 				const result = await models.Product.bulkWrite(bulkOps);
 				console.log(`✅ Recalculo masivo completado. Productos actualizados: ${result.modifiedCount}`);
+				return { updatedCount: result.modifiedCount };
 			}
+			return { updatedCount: 0 };
 		} catch (error) {
 			console.error('❌ Error en recalculo masivo:', error);
-			// No lanzamos error para no bloquear el flujo principal de updateConfig
+			throw error;
 		}
 	}
 
@@ -1290,6 +1799,9 @@ export class ProductService {
 				} else {
 					updateData.variants = processedVariants as any;
 				}
+
+				// ── Validar que ningún SKU colisione internamente ni con otro producto ──
+				await this.validateUniqueSkus(models, updateData.variants as any[], id);
 			}
 			if (updateData.tags) updateData.tags = JSON.parse(updateData.tags as string);
 			if (updateData.careInstructions) updateData.careInstructions = JSON.parse(updateData.careInstructions as string);
@@ -1571,6 +2083,66 @@ export class ProductService {
 		}
 	}
 
+	/**
+	 * Valida que ningún SKU del array de variantes exista ya en otro producto ni esté repetido internamente.
+	 * Si encuentra duplicado, lanza un AppError descriptivo con el SKU y el nombre del producto en conflicto.
+	 */
+	static async validateUniqueSkus(
+		models: TenantModels,
+		variants: any[],
+		excludeProductId?: string | Types.ObjectId
+	): Promise<void> {
+		if (!variants || !Array.isArray(variants) || variants.length === 0) return;
+
+		const skusToCheck = variants
+			.map(v => (v.sku && typeof v.sku === 'string' ? v.sku.trim() : ''))
+			.filter(Boolean);
+
+		if (skusToCheck.length === 0) return;
+
+		// 1. Verificar duplicados dentro del mismo payload enviado
+		const seenInPayload = new Set<string>();
+		for (const sku of skusToCheck) {
+			const normalized = sku.toUpperCase();
+			if (seenInPayload.has(normalized)) {
+				throw new AppError(
+					`Duplicate SKU in payload: ${sku}`,
+					`El SKU '${sku}' está repetido en más de una variante de este producto. Cada variante debe tener un SKU único.`,
+					400
+				);
+			}
+			seenInPayload.add(normalized);
+		}
+
+		// 2. Verificar contra la base de datos (otros productos)
+		const query: any = {
+			'variants.sku': { $in: skusToCheck }
+		};
+
+		if (excludeProductId) {
+			query._id = { $ne: excludeProductId };
+		}
+
+		const conflictingProduct = (await models.Product.findOne(query)
+			.select('_id model brand variants.sku')
+			.lean()) as unknown as any;
+
+		if (conflictingProduct) {
+			// Encontrar cuál es el SKU exacto que colisionó
+			const conflictingSku = skusToCheck.find(sku =>
+				conflictingProduct.variants?.some((v: any) => v.sku?.toUpperCase() === sku.toUpperCase())
+			) || skusToCheck[0];
+
+			const prodName = conflictingProduct.model || conflictingProduct.brand || 'otro producto';
+
+			throw new AppError(
+				`SKU conflict: ${conflictingSku} already in use by product ${conflictingProduct._id}`,
+				`El SKU '${conflictingSku}' ya está en uso en el producto '${prodName}'. Por favor elegí un SKU diferente.`,
+				400
+			);
+		}
+	}
+
 	static async getPublicActiveProducts(models: TenantModels) {
 		try {
 			const products = await models.Product.find({ isActive: true })
@@ -1580,5 +2152,216 @@ export class ProductService {
 		} catch (error) {
 			throw new AppError('Failed to fetch active products', 'Error al obtener los productos activos', 500);
 		}
+	}
+
+	/**
+	 * Creación masiva de productos (Asistente IA & Excel).
+	 * Recalcula finanzas, genera SKUs, sanitiza descripciones y persiste en lote.
+	 */
+	static async bulkCreateProducts(
+		models: TenantModels,
+		productsData: any[],
+		tenantSlug: string = 'general'
+	): Promise<{ success: boolean; createdCount: number; created: IProduct[]; errors: any[] }> {
+		const created: IProduct[] = [];
+		const errors: any[] = [];
+
+		const config = await EcommerceService.getConfig(models);
+		const { venta } = await getDolar(config.dollarQuoteType || 'oficial', config.customDollarRate || 0);
+
+		for (let i = 0; i < productsData.length; i++) {
+			const item = productsData[i];
+			try {
+				if (!item.model || !item.brand || !item.category) {
+					throw new AppError('Missing required fields (model, brand, category)', 'Faltan campos obligatorios (modelo, marca, categoría)', 400);
+				}
+
+				const productType = item.productType || ProductType.CLOTHING;
+				const costPriceARS = Number(item.costPriceARS || item.price || item.providerCost || 0);
+
+				const { price, finance } = await FinanceService.CalculatePrices({
+					providerCost: costPriceARS,
+					additionalCosts: item.additionalCosts || [],
+					discountPercentageTransfer: item.discountPercentageTransfer ? Number(item.discountPercentageTransfer) : undefined,
+					dolar: venta,
+					models,
+					useCustomProfit: item.useCustomProfit ?? (item.customProfitMargin !== undefined && item.customProfitMargin !== null),
+					customProfitMargin: item.customProfitMargin ? Number(item.customProfitMargin) : undefined,
+					pricingMethodChoice: item.pricingMethodChoice
+				});
+
+				const slug = this.generateSlug(item.brand, item.model);
+
+				// Process variants
+				let variants = Array.isArray(item.variants) ? item.variants : [];
+				variants = variants.map((v: any) => ({
+					colorName: v.colorName || v.color || 'Único',
+					colorHex: v.colorHex || '#000000',
+					size: String(v.size || v.talle || 'Único').trim().toUpperCase(),
+					stock: Number(v.stock ?? 0) >= 0 ? Number(v.stock ?? 0) : 0,
+					isActive: v.isActive !== false,
+					sku: v.sku ? String(v.sku).trim() : undefined,
+					imageIndex: v.imageIndex ?? 0
+				}));
+
+				if (variants.length > 0) {
+					variants = await SkuService.generateSkusForVariants(
+						models,
+						variants,
+						item.category,
+						productType,
+						item.brand
+					);
+				}
+
+				// Process images
+				let images: any[] = [];
+				if (Array.isArray(item.images) && item.images.length > 0) {
+					images = item.images.map((img: any) => {
+						if (typeof img === 'string') return { url: img, public_id: '' };
+						return { url: img.url || '', public_id: img.public_id || '' };
+					});
+				}
+
+				// Sanitize largeDescription
+				let largeDescription = item.largeDescription || '';
+				if (largeDescription) {
+					const window = new JSDOM('').window;
+					const purify = createDOMPurify(window);
+					largeDescription = purify.sanitize(largeDescription, this.purifyConfig);
+				}
+
+				const productDoc = new models.Product({
+					productType,
+					brand: String(item.brand).trim(),
+					model: String(item.model).trim(),
+					category: String(item.category).trim(),
+					provider: item.provider ? String(item.provider).trim() : 'General',
+					slug,
+					shortDescription: item.shortDescription || '',
+					largeDescription,
+					price,
+					finance,
+					variants,
+					images,
+					sizeGuide: item.sizeGuide || undefined,
+					gender: item.gender || ClothingGender.Unisex,
+					fit: item.fit || undefined,
+					material: item.material || '',
+					sizeType: item.sizeType || ClothingSizeType.Ropa,
+					tags: Array.isArray(item.tags) ? item.tags : [],
+					isActive: item.isActive !== false,
+					isFeatured: Boolean(item.isFeatured),
+					seo: item.seo || { metaTitle: `${item.model} | ${item.brand}`, metaDescription: item.shortDescription || '' }
+				});
+
+				const saved = await productDoc.save();
+				created.push(saved.toObject() as unknown as IProduct);
+			} catch (err: any) {
+				errors.push({ index: i, model: item.model || `Ítem #${i + 1}`, error: err.message || 'Error al crear producto' });
+			}
+		}
+
+		return { success: errors.length === 0, createdCount: created.length, created, errors };
+	}
+
+	/**
+	 * Actualización masiva de productos (Asistente IA).
+	 * Parchea campos selectivos (variantes/talles, costos, descripciones, SEO) con validación estricta.
+	 */
+	static async bulkUpdateProducts(
+		models: TenantModels,
+		updates: any[],
+		tenantSlug: string = 'general'
+	): Promise<{ success: boolean; updatedCount: number; updated: IProduct[]; errors: any[] }> {
+		const updated: IProduct[] = [];
+		const errors: any[] = [];
+
+		const config = await EcommerceService.getConfig(models);
+		const { venta } = await getDolar(config.dollarQuoteType || 'oficial', config.customDollarRate || 0);
+
+		for (let i = 0; i < updates.length; i++) {
+			const item = updates[i];
+			try {
+				if (!item._id || !Types.ObjectId.isValid(item._id)) {
+					throw new AppError('Invalid or missing _id', 'ID de producto inválido', 400);
+				}
+
+				const product = await models.Product.findById(item._id).select('+finance');
+				if (!product) {
+					throw new AppError('Product not found', `Producto no encontrado (ID: ${item._id})`, 404);
+				}
+
+				// If price or cost updated, recalculate finances
+				if (item.costPriceARS !== undefined || item.price !== undefined || item.providerCost !== undefined) {
+					const newCost = Number(item.costPriceARS ?? item.providerCost ?? item.price);
+					const { price, finance } = await FinanceService.CalculatePrices({
+						providerCost: newCost,
+						additionalCosts: item.additionalCosts || product.finance?.additionalCosts || [],
+						discountPercentageTransfer: item.discountPercentageTransfer !== undefined ? Number(item.discountPercentageTransfer) : (product.price as any)?.discountPercentageTransfer,
+						dolar: venta,
+						models,
+						useCustomProfit: item.useCustomProfit ?? product.finance?.pricingStrategy?.targetProfit !== undefined,
+						customProfitMargin: item.customProfitMargin !== undefined ? Number(item.customProfitMargin) : product.finance?.pricingStrategy?.targetProfit,
+						pricingMethodChoice: item.pricingMethodChoice ?? product.finance?.pricingStrategy?.method
+					});
+					product.price = price;
+					product.finance = finance;
+				}
+
+				// If variants updated
+				if (Array.isArray(item.variants)) {
+					let newVariants = item.variants.map((v: any) => ({
+						_id: v._id && Types.ObjectId.isValid(v._id) ? v._id : new Types.ObjectId(),
+						colorName: v.colorName || v.color || 'Único',
+						colorHex: v.colorHex || '#000000',
+						size: String(v.size || v.talle || 'Único').trim().toUpperCase(),
+						stock: Number(v.stock ?? 0) >= 0 ? Number(v.stock ?? 0) : 0,
+						isActive: v.isActive !== false,
+						sku: v.sku ? String(v.sku).trim() : undefined,
+						imageIndex: v.imageIndex ?? 0
+					}));
+
+					newVariants = await SkuService.generateSkusForVariants(
+						models,
+						newVariants,
+						product.category,
+						product.productType,
+						product.brand
+					);
+
+					product.variants = newVariants as any;
+				}
+
+				const pAny = product as any;
+
+				// If simple fields updated
+				if (item.model !== undefined) pAny.model = String(item.model).trim();
+				if (item.brand !== undefined) pAny.brand = String(item.brand).trim();
+				if (item.category !== undefined) pAny.category = String(item.category).trim();
+				if (item.shortDescription !== undefined) pAny.shortDescription = String(item.shortDescription);
+				if (item.largeDescription !== undefined) {
+					const window = new JSDOM('').window;
+					const purify = createDOMPurify(window);
+					pAny.largeDescription = purify.sanitize(item.largeDescription, this.purifyConfig);
+				}
+				if (item.sizeGuide !== undefined) pAny.sizeGuide = item.sizeGuide;
+				if (item.gender !== undefined) pAny.gender = item.gender;
+				if (item.fit !== undefined) pAny.fit = item.fit;
+				if (item.material !== undefined) pAny.material = item.material;
+				if (item.sizeType !== undefined) pAny.sizeType = item.sizeType;
+				if (item.isActive !== undefined) pAny.isActive = Boolean(item.isActive);
+				if (item.isFeatured !== undefined) pAny.isFeatured = Boolean(item.isFeatured);
+				if (item.tags !== undefined && Array.isArray(item.tags)) pAny.tags = item.tags;
+				if (item.seo !== undefined) pAny.seo = { ...pAny.seo, ...item.seo };
+
+				const saved = await product.save();
+				updated.push(saved.toObject() as unknown as IProduct);
+			} catch (err: any) {
+				errors.push({ index: i, _id: item._id, model: item.model || `Ítem #${i + 1}`, error: err.message || 'Error al actualizar producto' });
+			}
+		}
+
+		return { success: errors.length === 0, updatedCount: updated.length, updated, errors };
 	}
 }

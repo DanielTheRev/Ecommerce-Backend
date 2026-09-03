@@ -105,6 +105,12 @@ export class EcommerceService {
 					transferDiscountPercentage: publicConfig.pricingStrategy?.transferDiscountPercentage || 0,
 					cashDiscountPercentage: publicConfig.pricingStrategy?.cashDiscountPercentage || 0
 				},
+				authConfig: {
+					allowEmailPassword: publicConfig.authConfig?.allowEmailPassword ?? true,
+					allowMagicCode: publicConfig.authConfig?.allowMagicCode ?? true,
+					allowGoogle: publicConfig.authConfig?.allowGoogle ?? true,
+					defaultMethod: publicConfig.authConfig?.defaultMethod || 'google'
+				},
 				integrations: {
 					metaPixel: {
 						active: publicConfig.integrations?.metaPixel?.active || false,
@@ -195,13 +201,16 @@ export class EcommerceService {
 
 			this.encryptEcommerceConfig(data);
 
-			// Exclusividad de pasarela fintech (Solo 1 activa a la vez: Mercado Pago vs Ualá Bis)
-			if (data.paymentGateways?.mercadopago?.active === true) {
-				if (!data.paymentGateways.uala) data.paymentGateways.uala = {} as any;
-				data.paymentGateways.uala.active = false;
+			// Exclusividad de pasarela fintech (Solo 1 activa a la vez: Getnet vs Mercado Pago vs Ualá Bis)
+			if (data.paymentGateways?.getnet?.active === true) {
+				if (data.paymentGateways.mercadopago) data.paymentGateways.mercadopago.active = false;
+				if (data.paymentGateways.uala) data.paymentGateways.uala.active = false;
+			} else if (data.paymentGateways?.mercadopago?.active === true) {
+				if (data.paymentGateways.getnet) data.paymentGateways.getnet.active = false;
+				if (data.paymentGateways.uala) data.paymentGateways.uala.active = false;
 			} else if (data.paymentGateways?.uala?.active === true) {
-				if (!data.paymentGateways.mercadopago) data.paymentGateways.mercadopago = {} as any;
-				data.paymentGateways.mercadopago.active = false;
+				if (data.paymentGateways.getnet) data.paymentGateways.getnet.active = false;
+				if (data.paymentGateways.mercadopago) data.paymentGateways.mercadopago.active = false;
 			}
 
 			if (userId) {
@@ -210,10 +219,7 @@ export class EcommerceService {
 			}
 
 			// Aplanamos el objeto para permitir actualizaciones parciales en niveles profundos
-			// evitando que se borren campos hermanos (como uala al actualizar mercadopago)
-			console.log('EcomerceConfig.updateConfig', data);
 			const flattenedData = flattenObject(data);
-			console.log('EcomerceConfig.updateConfig flattenedData', flattenedData);
 
 			const updatedConfig = await models.EcommerceConfig.findOneAndUpdate(
 				{ key: 'global_config' },
@@ -232,10 +238,10 @@ export class EcommerceService {
 				const { CacheService } = await import('./cache.service');
 				CacheService.invalidatePrefix(tenantSlug, 'config');
 				CacheService.invalidatePrefix(tenantSlug, 'home');
+				CacheService.invalidatePrefix(tenantSlug, 'product');
 			}
 
 			// 2. Detectamos si algo que afecta precios cambió — devolvemos flag al frontend
-			// El vendedor decide si quiere recalcular (via modal de confirmación)
 			let shouldRecalculate = false;
 			if (oldConfig) {
 				const costCurrencyChanged = oldConfig.costCurrency !== finalConfig.costCurrency;
@@ -247,10 +253,12 @@ export class EcommerceService {
 				const grossUpChanged = oldConfig.pricingStrategy?.transferGrossUp !== finalConfig.pricingStrategy?.transferGrossUp;
 				const absorbChanged = oldConfig.pricingStrategy?.absorbInstallments !== finalConfig.pricingStrategy?.absorbInstallments;
 				const card1PayDiscountChanged = oldConfig.pricingStrategy?.card1PayDiscount !== finalConfig.pricingStrategy?.card1PayDiscount;
+				const gatewayChanged = oldConfig.paymentGateways?.getnet?.active !== finalConfig.paymentGateways?.getnet?.active
+					|| oldConfig.paymentGateways?.mercadopago?.active !== finalConfig.paymentGateways?.mercadopago?.active;
 
 				shouldRecalculate = costCurrencyChanged || profitChanged || profit1PayChanged
 					|| profitInstallmentsChanged || ivaChanged || pricingMethodChanged
-					|| grossUpChanged || absorbChanged || card1PayDiscountChanged;
+					|| grossUpChanged || absorbChanged || card1PayDiscountChanged || gatewayChanged;
 			}
 
 			return { config: finalConfig, shouldRecalculate };
@@ -266,11 +274,25 @@ export class EcommerceService {
 	};
 
 	/**
+	 * Simulación / Vista previa de recálculo masivo de precios sin impacto en base de datos.
+	 */
+	static previewPriceRecalculation = async (models: TenantModels, onlyActive: boolean = true) => {
+		const config = await this.getConfig(models);
+		return await ProductService.previewRecalculatePrices(models, config, onlyActive);
+	};
+
+	/**
 	 * Recálculo masivo de precios — invocado MANUALMENTE por el vendedor tras confirmar en el modal.
 	 */
-	static triggerPriceRecalculation = async (models: TenantModels): Promise<void> => {
+	static triggerPriceRecalculation = async (models: TenantModels, onlyActive: boolean = true, tenantSlug?: string): Promise<{ updatedCount: number }> => {
 		const config = await this.getConfig(models);
-		await ProductService.recalculateAllProductsPrices(models, config);
+		const result = await ProductService.recalculateAllProductsPrices(models, config, onlyActive);
+		if (tenantSlug) {
+			const { CacheService } = await import('./cache.service');
+			CacheService.invalidatePrefix(tenantSlug, 'product');
+			CacheService.invalidatePrefix(tenantSlug, 'home');
+		}
+		return result;
 	};
 
 	static deleteConfig = async (models: TenantModels): Promise<void> => {
@@ -290,12 +312,14 @@ export class EcommerceService {
 		try {
 			const config = await this.getConfig(models);
 			switch (provider) {
+				case EcommercePaymentProviders.GETNET:
+					return config.paymentGateways?.getnet;
 				case EcommercePaymentProviders.UALA:
-					return config.paymentGateways.uala.credentials;
+					return config.paymentGateways?.uala?.credentials;
 				case EcommercePaymentProviders.MERCADOPAGO:
-					return config.paymentGateways.mercadopago;
+					return config.paymentGateways?.mercadopago;
 				case EcommercePaymentProviders.TRANSFER:
-					return config.paymentGateways.transfer;
+					return config.paymentGateways?.transfer;
 				default:
 					throw new AppError('Invalid payment provider', 'Proveedor de pago inválido', 400);
 			}
@@ -312,10 +336,11 @@ export class EcommerceService {
 	static async getPaymentGateway(models: TenantModels, provider: EcommercePaymentProviders) {
 		try {
 			const config = await this.getConfig(models);
-			const paymentGateways = {
-				[EcommercePaymentProviders.UALA]: config.paymentGateways.uala,
-				[EcommercePaymentProviders.MERCADOPAGO]: config.paymentGateways.mercadopago,
-				[EcommercePaymentProviders.TRANSFER]: config.paymentGateways.transfer
+			const paymentGateways: Record<EcommercePaymentProviders, any> = {
+				[EcommercePaymentProviders.GETNET]: config.paymentGateways?.getnet,
+				[EcommercePaymentProviders.UALA]: config.paymentGateways?.uala,
+				[EcommercePaymentProviders.MERCADOPAGO]: config.paymentGateways?.mercadopago,
+				[EcommercePaymentProviders.TRANSFER]: config.paymentGateways?.transfer
 			};
 			const selectedProvider = paymentGateways[provider];
 			if (!selectedProvider)
@@ -324,6 +349,7 @@ export class EcommerceService {
 					'No se encontró proveedor de pago',
 					404
 				);
+			return selectedProvider;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
 			throw new AppError(

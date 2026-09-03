@@ -71,6 +71,7 @@ class ConnectionManager {
 
 	private tenantSlugCache = new Map<string, ITenant>();
 	private tenantDomainCache = new Map<string, ITenant>();
+	private tenantApiKeyCache = new Map<string, ITenant>();
 
 	async getTenantBySlug(slug: string): Promise<ITenant | null> {
 		const cleanSlug = (slug || '').trim().toLowerCase();
@@ -92,6 +93,26 @@ class ConnectionManager {
 
 		if (tenant) {
 			this.tenantSlugCache.set(cleanSlug, tenant);
+		}
+		return tenant;
+	}
+
+	/**
+	 * Busca un tenant por Storefront API Key (ej. pk_live_...)
+	 */
+	async getTenantByApiKey(apiKey: string): Promise<ITenant | null> {
+		const cleanApiKey = (apiKey || '').trim();
+		if (!cleanApiKey) return null;
+
+		const cached = this.tenantApiKeyCache.get(cleanApiKey);
+		if (cached) return cached;
+
+		const masterDb = this.getMasterDb();
+		const TenantModel = masterDb.model<ITenant>('Tenant');
+		const tenant = await TenantModel.findOne({ apiKey: cleanApiKey, isActive: true }).lean() as ITenant | null;
+
+		if (tenant) {
+			this.tenantApiKeyCache.set(cleanApiKey, tenant);
 		}
 		return tenant;
 	}
@@ -119,14 +140,16 @@ class ConnectionManager {
 	/**
 	 * Invalida el caché de tenants si se crea o modifica uno.
 	 */
-	invalidateTenantCache(slugOrDomain?: string): void {
-		if (slugOrDomain) {
-			const clean = slugOrDomain.trim().toLowerCase();
+	invalidateTenantCache(slugOrDomainOrKey?: string): void {
+		if (slugOrDomainOrKey) {
+			const clean = slugOrDomainOrKey.trim().toLowerCase();
 			this.tenantSlugCache.delete(clean);
 			this.tenantDomainCache.delete(clean);
+			this.tenantApiKeyCache.delete(slugOrDomainOrKey.trim());
 		} else {
 			this.tenantSlugCache.clear();
 			this.tenantDomainCache.clear();
+			this.tenantApiKeyCache.clear();
 		}
 	}
 

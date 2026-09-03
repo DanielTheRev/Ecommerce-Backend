@@ -19,7 +19,8 @@ router.get('/admin/quality-audit', protect, adminOnly, ProductController.getQual
 router.get('/admin/list', protect, adminOnly, ProductController.getProducts); // products con precios completos
 router.post('/calculate-prices', protect, adminOnly, validateSchema(PriceCalculatorSchema), ProductController.calculatePrice); // Calculadora de precios
 router.get('/complete/:id', protect, adminOnly, ProductController.getProductWCompletePrices); // product con precios completos
-router.post('/', protect, adminOnly, multerConfig, validateSchema(CreateProductSchema), ProductController.createProduct); // Crear producto
+router.post('/bulk-create', protect, adminOnly, ProductController.bulkCreateProducts); // Creación masiva (IA / Excel)
+router.patch('/bulk-update', protect, adminOnly, ProductController.bulkUpdateProducts); // Actualización masiva (IA)
 router.patch('/bulk-status', protect, adminOnly, ProductController.bulkUpdateStatus); // Actualización masiva de estado
 router.patch('/:id', protect, adminOnly, multerConfig, validateSchema(UpdateProductSchema), ProductController.patchProduct); // Actualización parcial
 router.delete('/:id', protect, adminOnly, ProductController.deleteProduct); // Eliminar producto

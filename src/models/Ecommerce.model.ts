@@ -54,6 +54,22 @@ const EcommerceSchema = new Schema(
 				default: false
 			}
 		},
+		// Configuración de Punto de Venta (POS)
+		posConfig: {
+			transferValidationMode: {
+				type: String,
+				enum: ['fast_receipt', 'strict_admin_approval'],
+				default: 'fast_receipt'
+			},
+			allowManualDiscount: {
+				type: Boolean,
+				default: false
+			},
+			autoPrintReceipt: {
+				type: Boolean,
+				default: true
+			}
+		},
 		// Integraciones de Marketing, Analytics, Auth y Emails por Tenant
 		integrations: {
 			metaPixel: {
@@ -76,6 +92,13 @@ const EcommerceSchema = new Schema(
 				fromEmail: { type: String, default: '' },
 				fromName: { type: String, default: '' }
 			}
+		},
+		// Configuración de Autenticación de Clientes en Tienda Web
+		authConfig: {
+			allowEmailPassword: { type: Boolean, default: true },
+			allowMagicCode: { type: Boolean, default: true },
+			allowGoogle: { type: Boolean, default: true },
+			defaultMethod: { type: String, enum: ['google', 'magic_code', 'password'], default: 'google' }
 		},
 		firstPurchaseDiscount: {
 			enabled: { type: Boolean, default: true },
@@ -106,19 +129,38 @@ const EcommerceSchema = new Schema(
 				},
 				baseCommission: { type: Number, required: false, default: 0.049 },
 				cft3cuotas: { type: Number, required: false, default: 12 },
-				cft6Cuotas: { type: Number, required: false, default: 18.9 }
+				cft6Cuotas: { type: Number, required: false, default: 18.9 },
+				cft12cuotas: { type: Number, required: false, default: 0 },
+				callbackSuccess: { type: String, default: '' },
+				callbackFail: { type: String, default: '' },
+				notificationUrl: { type: String, default: '' }
 			},
 			mercadopago: {
 				active: { type: Boolean, default: false },
 				accessToken: { type: String, default: 'no asignado', select: false },
 				publicKey: { type: String, default: 'no asignado' },
+				environment: { type: String, enum: ['sandbox', 'production'], default: 'production' },
+				checkoutMode: { type: String, enum: ['transparent', 'redirect', 'modal', 'bricks', 'pro', 'api'], default: 'transparent' },
 				webhookSecret: { type: String, default: 'no asignado', select: false },
 				baseCommission: { type: Number, default: 0.06 },
 				cft3cuotas: { type: Number, default: 12 },
 				cft6Cuotas: { type: Number, default: 18.9 },
+				cft12cuotas: { type: Number, default: 0 },
 				maxInstallments: { type: Number, default: 6 },
 				excludedPaymentMethods: [{ type: String }],
 				excludedPaymentTypes: [{ type: String, default: '' }]
+			},
+			getnet: {
+				active: { type: Boolean, default: false },
+				clientId: { type: String, default: '', select: false },
+				clientSecret: { type: String, default: '', select: false },
+				environment: { type: String, enum: ['sandbox', 'production'], default: 'sandbox' },
+				baseCommission: { type: Number, default: 0.035 },
+				cft3cuotas: { type: Number, default: 0 },
+				cft6Cuotas: { type: Number, default: 10 },
+				cft12cuotas: { type: Number, default: 0 },
+				maxInstallments: { type: Number, default: 6 },
+				checkoutMode: { type: String, enum: ['redirect', 'modal', 'iframe'], default: 'redirect' }
 			},
 			transfer: {
 				active: { type: Boolean, default: false },

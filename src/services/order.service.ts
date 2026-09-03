@@ -1197,6 +1197,97 @@ export class OrderService {
 		}
 	}
 
+	static async confirmGetnetPayment(models: TenantModels, orderId: string, paymentData: any, tenantSlug?: string) {
+		try {
+			const config = await EcommerceService.getConfig(models);
+			const getnetConfig = config.paymentGateways?.getnet;
+
+			const order = await models.Order.findById(orderId)
+				.select(ADMIN_PRICE_SELECT)
+				.populate([
+					{ path: 'user', select: 'name email' },
+				]) as IOrderDocument;
+
+			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
+
+			const oldPaymentStatus = order.paymentInfo.status;
+			const isFirstPaymentUpdate = oldPaymentStatus === PaymentStatus.PENDING;
+
+			const status = String(paymentData.status || paymentData.state || '').toLowerCase();
+			let paymentStatus: PaymentStatus = PaymentStatus.PENDING;
+			let orderStatus: OrderStatus = OrderStatus.PENDING_PAYMENT;
+
+			if (status === 'approved' || status === 'paid' || status === 'authorized' || status === 'completed') {
+				paymentStatus = PaymentStatus.APPROVED;
+				orderStatus = OrderStatus.PROCESSING_SHIPPING;
+			} else if (status === 'rejected' || status === 'declined' || status === 'failed' || status === 'cancelled') {
+				paymentStatus = PaymentStatus.REJECTED;
+				orderStatus = OrderStatus.PAYMENT_FAILED;
+			} else {
+				paymentStatus = PaymentStatus.PENDING;
+				orderStatus = OrderStatus.PENDING_PAYMENT;
+			}
+
+			const isAlreadyApproved = oldPaymentStatus === PaymentStatus.APPROVED;
+			if (!isAlreadyApproved) {
+				order.paymentInfo.status = paymentStatus;
+				order.status = orderStatus;
+			}
+
+			order.paymentInfo.transactionId = paymentData.payment_id || paymentData.id || order.paymentInfo.transactionId;
+
+			if (order.paymentInfo.status === PaymentStatus.APPROVED && !isAlreadyApproved) {
+				order.paymentInfo.paymentDate = new Date();
+				const installments = paymentData.installments || 1;
+
+				const itemsForPaymentService = order.items.map(item => ({
+					data: item.productSnapshot as any,
+					quantity: item.quantity
+				}));
+
+				const paymentService = new PaymentService(
+					itemsForPaymentService,
+					PaymentType.CARD,
+					order.shippingInfo.cost
+				);
+
+				order.finance.earnings = paymentService.getEarnings(installments);
+				order.finance.installments = installments;
+
+				const rawBaseComm = getnetConfig?.baseCommission ?? 0.035;
+				const rawCFT3 = getnetConfig?.cft3cuotas ?? 0;
+				const rawCFT6 = getnetConfig?.cft6Cuotas ?? 10;
+				const ivaFactor = 1 + Number(config.taxes.iva) / 100;
+
+				let tasa = Number(rawBaseComm) > 1 ? Number(rawBaseComm) / 100 : Number(rawBaseComm);
+				if (installments > 3) {
+					tasa += Number(rawCFT6) / 100;
+				} else if (installments > 1) {
+					tasa += Number(rawCFT3) / 100;
+				}
+
+				order.finance.paymentGatewayFee = order.finance.total * (tasa * ivaFactor);
+			}
+
+			await order.save();
+
+			// Emails & Meta CAPI Purchase
+			if (order.paymentInfo.status === PaymentStatus.APPROVED && oldPaymentStatus !== PaymentStatus.APPROVED) {
+				await ResendService.sendOrderConfirmationEmail(order.toObject() as unknown as IOrder, models);
+				MetaService.trackPurchaseFromOrder(order.toObject())
+					.catch(err => console.error('[Meta CAPI] Error enviando Purchase event:', err));
+			} else if (order.paymentInfo.status === PaymentStatus.PENDING && isFirstPaymentUpdate) {
+				await ResendService.sendPaymentInProcessEmail(order.toObject() as unknown as IOrder, models);
+			}
+
+			return order;
+		} catch (error) {
+			console.error('Error confirming Getnet payment:', error);
+			if (error instanceof AppError) throw error;
+			throw new AppError('Failed to confirm Getnet payment', 'Error al confirmar el pago con Getnet', 500);
+		}
+	}
+
 	static async getAllOrders(
 		models: TenantModels,
 		role: Role,
@@ -1448,8 +1539,8 @@ export class OrderService {
 	// ==========================================
 
 	/**
-	 * Crea un pedido de venta local (mostrador). Se descuenta stock inmediatamente,
-	 * y el pedido nace en estado DELIVERED (Entregado) y APPROVED (si el pago cubre el total).
+	 * Crea un pedido de venta local (mostrador). Se descuenta stock inmediatamente.
+	 * Soporta pagos en efectivo, QR Mercado Pago, tarjetas y transferencia bancaria con comprobante.
 	 */
 	static async createLocalOrder(
 		models: TenantModels,
@@ -1459,6 +1550,10 @@ export class OrderService {
 			sellerId: string;
 			userId?: string;
 			notes?: string;
+			paymentReceipt?: {
+				url: string;
+				public_id?: string;
+			};
 		}
 	) {
 		try {
@@ -1539,22 +1634,39 @@ export class OrderService {
 			const totalOppositeCurrency = isARS ? totalCost / dolarVenta : totalCost * dolarVenta;
 			const earningsOppositeCurrency = isARS ? totalEarnings / dolarVenta : totalEarnings * dolarVenta;
 
+			// Determinar estado del pago según el medio y la configuración POS
+			const hasTransfer = data.splitPayments.some(
+				p => (p.method as string) === PaymentType.BANK_TRANSFER ||
+					(p.method as string) === PaymentType.ALIAS_TRANSFER ||
+					(p.method as string) === 'Transferencia' ||
+					(p.method as string) === 'BANK_TRANSFER'
+			);
+
+			let paymentStatus = PaymentStatus.APPROVED;
+			if (hasTransfer) {
+				const isStrictMode = config.posConfig?.transferValidationMode === 'strict_admin_approval';
+				if (isStrictMode || data.paymentReceipt) {
+					paymentStatus = PaymentStatus.WAITING_CONFIRMATION;
+				}
+			}
+
 			// 7. Crear el Order record
 			const newOrder = await models.Order.create({
-				user: data.userId, // Controller se encargará de proveer el genérico
+				user: data.userId,
 				seller: data.sellerId,
 				saleType: SaleType.LOCAL,
-				status: OrderStatus.DELIVERED, // entregado automáticamente
+				status: OrderStatus.DELIVERED, // entregado en mostrador
 				items: orderItems,
 				shippingInfo: {
 					type: ShippingType.PICKUP,
 					cost: 0
 				},
 				paymentInfo: {
-					method: data.splitPayments[0]?.method || PaymentType.CASH, // método primario
+					method: data.splitPayments[0]?.method || PaymentType.CASH,
 					amount: totalCost,
-					status: PaymentStatus.APPROVED, // asumiendo que el mostrador cobra en el acto
-					paymentDate: new Date()
+					status: paymentStatus,
+					paymentDate: paymentStatus === PaymentStatus.APPROVED ? new Date() : undefined,
+					paymentReceipt: data.paymentReceipt
 				},
 				splitPayments: data.splitPayments,
 				total: totalCost,
@@ -1567,7 +1679,9 @@ export class OrderService {
 				history: [{
 					status: OrderStatus.DELIVERED,
 					timestamp: new Date(),
-					note: 'Venta presencial en local'
+					note: hasTransfer && paymentStatus === PaymentStatus.WAITING_CONFIRMATION
+						? 'Venta presencial registrada con comprobante de transferencia pendiente de validación'
+						: 'Venta presencial en local'
 				}]
 			});
 
@@ -1587,69 +1701,180 @@ export class OrderService {
 	}
 
 	/**
+	 * Aprueba una transferencia bancaria (local u online) verificada por el Admin
+	 */
+	static async approveTransferPayment(models: TenantModels, orderId: string, adminUserId?: string) {
+		try {
+			const order = await models.Order.findById(orderId);
+			if (!order) {
+				throw new AppError('Orden no encontrada', 'No se encontró la orden especificada', 404);
+			}
+
+			order.paymentInfo.status = PaymentStatus.APPROVED;
+			order.paymentInfo.paymentDate = new Date();
+			order.history.push({
+				status: order.status,
+				timestamp: new Date(),
+				note: `Transferencia bancaria auditada y aprobada por el administrador`
+			});
+
+			await order.save();
+
+			const safeOrder = await models.Order.findById(order._id).populate([
+				{ path: 'user', select: 'name email' },
+				{ path: 'seller', select: 'name' }
+			]);
+
+			return safeOrder || order;
+		} catch (error) {
+			console.error(error);
+			if (error instanceof AppError) throw error;
+			throw new AppError('Error al aprobar transferencia', 'No se pudo aprobar la transferencia bancaria.', 500);
+		}
+	}
+
+	/**
 	 * Estadísticas del día en la tienda física/online
 	 */
 	static async getDailyStats(models: TenantModels, dateParam?: string) {
-		console.log('get daily stats');
 		try {
 			const targetDate = dateParam ? new Date(dateParam) : new Date();
 
-			// Inicio del día en string param local u hora servidor (hoy)
 			const startOfDay = new Date(targetDate);
 			startOfDay.setHours(0, 0, 0, 0);
 
 			const endOfDay = new Date(targetDate);
 			endOfDay.setHours(23, 59, 59, 999);
 
-			// Consultar todas las órdenes del día que no estén canceladas
+			// Consultar todas las órdenes del día
 			const dailyOrders = await models.Order.find({
-				createdAt: { $gte: startOfDay, $lte: endOfDay },
-				status: { $ne: OrderStatus.CANCELLED }
-			});
-
-			if (dailyOrders.length <= 0) {
-				return null
-			}
+				createdAt: { $gte: startOfDay, $lte: endOfDay }
+			})
+				.select(ADMIN_PRICE_SELECT)
+				.populate([
+					{ path: 'user', select: 'name email' },
+					{ path: 'items.productSnapshot.providerSnapshot', strictPopulate: false }
+				])
+				.lean();
 
 			let totalRevenue = 0;
 			let totalEarnings = 0;
+			let totalCostPrice = 0;
+			let refundedRevenue = 0;
+			let refundedCount = 0;
 			const incomeByMethod: Record<string, number> = {};
 			let localSalesCount = 0;
 			let onlineSalesCount = 0;
 
-			dailyOrders.forEach(order => {
-				totalRevenue += order.finance.total;
-				if (order.status !== OrderStatus.CANCELLED && order.paymentInfo.status !== PaymentStatus.REJECTED) {
-					totalEarnings += Number(order.finance.earnings) || 0;
-				}
-				if (order.saleType === SaleType.LOCAL) localSalesCount++;
-				else onlineSalesCount++;
+			// 24 slots horarios
+			const hourlyMap = new Map<number, { hour: number; revenue: number; count: number }>();
+			for (let h = 0; h < 24; h++) {
+				hourlyMap.set(h, { hour: h, revenue: 0, count: 0 });
+			}
 
-				// Contabilizar splitPayments si los hay, sino fallback a paymentInfo primario
-				if (order.splitPayments && order.splitPayments.length > 0) {
-					order.splitPayments.forEach(sp => {
-						incomeByMethod[sp.method] = (incomeByMethod[sp.method] || 0) + sp.amount;
+			const salesWithDetails: any[] = [];
+
+			for (const order of dailyOrders) {
+				const isRefunded = order.status === OrderStatus.CANCELLED ||
+					order.paymentInfo?.status === PaymentStatus.CANCELLED ||
+					order.paymentInfo?.status === PaymentStatus.REJECTED;
+
+				const isApproved = order.paymentInfo?.status === PaymentStatus.APPROVED && order.status !== OrderStatus.CANCELLED;
+
+				if (isRefunded) {
+					refundedCount++;
+					refundedRevenue += order.finance?.total || 0;
+				} else if (isApproved) {
+					totalRevenue += order.finance?.total || 0;
+					totalEarnings += Number(order.finance?.earnings) || 0;
+
+					if (order.saleType === SaleType.LOCAL) localSalesCount++;
+					else onlineSalesCount++;
+
+					// Horas
+					const orderHour = new Date(order.createdAt).getHours();
+					const currentSlot = hourlyMap.get(orderHour) || { hour: orderHour, revenue: 0, count: 0 };
+					currentSlot.revenue += order.finance?.total || 0;
+					currentSlot.count++;
+					hourlyMap.set(orderHour, currentSlot);
+
+					// Métodos de pago
+					if (order.splitPayments && order.splitPayments.length > 0) {
+						order.splitPayments.forEach((sp: any) => {
+							incomeByMethod[sp.method] = (incomeByMethod[sp.method] || 0) + sp.amount;
+						});
+					} else {
+						const method = order.paymentInfo?.method || 'unknown';
+						incomeByMethod[method] = (incomeByMethod[method] || 0) + (order.finance?.total || 0);
+					}
+				}
+
+				// Items con detalle
+				const itemsWithDetail: any[] = [];
+				for (const item of (order.items as any[])) {
+					const snapshot = item.productSnapshot;
+					const costPriceValue = item.costPriceSnapshot?.inARS ?? snapshot?.prices?.costPrice?.inARS ?? 0;
+					if (isApproved) {
+						totalCostPrice += costPriceValue * item.quantity;
+					}
+
+					itemsWithDetail.push({
+						productName: `${snapshot?.brand ?? ''} ${snapshot?.model ?? ''}`.trim(),
+						image: snapshot?.image ?? '',
+						quantity: item.quantity,
+						unitPrice: item.price,
+						costPrice: costPriceValue,
+						variant: item.variantSnapshot ? `${item.variantSnapshot.size || ''} ${item.variantSnapshot.color?.name || ''}`.trim() : '',
+						provider: snapshot?.providerSnapshot
+							? { name: snapshot.providerSnapshot.name ?? 'Sin proveedor' }
+							: null
 					});
-				} else {
-					const method = order.paymentInfo?.method || 'unknown';
-					incomeByMethod[method] = (incomeByMethod[method] || 0) + order.finance.total;
 				}
-			});
 
+				const orderUser = order.user as any;
+				const buyer = orderUser
+					? { name: orderUser.name, email: orderUser.email }
+					: order.buyerData
+						? { name: `${order.buyerData.firstName} ${order.buyerData.lastName}`, email: order.buyerData.email }
+						: null;
 
+				salesWithDetails.push({
+					orderId: (order as any)._id.toString(),
+					orderNumber: order.orderNumber,
+					createdAt: order.createdAt,
+					saleType: order.saleType,
+					status: order.status,
+					paymentStatus: order.paymentInfo?.status,
+					total: order.finance?.total || 0,
+					earnings: Number(order.finance?.earnings) || 0,
+					paymentMethod: order.paymentInfo?.method,
+					buyer,
+					items: itemsWithDetail
+				});
+			}
+
+			// Ordenar transacciones por fecha descendente
+			salesWithDetails.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
 			return {
 				date: targetDate,
 				totalRevenue,
 				totalEarnings,
+				totalCostPrice,
 				salesCount: {
-					total: dailyOrders.length,
+					total: localSalesCount + onlineSalesCount,
 					local: localSalesCount,
 					online: onlineSalesCount
 				},
-				revenueByMethod: incomeByMethod
+				refunds: {
+					total: refundedRevenue,
+					count: refundedCount
+				},
+				incomeByMethod,
+				revenueByMethod: incomeByMethod,
+				hourlyBreakdown: Array.from(hourlyMap.values()),
+				salesWithDetails
 			};
-
 		} catch (error) {
 			console.log(error);
 			throw new AppError('Failed to get daily stats', 'Error al obtener las estadísticas del día', 500);
@@ -1689,8 +1914,7 @@ export class OrderService {
 
 	/**
 	 * Estadísticas de ventas por rango (día, semana, mes, año).
-	 * Solo incluye órdenes con paymentInfo.status === APPROVED.
-	 * Incluye ventas online y POS (saleType: LOCAL/ONLINE).
+	 * Incluye órdenes aprobadas, métricas de cancelaciones/reembolsos, top productos y KPIs avanzados.
 	 */
 	static async getSalesStats(
 		models: TenantModels,
@@ -1701,7 +1925,6 @@ export class OrderService {
 		try {
 			const targetDate = dateParam ? new Date(dateParam) : new Date();
 
-			// Calcular from/to según el rango
 			let from: Date;
 			let to: Date;
 
@@ -1732,10 +1955,9 @@ export class OrderService {
 					break;
 			}
 
-			// Solo órdenes APROBADAS en el rango (fix del bug de getDailyStats)
-			const approvedOrders = await models.Order.find({
-				createdAt: { $gte: from, $lte: to },
-				'paymentInfo.status': PaymentStatus.APPROVED
+			// Consultar todas las órdenes del rango
+			const allRangeOrders = await models.Order.find({
+				createdAt: { $gte: from, $lte: to }
 			})
 				.select(ADMIN_PRICE_SELECT)
 				.populate([
@@ -1744,38 +1966,58 @@ export class OrderService {
 				])
 				.lean();
 
-			// ── KPIs globales ───────────────────────────────────────────────────────
 			let totalRevenue = 0;
 			let totalEarnings = 0;
 			let totalCostPrice = 0;
 			let localSalesCount = 0;
 			let onlineSalesCount = 0;
+			let refundedCount = 0;
+			let refundedTotal = 0;
 			const revenueByMethod: Record<string, number> = {};
 
-			// ── Daily breakdown (para el chart) ────────────────────────────────────
 			const breakdownMap = new Map<string, { revenue: number; earnings: number; ordersCount: number }>();
-
-			// ── Sales con detalle de comprador y proveedor ──────────────────────────
 			const salesWithDetails: any[] = [];
+			const productsMap = new Map<string, { productName: string; image: string; quantity: number; revenue: number; earnings: number }>();
 
-			for (const order of approvedOrders) {
-				totalRevenue += order.finance.total;
-				totalEarnings += Number(order.finance.earnings) || 0;
+			for (const order of allRangeOrders) {
+				const isRefunded = order.status === OrderStatus.CANCELLED ||
+					order.paymentInfo?.status === PaymentStatus.CANCELLED ||
+					order.paymentInfo?.status === PaymentStatus.REJECTED;
 
-				if (order.saleType === SaleType.LOCAL) localSalesCount++;
-				else onlineSalesCount++;
+				const isApproved = order.paymentInfo?.status === PaymentStatus.APPROVED && order.status !== OrderStatus.CANCELLED;
 
-				// Ingresos por método de pago
-				if (order.splitPayments && order.splitPayments.length > 0) {
-					order.splitPayments.forEach((sp: any) => {
-						revenueByMethod[sp.method] = (revenueByMethod[sp.method] || 0) + sp.amount;
-					});
-				} else {
-					const method = order.paymentInfo?.method || 'unknown';
-					revenueByMethod[method] = (revenueByMethod[method] || 0) + order.finance.total;
+				if (isRefunded) {
+					refundedCount++;
+					refundedTotal += order.finance?.total || 0;
 				}
 
-				// Costo de proveedor por item (deuda al proveedor)
+				if (isApproved) {
+					totalRevenue += order.finance?.total || 0;
+					totalEarnings += Number(order.finance?.earnings) || 0;
+
+					if (order.saleType === SaleType.LOCAL) localSalesCount++;
+					else onlineSalesCount++;
+
+					if (order.splitPayments && order.splitPayments.length > 0) {
+						order.splitPayments.forEach((sp: any) => {
+							revenueByMethod[sp.method] = (revenueByMethod[sp.method] || 0) + sp.amount;
+						});
+					} else {
+						const method = order.paymentInfo?.method || 'unknown';
+						revenueByMethod[method] = (revenueByMethod[method] || 0) + (order.finance?.total || 0);
+					}
+
+					// Breakdown por día
+					const dayKey = new Date(order.createdAt).toISOString().split('T')[0];
+					const existing = breakdownMap.get(dayKey) || { revenue: 0, earnings: 0, ordersCount: 0 };
+					breakdownMap.set(dayKey, {
+						revenue: existing.revenue + (order.finance?.total || 0),
+						earnings: existing.earnings + (Number(order.finance?.earnings) || 0),
+						ordersCount: existing.ordersCount + 1
+					});
+				}
+
+				// Items
 				const itemsWithDetail: any[] = [];
 				for (const item of (order.items as any[])) {
 					const snapshot = item.productSnapshot;
@@ -1783,20 +2025,39 @@ export class OrderService {
 						? (item.costPriceSnapshot?.inUSD ?? snapshot?.prices?.costPrice?.inUSD ?? 0)
 						: (item.costPriceSnapshot?.inARS ?? snapshot?.prices?.costPrice?.inARS ?? 0);
 
-					totalCostPrice += costPriceValue * item.quantity;
+					if (isApproved) {
+						totalCostPrice += costPriceValue * item.quantity;
+
+						// Top products
+						const prodName = `${snapshot?.brand ?? ''} ${snapshot?.model ?? ''}`.trim() || 'Producto';
+						const prodKey = snapshot?._id?.toString() || prodName;
+						const itemEarnings = (item.price - costPriceValue) * item.quantity;
+						const existingProd = productsMap.get(prodKey) || {
+							productName: prodName,
+							image: snapshot?.image || '',
+							quantity: 0,
+							revenue: 0,
+							earnings: 0
+						};
+						existingProd.quantity += item.quantity;
+						existingProd.revenue += item.price * item.quantity;
+						existingProd.earnings += itemEarnings;
+						productsMap.set(prodKey, existingProd);
+					}
 
 					itemsWithDetail.push({
 						productName: `${snapshot?.brand ?? ''} ${snapshot?.model ?? ''}`.trim(),
+						image: snapshot?.image ?? '',
 						quantity: item.quantity,
 						unitPrice: item.price,
 						costPrice: costPriceValue,
+						variant: item.variantSnapshot ? `${item.variantSnapshot.size || ''} ${item.variantSnapshot.color?.name || ''}`.trim() : '',
 						provider: snapshot?.providerSnapshot
 							? { name: snapshot.providerSnapshot.name ?? 'Sin proveedor' }
 							: null
 					});
 				}
 
-				// Buyer info
 				const orderUser = order.user as any;
 				const buyer = orderUser
 					? { name: orderUser.name, email: orderUser.email }
@@ -1807,32 +2068,32 @@ export class OrderService {
 				salesWithDetails.push({
 					orderId: (order as any)._id.toString(),
 					orderNumber: order.orderNumber,
-					createdAt: (order as any).createdAt,
+					createdAt: order.createdAt,
 					saleType: order.saleType,
-					total: order.finance.total,
-					earnings: Number(order.finance.earnings) || 0,
+					status: order.status,
+					paymentStatus: order.paymentInfo?.status,
+					total: order.finance?.total || 0,
+					earnings: Number(order.finance?.earnings) || 0,
 					paymentMethod: order.paymentInfo?.method,
 					buyer,
 					items: itemsWithDetail
 				});
-
-				// Daily breakdown
-				const dayKey = new Date((order as any).createdAt).toISOString().split('T')[0];
-				const existing = breakdownMap.get(dayKey) || { revenue: 0, earnings: 0, ordersCount: 0 };
-				breakdownMap.set(dayKey, {
-					revenue: existing.revenue + order.finance.total,
-					earnings: existing.earnings + (Number(order.finance.earnings) || 0),
-					ordersCount: existing.ordersCount + 1
-				});
 			}
 
-			// Ordenar breakdown por fecha ascendente
 			const dailyBreakdown = Array.from(breakdownMap.entries())
 				.sort(([a], [b]) => a.localeCompare(b))
 				.map(([date, data]) => ({ date, ...data }));
 
-			// Ordenar ventas por fecha descendente (más recientes primero)
 			salesWithDetails.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+			// Top products ordenados por cantidad vendida
+			const topProducts = Array.from(productsMap.values())
+				.sort((a, b) => b.quantity - a.quantity)
+				.slice(0, 8);
+
+			const approvedCount = localSalesCount + onlineSalesCount;
+			const averageTicket = approvedCount > 0 ? totalRevenue / approvedCount : 0;
+			const averageMargin = totalRevenue > 0 ? (totalEarnings / totalRevenue) * 100 : 0;
 
 			return {
 				range,
@@ -1842,13 +2103,20 @@ export class OrderService {
 				totalRevenue,
 				totalEarnings,
 				totalCostPrice,
+				averageTicket,
+				averageMargin,
 				salesCount: {
-					total: approvedOrders.length,
+					total: approvedCount,
 					local: localSalesCount,
 					online: onlineSalesCount
 				},
+				refunds: {
+					total: refundedTotal,
+					count: refundedCount
+				},
 				revenueByMethod,
 				dailyBreakdown,
+				topProducts,
 				salesWithDetails
 			};
 		} catch (error) {

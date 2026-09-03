@@ -28,6 +28,7 @@ import cartRoutes from './routes/cart.routes';
 import notificationRoutes from './routes/notification.routes';
 import couponRoutes from './routes/coupon.routes';
 import newsletterRoutes from './routes/newsletter.routes';
+import { getnetRoutes } from './routes/getnet.routes';
 
 // Cargar variables de entorno según el entorno (development vs production)
 const currentEnv = process.env.NODE_ENV || 'development';
@@ -160,6 +161,8 @@ const registerRoutes = (prefix: string) => {
 	app.use(`${prefix}/notifications`, resolveTenant, notificationRoutes);
 	app.use(`${prefix}/coupons`, resolveTenant, couponRoutes);
 	app.use(`${prefix}/newsletter`, resolveTenant, newsletterRoutes);
+	app.use(`${prefix}/getnet`, resolveTenant, getnetRoutes);
+	app.use(`${prefix}/webhooks/getnet`, resolveTenant, getnetRoutes);
 };
 
 // Soportar tanto /api/... como /... (compatible con api.vura.com.ar)

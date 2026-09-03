@@ -6,12 +6,16 @@ export enum TenantPlan {
 	premium = 'premium'
 }
 
+export type TenantSubscriptionStatus = 'active' | 'past_due' | 'suspended' | 'trial';
+
 export interface ITenant {
 	_id: string;
 	slug: string;
 	name: string;
 	dbName: string;
 	domain?: string;
+	apiKey?: string;
+	subscriptionStatus?: TenantSubscriptionStatus;
 	isActive: boolean;
 	plan: TenantPlan;
 	commission: {

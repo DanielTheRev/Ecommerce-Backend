@@ -33,7 +33,13 @@ export class HeroService {
 
     const slidePayload: any = {
       ...data,
-      featuredProducts: data.featuredProducts ? JSON.parse(data.featuredProducts) : [],
+      title: data.title || `Slide ${slidesCount + 1}`,
+      slideType: data.slideType || 'visual',
+      sub_title: data.sub_title || '',
+      description: data.description || '',
+      ctaText: data.ctaText || '',
+      ctaLink: data.ctaLink || '',
+      featuredProducts: data.featuredProducts ? (typeof data.featuredProducts === 'string' ? JSON.parse(data.featuredProducts) : data.featuredProducts) : [],
     };
 
     rawImages.forEach((img, index) => {
@@ -136,8 +142,24 @@ export class HeroService {
 
       delete slidePayload.imageFiles;
 
-      const fieldsToSelect = Object.keys(slidePayload).join(' ');
-      const slide = await models.HeroSlide.findByIdAndUpdate(id, slidePayload, { new: true, runValidators: true, select: fieldsToSelect }).lean() as unknown as IHeroSlide;
+      const updateDoc: any = { $set: slidePayload };
+
+      // Si el slideType no es split, limpiamos imageDesktop2 e imageMobile2
+      if (slidePayload.slideType && slidePayload.slideType !== 'split') {
+        const oldDesktop2 = slideToUpdate.imageDesktop2 as any;
+        if (oldDesktop2?.public_id) {
+          await ImageService.DeleteImage(oldDesktop2.public_id).catch(err => console.error('Failed to delete old imageDesktop2:', err));
+        }
+        const oldMobile2 = slideToUpdate.imageMobile2 as any;
+        if (oldMobile2?.public_id) {
+          await ImageService.DeleteImage(oldMobile2.public_id).catch(err => console.error('Failed to delete old imageMobile2:', err));
+        }
+        updateDoc.$unset = { imageDesktop2: 1, imageMobile2: 1 };
+        delete slidePayload.imageDesktop2;
+        delete slidePayload.imageMobile2;
+      }
+
+      const slide = await models.HeroSlide.findByIdAndUpdate(id, updateDoc, { new: true, runValidators: true }).lean() as unknown as IHeroSlide;
       if (!slide) throw new AppError('slide not found', 'slide no encontrado', 404);
 
       if (tenantSlug) {

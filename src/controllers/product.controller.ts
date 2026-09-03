@@ -27,6 +27,9 @@ export class ProductController {
 				req.query.hasSizeGuide !== undefined ? req.query.hasSizeGuide === 'true' : undefined;
 			const hasSeoImage =
 				req.query.hasSeoImage !== undefined ? req.query.hasSeoImage === 'true' : undefined;
+			const isFeatured =
+				req.query.isFeatured !== undefined ? req.query.isFeatured === 'true' : undefined;
+			const sortBy = req.query.sortBy as string | undefined;
 
 			const result = await ProductService.getPaginatedProductsWCompletePrices(
 				req.models!,
@@ -38,7 +41,9 @@ export class ProductController {
 				isActive,
 				providerId,
 				hasSizeGuide,
-				hasSeoImage
+				hasSeoImage,
+				isFeatured,
+				sortBy
 			);
 			res.status(200).json(result);
 		} catch (error) {
@@ -323,6 +328,62 @@ export class ProductController {
 		}
 	}
 
+	// POST /api/products/bulk-create - Creación masiva de productos (IA / Excel)
+	static async bulkCreateProducts(
+		req: AuthRequest,
+		res: Response,
+		next: NextFunction
+	): Promise<void> {
+		try {
+			const { products } = req.body;
+			if (!Array.isArray(products) || products.length === 0) {
+				res.status(400).json({ success: false, message: 'Se requiere un array de productos' });
+				return;
+			}
+
+			const tenantSlug = req.tenant?.slug || 'general';
+			const result = await ProductService.bulkCreateProducts(req.models!, products, tenantSlug);
+
+			if (req.tenant?.slug) {
+				const { CacheService } = await import('@/services/cache.service');
+				CacheService.invalidatePrefix(req.tenant.slug, 'home');
+				CacheService.invalidatePrefix(req.tenant.slug, 'products');
+			}
+
+			res.status(201).json(result);
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// PATCH /api/products/bulk-update - Actualización masiva de productos (IA)
+	static async bulkUpdateProducts(
+		req: AuthRequest,
+		res: Response,
+		next: NextFunction
+	): Promise<void> {
+		try {
+			const { updates } = req.body;
+			if (!Array.isArray(updates) || updates.length === 0) {
+				res.status(400).json({ success: false, message: 'Se requiere un array de actualizaciones' });
+				return;
+			}
+
+			const tenantSlug = req.tenant?.slug || 'general';
+			const result = await ProductService.bulkUpdateProducts(req.models!, updates, tenantSlug);
+
+			if (req.tenant?.slug) {
+				const { CacheService } = await import('@/services/cache.service');
+				CacheService.invalidatePrefix(req.tenant.slug, 'home');
+				CacheService.invalidatePrefix(req.tenant.slug, 'products');
+			}
+
+			res.status(200).json(result);
+		} catch (error) {
+			next(error);
+		}
+	}
+
 	// DELETE /api/products/:id - Eliminar un producto
 	static async deleteProduct(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
@@ -358,7 +419,9 @@ export class ProductController {
 				brand,
 				gender,
 				tags,
-				featured
+				featured,
+				interleave,
+				splitColors
 			} = req.query;
 			const productType = req.query.type as string | undefined;
 
@@ -378,6 +441,9 @@ export class ProductController {
 			const limit = parseInt(req.query.limit as string) || 10;
 			const sortBy = (req.query.sortBy as string | undefined) || 'createdAt';
 			const sortOrder = (req.query.sortOrder as string | undefined) || 'asc';
+			const parsedInterleave = interleave !== undefined ? interleave === 'true' : undefined;
+			const parsedSplitColors = splitColors !== undefined ? splitColors === 'true' : undefined;
+
 			const result = await ProductService.searchProducts({
 				models: req.models!,
 				filters: {
@@ -391,7 +457,9 @@ export class ProductController {
 					tags: tags as string,
 					featured: featured as unknown as boolean,
 					sortBy: sortBy,
-					sortOrder: sortOrder
+					sortOrder: sortOrder,
+					interleave: parsedInterleave,
+					splitColors: parsedSplitColors
 				},
 				page: page,
 				limit: limit,

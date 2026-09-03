@@ -26,9 +26,20 @@ export const TenantSchema = new Schema<ITenant>(
 			trim: true,
 			sparse: true
 		},
+		apiKey: {
+			type: String,
+			unique: true,
+			sparse: true,
+			trim: true
+		},
 		isActive: {
 			type: Boolean,
 			default: true
+		},
+		subscriptionStatus: {
+			type: String,
+			enum: ['active', 'past_due', 'suspended', 'trial'],
+			default: 'active'
 		},
 		plan: {
 			type: String,

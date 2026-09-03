@@ -19,7 +19,8 @@ import {
 	getSalesStats,
 	getTicket,
 	trackOrder,
-	uploadPaymentReceipt
+	uploadPaymentReceipt,
+	approveTransferPayment
 } from '../controllers/order.controller';
 import { adminOnly, optionalAuth, protect } from '../middleware/auth';
 import { validateSchema } from '@/middleware/validator.middleware';
@@ -47,6 +48,7 @@ router.get('/', protect, adminOnly, getAllOrders); // Obtener todas las órdenes
 router.get('/admin/order/:id', protect, adminOnly, getOrderByIdAdmin); // Obtener orden por ID (admin)
 router.post('/updatePaymentStatus', protect, adminOnly, validateSchema(UpdatePaymentStatusSchema), updatePaymentStatus); // actualizar estado de una order desde el cliente
 router.post('/updateShippingStatus', protect, adminOnly, validateSchema(UpdateShippingStatusSchema), updateShippingStatus); // actualizar estado de una order desde el cliente
+router.patch('/admin/orders/:id/approve-transfer', protect, adminOnly, approveTransferPayment); // Aprobar transferencia bancaria manualmente (admin)
 router.get('/admin/stats', protect, adminOnly, getOrderStats); // Obtener estadísticas (admin)
 router.get('/admin/daily-stats', protect, adminOnly, getDailyStats); // Obtener estadísticas diarias (admin)
 router.get('/admin/sales-stats', protect, adminOnly, getSalesStats); // Obtener estadísticas de ventas por rango (admin)

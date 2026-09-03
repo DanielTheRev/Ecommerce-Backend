@@ -4,11 +4,12 @@ import { Schema, model } from 'mongoose';
 
 const HeroSlideSchema = new Schema<IHeroSlide>(
   {
-    title: { type: String, required: true }, // "Vura Essentials" (String)
-    sub_title: { type: String, required: true }, // "FW / 2026" (String)
-    description: { type: String, required: true }, // "Prendas diseñadas para perdurar..." (String)
-    ctaText: { type: String, required: true }, // "Comprar Colección" (String)
-    ctaLink: { type: String, required: true }, // /products?collection=autumn-2026 o /collections/essentials (String)
+    title: { type: String, required: false, default: '' },
+    slideType: { type: String, enum: ['visual', 'editorial', 'split'], default: 'visual' },
+    sub_title: { type: String, required: false, default: '' },
+    description: { type: String, required: false, default: '' },
+    ctaText: { type: String, required: false, default: '' },
+    ctaLink: { type: String, required: false, default: '' },
     imageDesktop1: {
       url: { type: String, required: true },
       public_id: { type: String, required: true }
@@ -30,8 +31,8 @@ const HeroSlideSchema = new Schema<IHeroSlide>(
         type: Schema.Types.ObjectId,
         ref: 'Product',
       }
-    ],//Un array de IDs de productos. (Esto es para el "Shop the Look").
-    isActive: { type: Boolean, default: false }
+    ],
+    isActive: { type: Boolean, default: true }
   },
   {
     timestamps: false,

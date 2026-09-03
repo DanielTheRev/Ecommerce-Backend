@@ -23,14 +23,12 @@ export interface TenantRequest extends Request {
  * Middleware que resuelve el tenant de la request.
  *
  * Estrategias de resolución (en orden de prioridad):
- * 1. Header `x-tenant-id` o Query param `tenantId`
- * 2. Body `tenantSlug` (para login / forms)
- * 3. Token JWT en Authorization Bearer o Cookie `token_b` (panel de control desacoplado)
- * 4. Params / URL (webhooks de Mercado Pago)
+ * 0. Storefront API Key `x-api-key` o query `apiKey` (para storefronts y webs personalizadas)
+ * 1. Body `tenantSlug` (para login / forms)
+ * 2. Header `x-tenant-id` o Query param `tenantId`
+ * 3. Token JWT en Authorization Bearer o Cookie `token_b` (panel de control)
+ * 4. Params / URL (webhooks de Mercado Pago / Getnet)
  * 5. Hostname/dominio
- *
- * Una vez resuelto, registra los modelos en la DB del tenant
- * y los pone disponibles en `req.models`.
  */
 export const resolveTenant = async (
 	req: TenantRequest,
@@ -38,10 +36,20 @@ export const resolveTenant = async (
 	next: NextFunction
 ): Promise<void> => {
 	try {
+		let tenant: ITenant | null = null;
 		let tenantSlug: string | undefined;
 
+		// Prioridad 0: Storefront API Key (x-api-key o ?apiKey=...)
+		const apiKeyHeader = req.headers['x-api-key'] || (req.query.apiKey as string);
+		if (apiKeyHeader && typeof apiKeyHeader === 'string' && apiKeyHeader.trim()) {
+			tenant = await connectionManager.getTenantByApiKey(apiKeyHeader.trim());
+			if (tenant) {
+				tenantSlug = tenant.slug;
+			}
+		}
+
 		// Prioridad 1: Extraer del body (para login con 3 campos - tiene la máxima prioridad)
-		if (req.body) {
+		if (!tenant && req.body) {
 			if (typeof req.body.tenantSlug === 'string' && req.body.tenantSlug.trim()) {
 				tenantSlug = req.body.tenantSlug.trim().toLowerCase();
 			} else if (typeof req.body.tenant === 'string' && req.body.tenant.trim()) {
@@ -49,20 +57,8 @@ export const resolveTenant = async (
 			}
 		}
 
-		// Prioridad 2: Header x-tenant-id o query params (si tiene valor no vacío)
-		if (!tenantSlug) {
-			const headerTenant = req.headers['x-tenant-id'];
-			if (typeof headerTenant === 'string' && headerTenant.trim() && headerTenant !== 'undefined' && headerTenant !== 'null') {
-				tenantSlug = headerTenant.trim().toLowerCase();
-			} else if (typeof req.query.tenantId === 'string' && (req.query.tenantId as string).trim()) {
-				tenantSlug = (req.query.tenantId as string).trim().toLowerCase();
-			} else if (typeof req.query.state === 'string' && (req.query.state as string).trim()) {
-				tenantSlug = (req.query.state as string).trim().toLowerCase();
-			}
-		}
-
-		// Prioridad 3: Extraer del JWT Token (Bearer header o Cookie)
-		if (!tenantSlug) {
+		// Prioridad 2: Extraer del JWT Token (Bearer header o Cookie del panel/usuario)
+		if (!tenant && !tenantSlug) {
 			const authHeader = req.headers.authorization;
 			let token: string | undefined;
 			if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -83,36 +79,45 @@ export const resolveTenant = async (
 			}
 		}
 
-		// Prioridad 4: Intentar extraer de los params o webhook de Mercado Pago
-		if (!tenantSlug) {
+		// Prioridad 3: Intentar extraer de los params o webhook
+		if (!tenant && !tenantSlug) {
 			if (req.params.tenantSlug) {
 				tenantSlug = req.params.tenantSlug.trim().toLowerCase();
-			} else if (req.originalUrl.includes('/mercadopago-notification/')) {
+			} else if (req.originalUrl.includes('/mercadopago-notification/') || req.originalUrl.includes('/webhooks/')) {
 				const parts = req.originalUrl.split('/');
-				const index = parts.findIndex(p => p === 'mercadopago-notification');
+				const index = parts.findIndex(p => p === 'mercadopago-notification' || p === 'webhooks');
 				if (index !== -1 && parts[index + 1]) {
 					tenantSlug = parts[index + 1].split('?')[0].trim().toLowerCase();
 				}
 			}
 		}
 
-		let tenant: ITenant | null = null;
+		// Si es una petición pública que solo manda el viejo x-tenant-id sin x-api-key ni sesión: BLOQUEAR
+		if (!tenant && !tenantSlug && req.headers['x-tenant-id']) {
+			throw new AppError(
+				'Storefront API Key Required',
+				'El acceso público mediante x-tenant-id fue deshabilitado. Se requiere una Llave de Tienda válida (x-api-key) en los headers.',
+				401
+			);
+		}
 
-		if (tenantSlug) {
-			tenant = await connectionManager.getTenantBySlug(tenantSlug);
-		} else {
-			// Prioridad 5: Resolver por dominio/hostname
-			const hostname = req.hostname;
-			if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
-				tenant = await connectionManager.getTenantByDomain(hostname);
+		if (!tenant) {
+			if (tenantSlug) {
+				tenant = await connectionManager.getTenantBySlug(tenantSlug);
+			} else {
+				// Prioridad 4: Resolver por dominio/hostname
+				const hostname = req.hostname;
+				if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
+					tenant = await connectionManager.getTenantByDomain(hostname);
+				}
 			}
 		}
 
 		if (!tenant) {
-			console.warn(`⚠️ [TenantResolver] No se encontró el tenant para slug: "${tenantSlug}" en URL: ${req.originalUrl}`);
+			console.warn(`⚠️ [TenantResolver] No se encontró el tenant para slug/key: "${tenantSlug || apiKeyHeader || 'no provisto'}" en URL: ${req.originalUrl}`);
 			throw new AppError(
 				'Tenant not found or not specified',
-				`No se encontró la tienda "${tenantSlug || 'no especificada'}". Verificá el identificador ingresado.`,
+				`No se encontró la tienda "${tenantSlug || 'no especificada'}". Verificá tu Llave de Tienda o identificador.`,
 				400
 			);
 		}
@@ -120,7 +125,15 @@ export const resolveTenant = async (
 		if (!tenant.isActive) {
 			throw new AppError(
 				'Tenant is inactive',
-				'Este comercio está desactivado',
+				'Este comercio está desactivado temporalmente.',
+				403
+			);
+		}
+
+		if (tenant.subscriptionStatus === 'suspended') {
+			throw new AppError(
+				'Subscription Suspended',
+				'La suscripción de este comercio se encuentra suspendida. Contactá al administrador para reactivar el servicio.',
 				403
 			);
 		}

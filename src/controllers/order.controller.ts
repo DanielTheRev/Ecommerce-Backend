@@ -240,14 +240,15 @@ export const createLocalOrder = async (req: AuthRequest, res: Response, next: Ne
 	console.log('Create local order');
 	try {
 		const sellerId = req.user!._id.toString();
-		const data = req.body; // Debería contener items, splitPayments, userId (opcional), notes (opcional)
+		const data = req.body;
 
 		const newOrder = await OrderService.createLocalOrder(req.models!, {
 			items: data.items,
 			splitPayments: data.splitPayments,
 			sellerId: sellerId,
 			userId: data.userId,
-			notes: data.notes
+			notes: data.notes,
+			paymentReceipt: data.paymentReceipt
 		});
 
 		if (req.tenant) {
@@ -257,6 +258,30 @@ export const createLocalOrder = async (req: AuthRequest, res: Response, next: Ne
 		return res.status(201).json({
 			message: 'Venta local registrada con éxito',
 			order: newOrder
+		});
+	} catch (error) {
+		console.log(error);
+		return next(error);
+	}
+};
+
+// Aprobar transferencia bancaria manualmente (admin)
+export const approveTransferPayment = async (req: AuthRequest, res: Response, next: NextFunction) => {
+	console.log('Approve transfer payment');
+	try {
+		const { id } = req.params;
+		const adminUserId = req.user!._id.toString();
+
+		const updatedOrder = await OrderService.approveTransferPayment(req.models!, id, adminUserId);
+
+		if (req.tenant) {
+			socketManager.notifyOrderUpdatedToAdmins(req.tenant.slug, updatedOrder);
+		}
+
+		return res.status(200).json({
+			status: 'success',
+			message: 'Transferencia bancaria validada y aprobada',
+			order: updatedOrder
 		});
 	} catch (error) {
 		console.log(error);

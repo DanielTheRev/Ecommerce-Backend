@@ -20,7 +20,8 @@ const sendTokenResponse = (statusCode: number, res: Response, user: ISecureUser,
 			success: true,
 			message: statusCode === 201 ? 'Usuario registrado exitosamente' : 'Login exitoso',
 			user: user,
-			tenantSlug: tenantSlug
+			tenantSlug: tenantSlug,
+			token: token
 		});
 };
 

@@ -3,7 +3,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import DataURIParser from 'datauri/parser';
 import path from 'path';
 import dotenv from 'dotenv';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -55,7 +55,7 @@ export class ImageService {
 			const cleanId = this.sanitizeId(id);
 
 			const img_uploaded = await cloudinary.uploader.upload(contentToUpload, {
-				public_id: `${cleanId}-${uuidv4()}`, // ID limpio + identificador único
+				public_id: `${cleanId}-${randomUUID()}`, // ID limpio + identificador único
 				overwrite: true,
 				folder: folder,
 				resource_type: 'auto',

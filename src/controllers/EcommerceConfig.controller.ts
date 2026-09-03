@@ -145,13 +145,29 @@ export class EcommerceConfigController {
 		}
 	}
 
-	// POST /api/Ecommerce/config/recalculate-prices - Recálculo masivo manual
-	static async triggerRecalculation(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+	// POST /api/Ecommerce/config/recalculate-preview - Simulación / Vista previa de recálculo masivo
+	static async previewRecalculation(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
-			await EcommerceService.triggerPriceRecalculation(req.models!);
+			const onlyActive = req.body?.onlyActive !== false;
+			const previewData = await EcommerceService.previewPriceRecalculation(req.models!, onlyActive);
 			res.status(200).json({
 				success: true,
-				message: 'Recálculo masivo de precios completado'
+				...previewData
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// POST /api/Ecommerce/config/recalculate-prices - Recálculo masivo manual confirmado
+	static async triggerRecalculation(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const onlyActive = req.body?.onlyActive !== false;
+			const result = await EcommerceService.triggerPriceRecalculation(req.models!, onlyActive, req.tenant?.slug);
+			res.status(200).json({
+				success: true,
+				message: `Recálculo masivo completado. ${result.updatedCount} productos actualizados`,
+				updatedCount: result.updatedCount
 			});
 		} catch (error) {
 			next(error);
@@ -210,6 +226,113 @@ export class EcommerceConfigController {
 			res.status(200).json({
 				success: true,
 				message: 'Configuración eliminada/reseteada exitosamente'
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// GET /api/config/connection - Obtener configuración de llaves y dominios
+	static async getConnectionSettings(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { connectionManager } = await import('@/config/multitenancy');
+			const masterDb = connectionManager.getMasterDb();
+			const TenantModel = masterDb.model<any>('Tenant');
+			let tenant = await TenantModel.findById(req.tenant?._id);
+
+			if (!tenant) {
+				throw new AppError('Tenant not found', 'No se encontró la tienda', 404);
+			}
+
+			// Si no tiene apiKey generada aún, le generamos una automáticamente
+			if (!tenant.apiKey) {
+				const crypto = await import('crypto');
+				const randomHex = crypto.randomBytes(16).toString('hex');
+				tenant.apiKey = `pk_live_${tenant.slug}_${randomHex}`;
+				await tenant.save();
+				connectionManager.invalidateTenantCache(tenant.slug);
+			}
+
+			res.status(200).json({
+				apiKey: tenant.apiKey,
+				allowedOrigins: tenant.settings?.allowedOrigins || [],
+				subscriptionStatus: tenant.subscriptionStatus || 'active',
+				slug: tenant.slug,
+				name: tenant.name
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// POST /api/config/connection/regenerate-key - Regenerar Storefront API Key
+	static async regenerateApiKey(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { connectionManager } = await import('@/config/multitenancy');
+			const masterDb = connectionManager.getMasterDb();
+			const TenantModel = masterDb.model<any>('Tenant');
+			const tenant = await TenantModel.findById(req.tenant?._id);
+
+			if (!tenant) {
+				throw new AppError('Tenant not found', 'No se encontró la tienda', 404);
+			}
+
+			const crypto = await import('crypto');
+			const randomHex = crypto.randomBytes(16).toString('hex');
+			const newKey = `pk_live_${tenant.slug}_${randomHex}`;
+			const oldKey = tenant.apiKey;
+
+			tenant.apiKey = newKey;
+			await tenant.save();
+
+			connectionManager.invalidateTenantCache(tenant.slug);
+			if (oldKey) {
+				connectionManager.invalidateTenantCache(oldKey);
+			}
+
+			res.status(200).json({
+				success: true,
+				message: 'Nueva llave de conexión generada exitosamente',
+				apiKey: newKey
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// PUT /api/config/connection/allowed-origins - Actualizar dominios permitidos
+	static async updateAllowedOrigins(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { allowedOrigins } = req.body;
+			if (!Array.isArray(allowedOrigins)) {
+				throw new AppError('Invalid format', 'allowedOrigins debe ser un array de strings', 400);
+			}
+
+			const { connectionManager } = await import('@/config/multitenancy');
+			const masterDb = connectionManager.getMasterDb();
+			const TenantModel = masterDb.model<any>('Tenant');
+			const tenant = await TenantModel.findById(req.tenant?._id);
+
+			if (!tenant) {
+				throw new AppError('Tenant not found', 'No se encontró la tienda', 404);
+			}
+
+			if (!tenant.settings) {
+				tenant.settings = { allowedOrigins: [] };
+			}
+
+			// Limpieza de dominios (trim y sin trailing slash)
+			tenant.settings.allowedOrigins = allowedOrigins
+				.map((d: string) => String(d).trim().replace(/\/+$/, ''))
+				.filter(Boolean);
+
+			await tenant.save();
+			connectionManager.invalidateTenantCache(tenant.slug);
+
+			res.status(200).json({
+				success: true,
+				message: 'Dominios permitidos actualizados exitosamente',
+				allowedOrigins: tenant.settings.allowedOrigins
 			});
 		} catch (error) {
 			next(error);

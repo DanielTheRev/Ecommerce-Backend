@@ -123,8 +123,14 @@ export class HomeService {
 		}
 	}
 
-	static async getHomeConfig(models: TenantModels, tenantSlug?: string): Promise<IHomeConfig> {
-		const cacheKey = 'home:full';
+	static async getHomeConfig(
+		models: TenantModels,
+		tenantSlug?: string,
+		options?: { newsLimit?: number; splitColors?: boolean }
+	): Promise<IHomeConfig> {
+		const newsLimit = options?.newsLimit ? Math.max(1, Number(options.newsLimit)) : 12;
+		const splitColors = options?.splitColors === true;
+		const cacheKey = `home:full:${newsLimit}:${splitColors}`;
 		if (tenantSlug) {
 			const cached = (await import('./cache.service')).CacheService.get<IHomeConfig>(tenantSlug, cacheKey);
 			if (cached) return cached;
@@ -154,22 +160,16 @@ export class HomeService {
 			this.offers[2]
 		];
 
-		// Últimos productos subidos
-		const news = (await ProductService.searchProducts({
-			models,
-			filters: {
-				sortBy: 'createdAt',
-				sortOrder: 'asc'
-			},
-			page: 1,
-			limit: 12
-		})).data as unknown as IProduct[];
+		// Novedades Inteligentes: Destacados primero (isFeatured: true) + Relleno de últimos ingresos (sin repetir colores)
+		const news = await ProductService.getSmartNews(models, newsLimit, splitColors);
 
-		// Productos más vendidos (controlado por isFeatured mientras no haya ventas reales)
+		// Más vendidos / Catálogo dinámico
 		const mostSales = (await ProductService.searchProducts({
 			models,
 			filters: {
-				featured: true
+				sortBy: 'createdAt',
+				sortOrder: 'desc',
+				splitColors: true
 			},
 			limit: 8
 		})).data as unknown as IProduct[];
