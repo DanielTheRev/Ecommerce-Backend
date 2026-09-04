@@ -15,14 +15,18 @@ export interface IShopTheLookHotspot {
 	isActive: boolean;
 }
 
+export interface ILookItem {
+	_id?: Types.ObjectId | string;
+	name?: string;
+	mainImage: IShopTheLookImage;
+	hotspots: IShopTheLookHotspot[];
+	isActive: boolean;
+}
+
 export interface IShopTheLook {
 	title: string;
 	subtitle: string;
-	looks: {
-		mainImage: IShopTheLookImage;
-		hotspots: IShopTheLookHotspot[];
-		isActive: boolean;
-	}[];
+	looks: ILookItem[];
 	isActive: boolean;
 }
 

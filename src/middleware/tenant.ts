@@ -40,7 +40,8 @@ export const resolveTenant = async (
 		let tenantSlug: string | undefined;
 
 		// Prioridad 0: Storefront API Key (x-api-key o ?apiKey=...)
-		const apiKeyHeader = req.headers['x-api-key'] || (req.query.apiKey as string);
+		const rawApiKey = req.headers['x-api-key'] || (req.query.apiKey as string);
+		const apiKeyHeader = Array.isArray(rawApiKey) ? rawApiKey[0] : rawApiKey;
 		if (apiKeyHeader && typeof apiKeyHeader === 'string' && apiKeyHeader.trim()) {
 			tenant = await connectionManager.getTenantByApiKey(apiKeyHeader.trim());
 			if (tenant) {

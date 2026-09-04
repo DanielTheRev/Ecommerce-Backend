@@ -121,7 +121,7 @@ class ConnectionManager {
 	 * Busca un tenant por dominio (para resolución por subdominio/dominio).
 	 */
 	async getTenantByDomain(domain: string): Promise<ITenant | null> {
-		const cleanDomain = (domain || '').trim().toLowerCase();
+		const cleanDomain = (domain || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '');
 		if (!cleanDomain) return null;
 
 		const cached = this.tenantDomainCache.get(cleanDomain);
@@ -129,7 +129,15 @@ class ConnectionManager {
 
 		const masterDb = this.getMasterDb();
 		const TenantModel = masterDb.model<ITenant>('Tenant');
-		const tenant = await TenantModel.findOne({ domain: cleanDomain, isActive: true }).lean() as ITenant | null;
+		const tenant = await TenantModel.findOne({
+			$or: [
+				{ domain: cleanDomain },
+				{ domain: `https://${cleanDomain}` },
+				{ domain: `http://${cleanDomain}` },
+				{ domain: { $regex: new RegExp(`^https?://${cleanDomain}/?$`, 'i') } }
+			],
+			isActive: true
+		}).lean() as ITenant | null;
 
 		if (tenant) {
 			this.tenantDomainCache.set(cleanDomain, tenant);

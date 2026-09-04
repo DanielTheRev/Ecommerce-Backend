@@ -27,8 +27,10 @@ export const ShopTheLookSchema = new Schema<IShopTheLookDocument>(
 		subtitle: { type: String, trim: true },
 		looks: [
 			{
+				name: { type: String, trim: true, default: '' },
 				mainImage: { type: ShopTheLookImageSchema, required: true },
 				hotspots: { type: [ShopTheLookHotspotSchema], default: [] },
+				isActive: { type: Boolean, default: true }
 			}
 		],
 		isActive: { type: Boolean, default: true }
