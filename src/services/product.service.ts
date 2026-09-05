@@ -13,6 +13,8 @@ import { PaymentService } from './Payment.service';
 import { FinanceService } from './finance.service';
 import { SkuService } from './sku.service';
 import { EcommerceService, DEFAULT_RECOMMENDATION_RULES } from './ecommerce.service';
+import { CategoryGroupService } from './categoryGroup.service';
+import { ICategoryGroup } from '@/interfaces/categoryGroup.interface';
 
 
 export class ProductService {
@@ -26,6 +28,16 @@ export class ProductService {
 
 	public static readonly CATEGORY_GROUPS: Record<string, string[]> = {
 		abrigos: [
+			'Abrigos', 'Abrigo',
+			'Camperas', 'Campera', 'Camperones', 'Camperón', 'Camperon',
+			'Poleras', 'Polera', 'Polerones', 'Polerón', 'Poleron', 'Media Polera', 'Medias Poleras',
+			'Buzos', 'Buzo', 'Hoodies', 'Hoodie',
+			'Sweaters', 'Sweater', 'Suéteres', 'Sueteres', 'Suéter', 'Sueter',
+			'Cardigans', 'Cardigan', 'Cárdigans', 'Cárdigan',
+			'Chaquetas', 'Chaqueta', 'Tapados', 'Tapado', 'Parkas', 'Parka',
+			'Chalecos', 'Chaleco', 'Sacos', 'Saco', 'Blazers', 'Blazer', 'Trench', 'Anoraks', 'Anorak', 'Camisaco', 'Camisacos'
+		],
+		abrigo: [
 			'Abrigos', 'Abrigo',
 			'Camperas', 'Campera', 'Camperones', 'Camperón', 'Camperon',
 			'Poleras', 'Polera', 'Polerones', 'Polerón', 'Poleron', 'Media Polera', 'Medias Poleras',
@@ -52,39 +64,138 @@ export class ProductService {
 			'Cardigans', 'Cardigan', 'Cárdigans', 'Cárdigan'
 		],
 		buzos: ['Buzos', 'Buzo', 'Hoodies', 'Hoodie'],
+		buzo: ['Buzos', 'Buzo', 'Hoodies', 'Hoodie'],
+		hoodies: ['Buzos', 'Buzo', 'Hoodies', 'Hoodie'],
+		hoodie: ['Buzos', 'Buzo', 'Hoodies', 'Hoodie'],
 		poleras: ['Poleras', 'Polera', 'Polerones', 'Polerón', 'Poleron', 'Media Polera', 'Medias Poleras'],
+		polera: ['Poleras', 'Polera', 'Polerones', 'Polerón', 'Poleron', 'Media Polera', 'Medias Poleras'],
 		camperas: ['Camperas', 'Campera', 'Camperones', 'Camperón', 'Camperon', 'Chaquetas', 'Chaqueta', 'Parkas', 'Parka', 'Tapados', 'Tapado', 'Chalecos', 'Chaleco', 'Anoraks', 'Anorak', 'Camisaco', 'Camisacos'],
+		campera: ['Camperas', 'Campera', 'Camperones', 'Camperón', 'Camperon', 'Chaquetas', 'Chaqueta', 'Parkas', 'Parka', 'Tapados', 'Tapado', 'Chalecos', 'Chaleco', 'Anoraks', 'Anorak', 'Camisaco', 'Camisacos'],
 		pantalones: [
 			'Pantalones', 'Pantalón', 'Pantalon',
-			'Denim', 'Jeans', 'Jean',
-			'Baggies', 'Baggy', 'Bermudas', 'Bermuda', 'Shorts', 'Short',
 			'Joggers', 'Jogger', 'Cargo', 'Cargos', 'Calzas', 'Calza', 'Palazzo', 'Palazzos', 'Slacks'
 		],
-		remeras: [
-			'Remeras', 'Remera', 'T-Shirts', 'T-Shirt', 'Tshirts', 'Tshirt',
-			'Tops', 'Top', 'Crop Tops', 'Crop Top', 'Musculosas', 'Musculosa', 'Chombas', 'Chomba', 'Camisas', 'Camisa', 'Blusas', 'Blusa', 'Camisolas', 'Camisola'
+		pantalon: [
+			'Pantalones', 'Pantalón', 'Pantalon',
+			'Joggers', 'Jogger', 'Cargo', 'Cargos', 'Calzas', 'Calza', 'Palazzo', 'Palazzos', 'Slacks'
 		],
-		camisas: ['Camisas', 'Camisa', 'Blusas', 'Blusa', 'Camisolas', 'Camisola', 'Chombas', 'Chomba'],
+		jeans: ['Jeans', 'Jean', 'Denim', 'Baggies', 'Baggy'],
+		jean: ['Jeans', 'Jean', 'Denim', 'Baggies', 'Baggy'],
+		denim: ['Jeans', 'Jean', 'Denim', 'Baggies', 'Baggy'],
+		shorts: ['Shorts', 'Short', 'Bermudas', 'Bermuda'],
+		short: ['Shorts', 'Short', 'Bermudas', 'Bermuda'],
+		bermudas: ['Bermudas', 'Bermuda', 'Shorts', 'Short'],
+		bermuda: ['Bermudas', 'Bermuda', 'Shorts', 'Short'],
+		remeras: ['Remeras', 'Remera', 'T-Shirts', 'T-Shirt', 'Tshirts', 'Tshirt'],
+		remera: ['Remeras', 'Remera', 'T-Shirts', 'T-Shirt', 'Tshirts', 'Tshirt'],
+		tshirts: ['Remeras', 'Remera', 'T-Shirts', 'T-Shirt', 'Tshirts', 'Tshirt'],
+		tshirt: ['Remeras', 'Remera', 'T-Shirts', 'T-Shirt', 'Tshirts', 'Tshirt'],
+		musculosas: ['Musculosas', 'Musculosa'],
+		musculosa: ['Musculosas', 'Musculosa'],
+		tops: ['Tops', 'Top', 'Crop Tops', 'Crop Top'],
+		top: ['Tops', 'Top', 'Crop Tops', 'Crop Top'],
+		camisas: ['Camisas', 'Camisa', 'Camisolas', 'Camisola'],
+		camisa: ['Camisas', 'Camisa', 'Camisolas', 'Camisola'],
+		blusas: ['Blusas', 'Blusa', 'Camisas', 'Camisa', 'Camisolas', 'Camisola'],
+		blusa: ['Blusas', 'Blusa', 'Camisas', 'Camisa', 'Camisolas', 'Camisola'],
+		chombas: ['Chombas', 'Chomba', 'Polos', 'Polo'],
+		chomba: ['Chombas', 'Chomba', 'Polos', 'Polo'],
+		vestidos: ['Vestidos', 'Vestido', 'Monos', 'Mono', 'Enteritos', 'Enterito', 'Jumpsuits', 'Jumpsuit'],
+		vestido: ['Vestidos', 'Vestido', 'Monos', 'Mono', 'Enteritos', 'Enterito', 'Jumpsuits', 'Jumpsuit'],
 		calzado: [
 			'Calzado', 'Calzados', 'Zapatillas', 'Zapatilla', 'Sneakers', 'Sneaker',
 			'Zapatos', 'Zapato', 'Botas', 'Bota', 'Botinetas', 'Botineta', 'Borseguies', 'Borcego', 'Borsegos',
 			'Mule', 'Mules', 'Ojotas', 'Ojota', 'Sandalias', 'Sandalia', 'Pantuflas', 'Pantufla'
-		]
+		],
+		calzados: [
+			'Calzado', 'Calzados', 'Zapatillas', 'Zapatilla', 'Sneakers', 'Sneaker',
+			'Zapatos', 'Zapato', 'Botas', 'Bota', 'Botinetas', 'Botineta', 'Borseguies', 'Borcego', 'Borsegos',
+			'Mule', 'Mules', 'Ojotas', 'Ojota', 'Sandalias', 'Sandalia', 'Pantuflas', 'Pantufla'
+		],
+		zapatillas: ['Zapatillas', 'Zapatilla', 'Sneakers', 'Sneaker'],
+		zapatilla: ['Zapatillas', 'Zapatilla', 'Sneakers', 'Sneaker'],
+		sneakers: ['Zapatillas', 'Zapatilla', 'Sneakers', 'Sneaker'],
+		sneaker: ['Zapatillas', 'Zapatilla', 'Sneakers', 'Sneaker'],
+		accesorios: ['Accesorios', 'Accesorio', 'Gorras', 'Gorra', 'Caps', 'Cap', 'Bags', 'Bag', 'Mochilas', 'Mochila', 'Cinturones', 'Cinturón', 'Cinturon', 'Medias', 'Billeteras', 'Billetera'],
+		accesorio: ['Accesorios', 'Accesorio', 'Gorras', 'Gorra', 'Caps', 'Cap', 'Bags', 'Bag', 'Mochilas', 'Mochila', 'Cinturones', 'Cinturón', 'Cinturon', 'Medias', 'Billeteras', 'Billetera']
 	};
 
-	public static buildCategoryQuery(categoryParam: string): any {
+	/**
+	 * Construye la query de categoría en MongoDB resolviendo de forma dinámica
+	 * macro-categorías, sinónimos y grupos definidos por el merchant en el Panel.
+	 */
+	public static async buildCategoryQuery(
+		models: TenantModels,
+		categoryParam: string,
+		tenantSlug: string = 'global'
+	): Promise<any> {
 		const rawCategories = categoryParam.split(',').map(c => c.trim()).filter(Boolean);
 		const expandedCategories = new Set<string>();
 
-		for (const cat of rawCategories) {
-			const normalizedKey = cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-			const directKey = cat.toLowerCase();
+		// 1. Obtener grupos de categoría activos de la base de datos (con cache RAM sub-ms)
+		let activeGroups: ICategoryGroup[] = [];
+		try {
+			activeGroups = await CategoryGroupService.getActiveGroups(models, tenantSlug);
+		} catch (err) {
+			console.error('Error al obtener grupos de categoría para query:', err);
+		}
 
-			if (this.CATEGORY_GROUPS[normalizedKey]) {
-				this.CATEGORY_GROUPS[normalizedKey].forEach(c => expandedCategories.add(c));
-			} else if (this.CATEGORY_GROUPS[directKey]) {
-				this.CATEGORY_GROUPS[directKey].forEach(c => expandedCategories.add(c));
-			} else {
+		// 2. Construir mapas separados por prioridad de coincidencia
+		const slugMap = new Map<string, string[]>();
+		const nameMap = new Map<string, string[]>();
+		const synonymMap = new Map<string, string[]>();
+
+		for (const group of activeGroups) {
+			const targets = group.targetCategories && group.targetCategories.length > 0
+				? group.targetCategories
+				: [group.name];
+
+			const cleanSlug = group.slug.toLowerCase().trim();
+			const cleanName = group.name.toLowerCase().trim();
+			const cleanNameNormalized = cleanName.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+			slugMap.set(cleanSlug, targets);
+			nameMap.set(cleanName, targets);
+			nameMap.set(cleanNameNormalized, targets);
+
+			for (const syn of (group.synonyms || [])) {
+				const cleanSyn = syn.toLowerCase().trim();
+				const cleanSynNormalized = cleanSyn.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+				if (cleanSyn) {
+					const cur = synonymMap.get(cleanSyn) || [];
+					synonymMap.set(cleanSyn, Array.from(new Set([...cur, ...targets])));
+				}
+				if (cleanSynNormalized) {
+					const cur = synonymMap.get(cleanSynNormalized) || [];
+					synonymMap.set(cleanSynNormalized, Array.from(new Set([...cur, ...targets])));
+				}
+			}
+		}
+
+		for (const cat of rawCategories) {
+			const directKey = cat.toLowerCase().trim();
+			const normalizedKey = directKey.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+			// PRIORIDAD 1: Coincidencia con SLUG exacto de grupo (ej: ?category=abrigos o ?category=camperas)
+			if (slugMap.has(directKey)) {
+				slugMap.get(directKey)!.forEach(c => expandedCategories.add(c));
+			} else if (slugMap.has(normalizedKey)) {
+				slugMap.get(normalizedKey)!.forEach(c => expandedCategories.add(c));
+			}
+			// PRIORIDAD 2: Coincidencia con NOMBRE exacto de grupo (ej: ?category=Camperas o ?category=Abrigos)
+			else if (nameMap.has(directKey)) {
+				nameMap.get(directKey)!.forEach(c => expandedCategories.add(c));
+			} else if (nameMap.has(normalizedKey)) {
+				nameMap.get(normalizedKey)!.forEach(c => expandedCategories.add(c));
+			}
+			// PRIORIDAD 3: Coincidencia con SINÓNIMO de grupo (ej: ?category=outerwear)
+			else if (synonymMap.has(directKey)) {
+				synonymMap.get(directKey)!.forEach(c => expandedCategories.add(c));
+			} else if (synonymMap.has(normalizedKey)) {
+				synonymMap.get(normalizedKey)!.forEach(c => expandedCategories.add(c));
+			}
+			// PRIORIDAD 4: Coincidencia directa con categoría real
+			else {
 				expandedCategories.add(cat);
 			}
 		}
@@ -578,7 +689,7 @@ export class ProductService {
 			const Model = this.getModel(models, productType);
 			const query: any = { isActive: { $ne: false } };
 			if (category) {
-				const catQuery = this.buildCategoryQuery(category);
+				const catQuery = await this.buildCategoryQuery(models, category);
 				query.$or = [
 					{ category: catQuery },
 					{ clothingType: catQuery }
@@ -654,7 +765,14 @@ export class ProductService {
 			}
 
 			if (category) {
-				query.category = this.buildCategoryQuery(category);
+				const cats = category.split(',').map(c => c.trim()).filter(Boolean);
+				if (cats.length === 1) {
+					const escaped = cats[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+					query.category = new RegExp(`^${escaped}$`, 'i');
+				} else if (cats.length > 1) {
+					const regexes = cats.map(c => new RegExp(`^${c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'));
+					query.category = { $in: regexes };
+				}
 			}
 
 			if (isActive !== undefined) {
@@ -1075,7 +1193,7 @@ export class ProductService {
 			}
 
 			if (filters.category) {
-				const catQuery = ProductService.buildCategoryQuery(filters.category);
+				const catQuery = await ProductService.buildCategoryQuery(models, filters.category);
 				andConditions.push({
 					$or: [
 						{ category: catQuery },

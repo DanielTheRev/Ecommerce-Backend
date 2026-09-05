@@ -15,6 +15,7 @@ import { BaseProductSchema } from '@/models/Product.model';
 import { shippingOptionSchema } from '@/models/ShippingOption.model';
 import { userSchema } from '@/models/User.model';
 import { BentoConfigSchema } from '@/models/BentoConfig.model';
+import { VisualMenuSchema } from '@/models/VisualMenu.model';
 import { ShopTheLookSchema } from '@/models/shopTheLook.model';
 import { addressSchema } from '@/models/Address.model';
 import { SkuCounterSchema, ISkuCounterDocument } from '@/models/SkuCounter.model';
@@ -27,6 +28,8 @@ import { INotificationDocument } from '@/interfaces/notification.interface';
 import { providerSchema } from '@/models/provider.model';
 import { CouponSchema } from '@/models/Coupon.model';
 import { NewsletterSchema } from '@/models/Newsletter.model';
+import { MenuSchema } from '@/models/Menu.model';
+import { CategoryGroupSchema } from '@/models/CategoryGroup.model';
 
 // Interfaces
 import { ICashRegisterDocument, ICashRegisterModel } from '@/interfaces/cash-register.interface';
@@ -38,6 +41,9 @@ import { IShippingOption } from '@/interfaces/shippingMethods.interface';
 import { IUser } from '@/interfaces/user.interface';
 import { IHeroSlide } from '@/interfaces/hero.interface';
 import { IBentoConfigDocument } from '@/interfaces/bento.interface';
+import { IVisualMenuDocument } from '@/interfaces/visualMenu.interface';
+import { IMenuDocument } from '@/interfaces/menu.interface';
+import { ICategoryGroupDocument } from '@/interfaces/categoryGroup.interface';
 import { IShopTheLookDocument } from '@/interfaces/shopTheLook.interface';
 import { IAddressDocument } from '@/interfaces/address.interface';
 import { IProviderDocument } from '@/interfaces/provider.interface';
@@ -71,6 +77,9 @@ export interface TenantModels {
 	Notification: Model<INotificationDocument>;
 	Coupon: Model<ICouponDocument>;
 	Newsletter: Model<INewsletterDocument>;
+	VisualMenu: Model<IVisualMenuDocument>;
+	Menu: Model<IMenuDocument>;
+	CategoryGroup: Model<ICategoryGroupDocument>;
 }
 
 export function getModelsForConnection(db: Connection): TenantModels {
@@ -186,6 +195,21 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		? db.model<INewsletterDocument>('Newsletter')
 		: db.model<INewsletterDocument>('Newsletter', NewsletterSchema);
 
+	// VisualMenu
+	const VisualMenuModel = db.models.VisualMenu
+		? db.model<IVisualMenuDocument>('VisualMenu')
+		: db.model<IVisualMenuDocument>('VisualMenu', VisualMenuSchema);
+
+	// Menu (Menu Builder)
+	const MenuModel = db.models.Menu
+		? db.model<IMenuDocument>('Menu')
+		: db.model<IMenuDocument>('Menu', MenuSchema);
+
+	// CategoryGroup
+	const CategoryGroupModel = db.models.CategoryGroup
+		? db.model<ICategoryGroupDocument>('CategoryGroup')
+		: db.model<ICategoryGroupDocument>('CategoryGroup', CategoryGroupSchema);
+
 	return {
 		Product: ProductModel,
 		TechProduct: TechProductModel,
@@ -209,6 +233,9 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		Cart: CartModel,
 		Notification: NotificationModel,
 		Coupon: CouponModel,
-		Newsletter: NewsletterModel
+		Newsletter: NewsletterModel,
+		VisualMenu: VisualMenuModel,
+		Menu: MenuModel,
+		CategoryGroup: CategoryGroupModel
 	};
 }

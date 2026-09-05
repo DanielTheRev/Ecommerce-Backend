@@ -12,7 +12,8 @@ import { ITenant } from './interfaces/tenant.interface';
 import authRoutes from './routes/auth.routes';
 import ecommerceConfigRoutes from './routes/EcommerceConfig.routes';
 import heroRoutes from './routes/hero.routes';
-import bentoRoutes from './routes/bento.routes';
+import menuRoutes from './routes/menu.routes';
+import visualMenuRoutes from './routes/visualMenu.routes';
 import homeRoutes from './routes/home.routes';
 import orderRoutes from './routes/orderRoutes.routes';
 import paymentMethodRoutes from './routes/paymentMethodRoutes.routes';
@@ -28,6 +29,7 @@ import cartRoutes from './routes/cart.routes';
 import notificationRoutes from './routes/notification.routes';
 import couponRoutes from './routes/coupon.routes';
 import newsletterRoutes from './routes/newsletter.routes';
+import categoryGroupRoutes from './routes/categoryGroup.routes';
 import { getnetRoutes } from './routes/getnet.routes';
 
 // Cargar variables de entorno según el entorno (development vs production)
@@ -150,7 +152,11 @@ const registerRoutes = (prefix: string) => {
 	app.use(`${prefix}/home`, resolveTenant, homeRoutes);
 	app.use(`${prefix}/payment-methods`, resolveTenant, paymentMethodRoutes);
 	app.use(`${prefix}/hero`, resolveTenant, heroRoutes);
-	app.use(`${prefix}/bento`, resolveTenant, bentoRoutes);
+	app.use(`${prefix}/menus`, resolveTenant, menuRoutes);
+	app.use(`${prefix}/visual-menu`, resolveTenant, menuRoutes); // Alias retrocompatible
+	app.use(`${prefix}/bento`, resolveTenant, menuRoutes); // Alias retrocompatible
+	app.use(`${prefix}/category-groups`, resolveTenant, categoryGroupRoutes);
+	app.use(`${prefix}/categories`, resolveTenant, categoryGroupRoutes); // Alias
 	app.use(`${prefix}/config`, resolveTenant, ecommerceConfigRoutes);
 	app.use(`${prefix}/cash-register`, resolveTenant, cashRegisterRoutes);
 	app.use(`${prefix}/shop-the-look`, resolveTenant, shopTheLookRoutes);

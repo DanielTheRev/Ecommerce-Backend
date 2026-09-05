@@ -1,14 +1,18 @@
 import { Document, Types } from 'mongoose';
 import { IHeroSlide } from './hero.interface';
 import { IProduct } from './product.interface';
+import { IVisualMenuConfig } from './visualMenu.interface';
 import { IBentoConfig } from './bento.interface';
+import { IMenu } from './menu.interface';
 import { IShopTheLook } from './shopTheLook.interface';
 
 export interface IHomeConfig {
 	offers: IHomeOffer[];
 	productByBrand: IBrandSection[];
-	heroSlides: IHeroSlide[]
-	bentoConfig: IBentoConfig | null;
+	heroSlides: IHeroSlide[];
+	categoriesMenu?: IMenu | null;
+	visualMenuConfig?: any | null;
+	bentoConfig?: any | null;
 	shopTheLook: IShopTheLook[];
 	news: IProduct[];
 	mostSales: IProduct[];

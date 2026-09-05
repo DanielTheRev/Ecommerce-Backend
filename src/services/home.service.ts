@@ -5,7 +5,7 @@ import { BannerService } from './banner.service';
 import { HeroService } from './hero.service';
 import { AppError } from '@/errors/app.error';
 import { TenantModels } from '@/config/modelRegistry';
-import { BentoService } from './bento.service';
+import { MenuService } from './menu.service';
 import { ShopTheLookService } from './shopTheLook.service';
 import { EcommerceService } from './ecommerce.service';
 
@@ -139,7 +139,7 @@ export class HomeService {
 		const productByBrand = await this.getProductsGroupByBrand(models);
 		// Fetch Hero Slides
 		const heroSlides = await HeroService.getActiveSlides(models, tenantSlug);
-		const bentoConfig = await BentoService.getBentoConfig(models, tenantSlug);
+		const categoriesMenu = await MenuService.getMenuBySlugOrId(models, 'categories', tenantSlug);
 		const ShopTheLooks = await ShopTheLookService.getActiveLooks(models, tenantSlug);
 
 		const config = await EcommerceService.getConfig(models);
@@ -178,7 +178,9 @@ export class HomeService {
 			heroSlides,
 			offers: dynamicOffers,
 			productByBrand,
-			bentoConfig,
+			categoriesMenu,
+			visualMenuConfig: categoriesMenu,
+			bentoConfig: categoriesMenu,
 			shopTheLook: ShopTheLooks,
 			news,
 			mostSales
