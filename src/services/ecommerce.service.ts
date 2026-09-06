@@ -466,7 +466,7 @@ export class EcommerceService {
 	static getRecommendationsConfig = async (models: TenantModels) => {
 		try {
 			const config = await this.getConfig(models);
-			const activeProductCategories = (await models.Product.distinct('category', { isActive: true })) as string[];
+			const activeProductCategories = (await models.Product.distinct('category', { status: 'published' })) as string[];
 			const storeConfigCategories = config.categories || [];
 
 			const availableCategories = Array.from(new Set([...storeConfigCategories, ...activeProductCategories]))

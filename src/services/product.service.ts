@@ -1,7 +1,7 @@
 import { TenantModels } from '@/config/modelRegistry';
 import { AppError } from '@/errors/app.error';
 import { EcommercePaymentProviders } from '@/interfaces/ecommerce.interface';
-import { ClothingGender, ClothingSizeType, IProduct, IProductCreateDTO, IProductUpdateDTO, ISizeGuide, ProductType } from '@/interfaces/product.interface';
+import { ClothingGender, ClothingSizeType, IProduct, IProductCreateDTO, IProductUpdateDTO, ISizeGuide, ProductType, ProductStatus } from '@/interfaces/product.interface';
 import { paginate } from '@/utils/pagination.util';
 import createDOMPurify from 'dompurify';
 import { JSDOM } from 'jsdom';
@@ -477,12 +477,12 @@ export class ProductService {
 
 	// ============ READ METHODS ============
 
-	static async getAllProducts(models: TenantModels, productType?: string, isActive: boolean = true): Promise<IProduct[]> {
+	static async getAllProducts(models: TenantModels, productType?: string, status: string = 'published'): Promise<IProduct[]> {
 		try {
 			const Model = this.getModel(models, productType);
 			const query: any = {};
-			if (isActive) {
-				query.isActive = { $ne: false };
+			if (status && status !== 'all') {
+				query.status = status;
 			}
 			const products = (await Model.find(query).lean()) as unknown as IProduct[];
 			return products;
@@ -552,10 +552,10 @@ export class ProductService {
 				const product = products.find(p => p._id.toString() === item._id.toString());
 				if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
 
-				if (product.isActive === false) {
+				if (product.status !== 'published') {
 					throw new AppError(
-						`Product ${product.brand} ${product.model} is inactive`,
-						`El producto ${product.brand} ${product.model} está inactivo`,
+						`Product ${product.brand} ${product.model} is not published`,
+						`El producto ${product.brand} ${product.model} no está disponible para la compra`,
 						400
 					);
 				}
@@ -676,7 +676,7 @@ export class ProductService {
 	static async getAllProductSlugs(models: TenantModels): Promise<{ slug: string }[]> {
 		try {
 			// Explicitly exclude _id and the discriminator key (productType)
-			const products = await models.Product.find({ isActive: { $ne: false } }).select('slug -_id -productType').lean() as unknown as { slug: string }[];
+			const products = await models.Product.find({ status: 'published' }).select('slug -_id -productType').lean() as unknown as { slug: string }[];
 			return products;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
@@ -687,7 +687,7 @@ export class ProductService {
 	static async getPaginatedProducts(models: TenantModels, page: number = 1, limit: number = 20, productType?: string, category?: string) {
 		try {
 			const Model = this.getModel(models, productType);
-			const query: any = { isActive: { $ne: false } };
+			const query: any = { status: 'published' };
 			if (category) {
 				const catQuery = await this.buildCategoryQuery(models, category);
 				query.$or = [
@@ -714,7 +714,7 @@ export class ProductService {
 		productType?: string,
 		q?: string,
 		category?: string,
-		isActive?: boolean,
+		status?: string,
 		providerId?: string,
 		hasSizeGuide?: boolean,
 		hasSeoImage?: boolean,
@@ -775,8 +775,8 @@ export class ProductService {
 				}
 			}
 
-			if (isActive !== undefined) {
-				query.isActive = isActive;
+			if (status && status !== 'all') {
+				query.status = status;
 			}
 
 			if (providerId) {
@@ -835,16 +835,46 @@ export class ProductService {
 				sort = { isFeatured: -1, createdAt: -1 };
 			}
 
-			const result = await paginate(Model, query, {
-				page,
-				limit,
-				sort,
-				select: '+provider +finance +linkProductProvider',
-				populate: {
-					path: 'provider',
+			const [result, statusCountsRaw] = await Promise.all([
+				paginate(Model, query, {
+					page,
+					limit,
+					sort,
+					select: '+provider +finance +linkProductProvider',
+					populate: {
+						path: 'provider',
+					}
+				}),
+				Model.aggregate([
+					{
+						$group: {
+							_id: '$status',
+							count: { $sum: 1 }
+						}
+					}
+				])
+			]);
+
+			const statusCounts = {
+				all: 0,
+				published: 0,
+				draft: 0,
+				paused: 0,
+				archived: 0
+			};
+
+			for (const sc of statusCountsRaw) {
+				const key = sc._id as 'published' | 'draft' | 'paused' | 'archived';
+				if (key && statusCounts[key] !== undefined) {
+					statusCounts[key] = sc.count;
 				}
-			});
-			return result;
+				statusCounts.all += sc.count;
+			}
+
+			return {
+				...result,
+				statusCounts
+			};
 		} catch (error) {
 			if (error instanceof AppError) throw error;
 			throw new AppError('Failed to fetch paginated products', 'Error al obtener los productos', 500);
@@ -853,7 +883,7 @@ export class ProductService {
 
 	static async getQualityAudit(models: TenantModels) {
 		try {
-			const products = (await models.Product.find({ isActive: { $ne: false } })
+			const products = (await models.Product.find({ status: 'published' })
 				.select('_id brand model category slug productType seo sizeGuide images')
 				.lean()) as unknown as any[];
 
@@ -927,7 +957,7 @@ export class ProductService {
 
 	static async getProductBySlug(models: TenantModels, slug: string): Promise<IProduct> {
 		try {
-			const product = (await models.Product.findOne({ slug, isActive: { $ne: false } }).lean()) as unknown as IProduct;
+			const product = (await models.Product.findOne({ slug, status: 'published' }).lean()) as unknown as IProduct;
 			if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
 			return product;
 		} catch (error) {
@@ -943,7 +973,7 @@ export class ProductService {
 	): Promise<IProduct[]> {
 		try {
 			// 1. Obtener producto origen con provider y manualRecommendations
-			const sourceProduct = (await models.Product.findOne({ slug, isActive: { $ne: false } })
+			const sourceProduct = (await models.Product.findOne({ slug, status: 'published' })
 				.select('+provider +manualRecommendations +recommendationsMode')
 				.lean()) as unknown as IProduct;
 
@@ -965,7 +995,7 @@ export class ProductService {
 			) {
 				const manualProducts = (await models.Product.find({
 					_id: { $in: rawSource.manualRecommendations.map((id: any) => new Types.ObjectId(id)) },
-					isActive: { $ne: false }
+					status: 'published'
 				})
 					.limit(limit)
 					.lean()) as unknown as IProduct[];
@@ -995,7 +1025,7 @@ export class ProductService {
 					if (matchedKey) {
 						targetCategories = DEFAULT_RECOMMENDATION_RULES[matchedKey];
 					} else {
-						const allCategories = (await models.Product.distinct('category', { isActive: { $ne: false } })) as string[];
+						const allCategories = (await models.Product.distinct('category', { status: 'published' })) as string[];
 						targetCategories = allCategories.filter((c: string) => c !== sourceProduct.category);
 						targetCategories.push(sourceProduct.category);
 					}
@@ -1022,7 +1052,7 @@ export class ProductService {
 
 				if (providerId) {
 					const sameProviderQuery: any = {
-						isActive: { $ne: false },
+						status: 'published',
 						category: cat,
 						provider: new Types.ObjectId(providerId),
 						_id: { $nin: Array.from(selectedIdsSet).map(id => new Types.ObjectId(id)) },
@@ -1054,7 +1084,7 @@ export class ProductService {
 				const perCatLimit = Math.max(1, Math.ceil(remainingLimit / Math.max(1, remainingCategories)));
 
 				const otherProviderQuery: any = {
-					isActive: { $ne: false },
+					status: 'published',
 					category: cat,
 					_id: { $nin: Array.from(selectedIdsSet).map(id => new Types.ObjectId(id)) },
 					...genderFilter
@@ -1079,7 +1109,7 @@ export class ProductService {
 			if (recommendations.length < limit) {
 				const remainingCount = limit - recommendations.length;
 				const fallbackQuery: any = {
-					isActive: { $ne: false },
+					status: 'published',
 					_id: { $nin: Array.from(selectedIdsSet).map(id => new Types.ObjectId(id)) },
 					productType: sourceProduct.productType,
 					...genderFilter
@@ -1111,7 +1141,7 @@ export class ProductService {
 		try {
 			const Model = this.getModel(models, productType);
 			const query = {
-				isActive: { $ne: false },
+				status: 'published',
 				$or: [
 					{ brand: { $regex: queryText, $options: 'i' } },
 					{ model: { $regex: queryText, $options: 'i' } }
@@ -1171,7 +1201,7 @@ export class ProductService {
 			const Model = this.getModel(models, productType);
 			const query: any = {};
 
-			query.isActive = { $ne: false };
+			query.status = 'published';
 
 			if (filters.featured) {
 				query.isFeatured = filters.featured;
@@ -1279,7 +1309,7 @@ export class ProductService {
 		try {
 			// 1. Obtener destacados activos ordenados por fecha descendente
 			const featuredProducts = (await models.Product.find({
-				isActive: { $ne: false },
+				status: 'published',
 				isFeatured: true
 			})
 				.sort({ createdAt: -1 })
@@ -1294,7 +1324,7 @@ export class ProductService {
 				const featuredIds = featuredProducts.map(p => p._id);
 				
 				const recentProducts = (await models.Product.find({
-					isActive: { $ne: false },
+					status: 'published',
 					_id: { $nin: featuredIds }
 				})
 					.sort({ createdAt: -1 })
@@ -1423,6 +1453,8 @@ export class ProductService {
 				images,
 				specifications: data.specifications,
 				variants: data.variants || [],
+				status: data.status || 'draft',
+				isFeatured: Boolean(data.isFeatured),
 				tags: data.tags || [],
 				seo: seoData
 			};
@@ -1482,7 +1514,7 @@ export class ProductService {
 	 */
 	static async previewRecalculatePrices(models: TenantModels, config: any, onlyActive: boolean = true) {
 		try {
-			const query = onlyActive ? { isActive: { $ne: false } } : {};
+			const query = onlyActive ? { status: 'published' } : {};
 			const products = await models.Product.find(query)
 				.select('+finance')
 				.lean() as unknown as IProduct[];
@@ -1563,7 +1595,7 @@ export class ProductService {
 					model: product.model,
 					brand: product.brand,
 					image: mainImage,
-					isActive: product.isActive !== false,
+					status: product.status,
 					oldPrice: {
 						cashTransferPrice: oldCash,
 						cardPrice: oldCard,
@@ -1599,7 +1631,7 @@ export class ProductService {
 	static async recalculateAllProductsPrices(models: TenantModels, config: any, onlyActive: boolean = true): Promise<{ updatedCount: number }> {
 		try {
 			console.log(`🔄 Iniciando recalculo masivo de precios (onlyActive: ${onlyActive})...`);
-			const query = onlyActive ? { isActive: { $ne: false } } : {};
+			const query = onlyActive ? { status: 'published' } : {};
 			const products = await models.Product.find(query)
 				.select('+finance')
 				.lean() as unknown as IProduct[];
@@ -2140,11 +2172,11 @@ export class ProductService {
 		}
 	}
 
-	static async bulkUpdateStatus(models: TenantModels, ids: string[], isActive: boolean): Promise<boolean> {
+	static async bulkUpdateStatus(models: TenantModels, ids: string[], status: ProductStatus): Promise<boolean> {
 		try {
 			await models.Product.updateMany(
 				{ _id: { $in: ids.map(id => new Types.ObjectId(id)) } },
-				{ $set: { isActive } }
+				{ $set: { status } }
 			);
 			return true;
 		} catch (error) {
@@ -2152,6 +2184,25 @@ export class ProductService {
 			throw new AppError(
 				'Failed to bulk update product status',
 				'Error al actualizar el estado masivo de los productos',
+				500
+			);
+		}
+	}
+
+	static async updateProductStatus(models: TenantModels, id: string, status: ProductStatus): Promise<IProduct> {
+		try {
+			const product = await models.Product.findByIdAndUpdate(
+				id,
+				{ $set: { status } },
+				{ new: true }
+			).lean() as unknown as IProduct;
+			if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
+			return product;
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError(
+				'Failed to update product status',
+				'Error al actualizar el estado del producto',
 				500
 			);
 		}
@@ -2263,7 +2314,7 @@ export class ProductService {
 
 	static async getPublicActiveProducts(models: TenantModels) {
 		try {
-			const products = await models.Product.find({ isActive: true })
+			const products = await models.Product.find({ status: 'published' })
 				.populate('provider')
 				.lean();
 			return products;
@@ -2308,19 +2359,64 @@ export class ProductService {
 					pricingMethodChoice: item.pricingMethodChoice
 				});
 
-				const slug = this.generateSlug(item.brand, item.model);
+				// Provider resolution (by ObjectId or name)
+				let providerId: any = undefined;
+				if (item.provider) {
+					const provStr = String(item.provider).trim();
+					if (Types.ObjectId.isValid(provStr)) {
+						providerId = provStr;
+					} else {
+						const foundProv = await models.Provider.findOne({
+							name: new RegExp('^' + provStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i')
+						});
+						if (foundProv) {
+							providerId = foundProv._id;
+						}
+					}
+				}
+				if (!providerId) {
+					const defaultProv = await models.Provider.findOne({ active: true });
+					if (defaultProv) {
+						providerId = defaultProv._id;
+					}
+				}
+
+				const brand = String(item.brand || 'Vura').trim();
+				const slug = this.generateSlug(brand, item.model);
+
+				// Process images
+				let images: any[] = [];
+				if (Array.isArray(item.images) && item.images.length > 0) {
+					images = item.images.map((img: any) => {
+						if (typeof img === 'string') return { url: String(img).trim(), public_id: '' };
+						return { url: img.url || '', public_id: img.public_id || '' };
+					}).filter((img: any) => img.url);
+				}
 
 				// Process variants
 				let variants = Array.isArray(item.variants) ? item.variants : [];
-				variants = variants.map((v: any) => ({
-					colorName: v.colorName || v.color || 'Único',
-					colorHex: v.colorHex || '#000000',
-					size: String(v.size || v.talle || 'Único').trim().toUpperCase(),
-					stock: Number(v.stock ?? 0) >= 0 ? Number(v.stock ?? 0) : 0,
-					isActive: v.isActive !== false,
-					sku: v.sku ? String(v.sku).trim() : undefined,
-					imageIndex: v.imageIndex ?? 0
-				}));
+				variants = variants.map((v: any) => {
+					const cName = v.colorName || (typeof v.color === 'string' ? v.color : v.color?.name) || 'Único';
+					const cHex = v.colorHex || v.color?.hex || '#000000';
+					const imgIdx = v.imageIndex !== undefined && v.imageIndex !== null ? Number(v.imageIndex) : undefined;
+					const variantObj: any = {
+						colorName: cName,
+						colorHex: cHex,
+						color: { name: cName, hex: cHex },
+						size: String(v.size || v.talle || 'Único').trim().toUpperCase(),
+						stock: Number(v.stock ?? 0) >= 0 ? Number(v.stock ?? 0) : 0,
+						isActive: v.isActive !== false,
+						sku: v.sku ? String(v.sku).trim() : undefined,
+						imageIndex: imgIdx !== undefined && !isNaN(imgIdx) ? imgIdx : 0
+					};
+					if (imgIdx !== undefined && !isNaN(imgIdx) && images[imgIdx]) {
+						variantObj.imageReference = {
+							url: images[imgIdx].url,
+							public_id: images[imgIdx].public_id
+						};
+					}
+					return variantObj;
+				});
 
 				if (variants.length > 0) {
 					variants = await SkuService.generateSkusForVariants(
@@ -2328,33 +2424,93 @@ export class ProductService {
 						variants,
 						item.category,
 						productType,
-						item.brand
+						brand
 					);
 				}
 
-				// Process images
-				let images: any[] = [];
-				if (Array.isArray(item.images) && item.images.length > 0) {
-					images = item.images.map((img: any) => {
-						if (typeof img === 'string') return { url: img, public_id: '' };
-						return { url: img.url || '', public_id: img.public_id || '' };
-					});
-				}
-
-				// Sanitize largeDescription
-				let largeDescription = item.largeDescription || '';
+				// Sanitize largeDescription HTML
+				let largeDescription = item.largeDescription || item.description || item.shortDescription || '';
 				if (largeDescription) {
 					const window = new JSDOM('').window;
 					const purify = createDOMPurify(window);
 					largeDescription = purify.sanitize(largeDescription, this.purifyConfig);
 				}
 
+				// Process composition if provided
+				let composition = undefined;
+				if (Array.isArray(item.composition) && item.composition.length > 0) {
+					composition = item.composition.map((c: any) => ({
+						material: String(c.material || '').trim(),
+						percentage: Number(c.percentage || 0)
+					})).filter((c: any) => c.material && !isNaN(c.percentage));
+				}
+
+				// Process careInstructions if provided
+				let careInstructions = undefined;
+				if (Array.isArray(item.careInstructions) && item.careInstructions.length > 0) {
+					careInstructions = item.careInstructions.map((ci: any) => String(ci).trim()).filter(Boolean);
+				}
+
+				// Process specifications / attributes (ficha técnica)
+				let specifications: any[] = [];
+				if (Array.isArray(item.specifications)) {
+					specifications = item.specifications.map((s: any) => ({
+						key: String(s.key || s.nombre || s.name || '').trim(),
+						value: String(s.value || s.valor || '').trim()
+					})).filter((s: any) => s.key && s.value);
+				} else if (typeof item.specifications === 'object' && item.specifications !== null) {
+					specifications = Object.entries(item.specifications).map(([key, value]) => ({
+						key: String(key).trim(),
+						value: String(value).trim()
+					})).filter((s: any) => s.key && s.value);
+				} else if (typeof item.specifications === 'string' && item.specifications.trim()) {
+					specifications = item.specifications.split(/[,;\n]+/).map((part: string) => {
+						const [k, ...v] = part.split(/[:=]/);
+						return { key: (k || '').trim(), value: (v.join(':') || '').trim() };
+					}).filter((s: any) => s.key && s.value);
+				}
+
+				// Process tags
+				let tags: string[] = [];
+				if (Array.isArray(item.tags)) {
+					tags = item.tags.map((t: any) => String(t).trim()).filter(Boolean);
+				} else if (typeof item.tags === 'string' && item.tags.trim()) {
+					tags = item.tags.split(/[,;\n]+/).map((t: string) => t.trim()).filter(Boolean);
+				}
+
+				// Process SEO
+				const metaTitle = item.seo?.metaTitle || item.metaTitle || `${item.model} | ${brand}`;
+				const metaDescription = item.seo?.metaDescription || item.metaDescription || item.shortDescription || '';
+				const metaImage = item.seo?.metaImage || (images.length > 0 ? { url: images[0].url, public_id: images[0].public_id || '' } : undefined);
+				const seo = {
+					metaTitle: String(metaTitle).trim(),
+					metaDescription: String(metaDescription).trim(),
+					...(metaImage ? { metaImage } : {})
+				};
+
+				// Process sizeGuide (optional)
+				let sizeGuide = undefined;
+				if (item.sizeGuide && typeof item.sizeGuide === 'object') {
+					if (Array.isArray(item.sizeGuide.headers) && Array.isArray(item.sizeGuide.rows) && item.sizeGuide.rows.length > 0) {
+						sizeGuide = {
+							headers: item.sizeGuide.headers.map((h: any) => String(h).trim()),
+							rows: item.sizeGuide.rows.map((r: any) => ({
+								size: String(r.size || '').trim(),
+								values: Array.isArray(r.values) ? r.values.map((v: any) => String(v).trim()) : []
+							})),
+							tolerance: item.sizeGuide.tolerance ? String(item.sizeGuide.tolerance).trim() : undefined
+						};
+					}
+				}
+
 				const productDoc = new models.Product({
 					productType,
-					brand: String(item.brand).trim(),
+					brand,
 					model: String(item.model).trim(),
+					subtitle: item.subtitle ? String(item.subtitle).trim() : undefined,
 					category: String(item.category).trim(),
-					provider: item.provider ? String(item.provider).trim() : 'General',
+					provider: providerId || undefined,
+					linkProductProvider: item.linkProductProvider ? String(item.linkProductProvider).trim() : undefined,
 					slug,
 					shortDescription: item.shortDescription || '',
 					largeDescription,
@@ -2362,15 +2518,20 @@ export class ProductService {
 					finance,
 					variants,
 					images,
-					sizeGuide: item.sizeGuide || undefined,
+					sizeGuide,
 					gender: item.gender || ClothingGender.Unisex,
-					fit: item.fit || undefined,
-					material: item.material || '',
+					fit: item.fit ? String(item.fit).trim() : undefined,
+					material: item.material ? String(item.material).trim() : '',
+					season: item.season ? String(item.season).trim() : undefined,
 					sizeType: item.sizeType || ClothingSizeType.Ropa,
-					tags: Array.isArray(item.tags) ? item.tags : [],
-					isActive: item.isActive !== false,
+					composition: composition || undefined,
+					careInstructions: careInstructions || undefined,
+					features: Array.isArray(item.features) ? item.features : [],
+					specifications,
+					tags,
+					status: item.status || 'draft', // Por defecto Borrador para IA
 					isFeatured: Boolean(item.isFeatured),
-					seo: item.seo || { metaTitle: `${item.model} | ${item.brand}`, metaDescription: item.shortDescription || '' }
+					seo
 				});
 
 				const saved = await productDoc.save();
@@ -2468,7 +2629,7 @@ export class ProductService {
 				if (item.fit !== undefined) pAny.fit = item.fit;
 				if (item.material !== undefined) pAny.material = item.material;
 				if (item.sizeType !== undefined) pAny.sizeType = item.sizeType;
-				if (item.isActive !== undefined) pAny.isActive = Boolean(item.isActive);
+				if (item.status !== undefined) pAny.status = item.status;
 				if (item.isFeatured !== undefined) pAny.isFeatured = Boolean(item.isFeatured);
 				if (item.tags !== undefined && Array.isArray(item.tags)) pAny.tags = item.tags;
 				if (item.seo !== undefined) pAny.seo = { ...pAny.seo, ...item.seo };

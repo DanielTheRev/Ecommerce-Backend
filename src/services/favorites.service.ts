@@ -12,8 +12,8 @@ export class FavoritesService {
 		const favorites = await models.Favorite.find({ user: userId })
 			.populate({
 				path: 'product',
-				match: { isActive: true },
-				select: 'brand model images price discount slug productType isActive isFeatured category'
+				match: { status: 'published' },
+				select: 'brand model images price discount slug productType status isFeatured category'
 			})
 			.sort({ createdAt: -1 })
 			.lean()
@@ -32,10 +32,10 @@ export class FavoritesService {
 	 * Es idempotente: si ya existe, devuelve el favorito existente sin lanzar error.
 	 */
 	static async addFavorite(models: TenantModels, userId: string, productId: string): Promise<IFavorite> {
-		// Verificar que el producto existe y está activo
-		const product = await models.Product.findOne({ _id: productId, isActive: true }).lean().exec();
+		// Verificar que el producto existe y está publicado
+		const product = await models.Product.findOne({ _id: productId, status: 'published' }).lean().exec();
 		if (!product) {
-			throw new AppError('Product not found or inactive', 'El producto no existe o está inactivo', 404);
+			throw new AppError('Product not found or inactive', 'El producto no existe o no está publicado', 404);
 		}
 
 		// findOneAndUpdate con upsert para evitar duplicados de forma atómica
@@ -46,8 +46,8 @@ export class FavoritesService {
 		)
 			.populate({
 				path: 'product',
-				match: { isActive: true },
-				select: 'brand model images price discount slug productType isActive isFeatured category'
+				match: { status: 'published' },
+				select: 'brand model images price discount slug productType status isFeatured category'
 			})
 			.lean()
 			.exec();
@@ -73,8 +73,8 @@ export class FavoritesService {
 	 * Chequea si un producto es favorito del usuario.
 	 */
 	static async isFavorite(models: TenantModels, userId: string, productId: string): Promise<boolean> {
-		// Verificar que el producto existe y está activo
-		const product = await models.Product.findOne({ _id: productId, isActive: true }).lean().exec();
+		// Verificar que el producto existe y está publicado
+		const product = await models.Product.findOne({ _id: productId, status: 'published' }).lean().exec();
 		if (!product) return false;
 
 		const exists = await models.Favorite.exists({ user: userId, product: productId });
@@ -125,7 +125,7 @@ export class FavoritesService {
 						images: 1,
 						'price.cashTransferPrice': 1,
 						'price.card_ticket1PayPrice': 1,
-						isActive: 1,
+						status: 1,
 						category: 1
 					},
 					favoritesCount: 1,

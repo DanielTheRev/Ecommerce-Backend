@@ -168,7 +168,7 @@ export const CreateProductSchema = z.object({
 			metaDescription: z.string().optional(),
 			metaTitle: z.string().optional(),
 		})).optional(),
-		isActive: z.string().or(z.boolean()).transform(v => v === 'true' || v === true).optional(),
+		status: z.enum(['published', 'draft', 'paused', 'archived']).default('draft').optional(),
 		isFeatured: z.string().or(z.boolean()).transform(v => v === 'true' || v === true).optional(),
 	}).superRefine((data, ctx) => {
 		const cost = data.providerCost ?? data.price;
@@ -267,7 +267,7 @@ export const UpdateProductSchema = z.object({
 
 		// Para borrar la og_image existente
 		deletedSeoOgImage: z.string().optional(),
-		isActive: z.string().or(z.boolean()).transform(v => v === 'true' || v === true).optional(),
+		status: z.enum(['published', 'draft', 'paused', 'archived']).optional(),
 		isFeatured: z.string().or(z.boolean()).transform(v => v === 'true' || v === true).optional(),
 	}).superRefine((data, ctx) => {
 		if (data.providerCost !== undefined && (data.providerCost <= 0 || isNaN(data.providerCost))) {

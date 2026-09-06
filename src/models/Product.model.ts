@@ -98,7 +98,7 @@ const BaseProductSchema = new Schema(
 		images: [
 			{
 				url: { type: String, required: true },
-				public_id: { type: String, required: true }
+				public_id: { type: String, required: false, default: '' }
 			}
 		],
 		features: [{ type: String }],
@@ -118,10 +118,11 @@ const BaseProductSchema = new Schema(
 			default: 3,
 			min: 0
 		},
-		isActive: {
-			type: Boolean,
-			default: true,
-			index: true // Índice para que las consultas del frontend vuelen
+		status: {
+			type: String,
+			enum: ['published', 'draft', 'paused', 'archived'],
+			default: 'draft',
+			index: true
 		},
 		isFeatured: {
 			type: Boolean,

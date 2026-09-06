@@ -16,7 +16,7 @@ export class ShopTheLookService {
 			const looks = await models.ShopTheLook.find()
 				.populate({
 					path: 'looks.hotspots.product',
-					match: { isActive: true }
+					match: { status: 'published' }
 				})
 				.lean() as any[];
 
@@ -48,7 +48,7 @@ export class ShopTheLookService {
 			const look = await models.ShopTheLook.findById(lookId)
 				.populate({
 					path: 'looks.hotspots.product',
-					match: { isActive: true }
+					match: { status: 'published' }
 				})
 				.lean() as any;
 			if (!look) {

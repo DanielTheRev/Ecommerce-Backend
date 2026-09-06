@@ -37,6 +37,15 @@ export enum ClothingSizeType {
 	Unico = 'Talle Único'
 }
 
+export type ProductStatus = 'published' | 'draft' | 'paused' | 'archived';
+
+export enum ProductStatusEnum {
+	PUBLISHED = 'published',
+	DRAFT = 'draft',
+	PAUSED = 'paused',
+	ARCHIVED = 'archived'
+}
+
 // ============ BASE PRODUCT ============
 
 export interface IProduct {
@@ -61,7 +70,7 @@ export interface IProduct {
 	variants: IVariant[]; // tipo mínimo en base — cada discriminador tiene el tipo exacto
 	tags?: string[];
 	lowStockThreshold?: number;
-	isActive: boolean;
+	status: ProductStatus;
 	isFeatured: boolean;
 	linkProductProvider?: string;
 	seo: IProductSeo;
@@ -253,7 +262,7 @@ export interface IProductCreateDTO {
 	specifications: string | IProductSpec[];
 	variants: string | IClothingVariant[] | ITechVariant[] | IVariant[];
 	linkProductProvider?: string;
-	isActive?: boolean | string;
+	status?: ProductStatus | string;
 	isFeatured?: boolean | string;
 	tags?: string | string[];
 

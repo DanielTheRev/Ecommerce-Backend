@@ -20,8 +20,7 @@ export class ProductController {
 			const productType = req.query.type as string | undefined;
 			const q = req.query.q as string | undefined;
 			const category = req.query.category as string | undefined;
-			const isActive =
-				req.query.isActive !== undefined ? req.query.isActive === 'true' : undefined;
+			const status = req.query.status as string | undefined;
 			const providerId = req.query.provider as string | undefined;
 			const hasSizeGuide =
 				req.query.hasSizeGuide !== undefined ? req.query.hasSizeGuide === 'true' : undefined;
@@ -38,7 +37,7 @@ export class ProductController {
 				productType,
 				q,
 				category,
-				isActive,
+				status,
 				providerId,
 				hasSizeGuide,
 				hasSeoImage,
@@ -306,12 +305,16 @@ export class ProductController {
 		next: NextFunction
 	): Promise<void> {
 		try {
-			const { ids, isActive } = req.body;
+			const { ids, status } = req.body;
 			if (!Array.isArray(ids)) {
 				res.status(400).json({ success: false, message: 'Se requiere un array de IDs' });
 				return;
 			}
-			await ProductService.bulkUpdateStatus(req.models!, ids, isActive);
+			if (!['published', 'draft', 'paused', 'archived'].includes(status)) {
+				res.status(400).json({ success: false, message: 'Estado inválido. Debe ser: published, draft, paused o archived' });
+				return;
+			}
+			await ProductService.bulkUpdateStatus(req.models!, ids, status);
 
 			if (req.tenant?.slug) {
 				const { CacheService } = await import('@/services/cache.service');
@@ -319,9 +322,16 @@ export class ProductController {
 				CacheService.invalidatePrefix(req.tenant.slug, 'products');
 			}
 
+			const statusLabels: Record<string, string> = {
+				published: 'publicados',
+				draft: 'guardados como borrador',
+				paused: 'pausados',
+				archived: 'archivados'
+			};
+
 			res.status(200).json({
 				success: true,
-				message: `Productos ${isActive ? 'activados' : 'desactivados'} exitosamente`
+				message: `Productos ${statusLabels[status] || status} exitosamente`
 			});
 		} catch (error) {
 			next(error);
