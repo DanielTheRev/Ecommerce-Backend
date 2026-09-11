@@ -52,16 +52,31 @@ export class CacheService {
 	}
 
 	/**
-	 * Invalida una clave exacta o todas las claves de un tenant
+	 * Invalida una clave exacta o todas las claves de un tenant.
+	 * Soporta comodín '*' al final o en medio para invalidar prefijos (ej: 'menus:*', 'home:full:*', 'home:*').
 	 */
-	static invalidate(tenantSlug: string, key?: string): void {
-		const cleanSlug = (tenantSlug || 'global').trim().toLowerCase();
-
+	static invalidate(tenantSlug?: string, key?: string): void {
 		if (key) {
-			const fullKey = this.buildKey(tenantSlug, key);
-			this.cache.delete(fullKey);
-		} else {
+			if (key.includes('*')) {
+				const prefix = key.split('*')[0].replace(/:+$/, '');
+				this.invalidatePrefix(tenantSlug, prefix);
+				return;
+			}
+			if (tenantSlug) {
+				const fullKey = this.buildKey(tenantSlug, key);
+				this.cache.delete(fullKey);
+			} else {
+				const cleanKey = key.trim().toLowerCase();
+				for (const k of this.cache.keys()) {
+					const parts = k.split(':');
+					if (parts.length > 1 && parts.slice(1).join(':') === cleanKey) {
+						this.cache.delete(k);
+					}
+				}
+			}
+		} else if (tenantSlug) {
 			// Invalida todo el tenant
+			const cleanSlug = tenantSlug.trim().toLowerCase();
 			const prefix = `${cleanSlug}:`;
 			for (const k of this.cache.keys()) {
 				if (k.startsWith(prefix)) {
@@ -72,16 +87,31 @@ export class CacheService {
 	}
 
 	/**
-	 * Invalida todas las claves que comiencen con un prefijo dentro de un tenant
-	 * Ej: invalidatePrefix('vura', 'hero') o invalidatePrefix('vura', 'home')
+	 * Invalida todas las claves que comiencen con un prefijo dentro de un tenant.
+	 * Si no se pasa tenantSlug, invalida para todos los tenants que coincidan con el prefijo.
+	 * Ej: invalidatePrefix('vura', 'menus') o invalidatePrefix('vura', 'home')
 	 */
-	static invalidatePrefix(tenantSlug: string, prefix: string): void {
-		const cleanSlug = (tenantSlug || 'global').trim().toLowerCase();
-		const cleanPrefix = `${cleanSlug}:${prefix.trim().toLowerCase()}`;
+	static invalidatePrefix(tenantSlug?: string, prefix?: string): void {
+		if (!prefix) return;
+		const cleanPrefix = prefix.trim().toLowerCase().replace(/:+$/, '');
 
-		for (const k of this.cache.keys()) {
-			if (k.startsWith(cleanPrefix)) {
-				this.cache.delete(k);
+		if (tenantSlug) {
+			const cleanSlug = tenantSlug.trim().toLowerCase();
+			const targetPrefix = `${cleanSlug}:${cleanPrefix}`;
+			for (const k of this.cache.keys()) {
+				if (k === targetPrefix || k.startsWith(`${targetPrefix}:`)) {
+					this.cache.delete(k);
+				}
+			}
+		} else {
+			for (const k of this.cache.keys()) {
+				const parts = k.split(':');
+				if (parts.length > 1) {
+					const keyPart = parts.slice(1).join(':');
+					if (keyPart === cleanPrefix || keyPart.startsWith(`${cleanPrefix}:`)) {
+						this.cache.delete(k);
+					}
+				}
 			}
 		}
 	}

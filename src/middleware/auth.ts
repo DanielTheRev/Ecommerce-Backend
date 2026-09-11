@@ -93,6 +93,11 @@ export const authorize = (...roles: string[]) => {
 export const adminOnly = authorize('admin');
 
 /**
+ * Middleware para personal operativo de tienda (admin o empleado / cajero)
+ */
+export const staffOnly = authorize('admin', 'employee');
+
+/**
  * Middleware para verificar si el usuario es propietario del recurso o admin
  */
 export const ownerOrAdmin = (resourceUserIDField: string = 'userID') => {

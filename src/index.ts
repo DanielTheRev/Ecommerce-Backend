@@ -143,6 +143,7 @@ app.get('/health', (req: Request, res: Response) => {
 });
 
 import cashRegisterRoutes from './routes/cashRegisterRoutes.routes';
+import posRoutes from './routes/pos.routes';
 
 const registerRoutes = (prefix: string) => {
 	app.use(`${prefix}/products`, resolveTenant, productRoutes);
@@ -159,6 +160,7 @@ const registerRoutes = (prefix: string) => {
 	app.use(`${prefix}/categories`, resolveTenant, categoryGroupRoutes); // Alias
 	app.use(`${prefix}/config`, resolveTenant, ecommerceConfigRoutes);
 	app.use(`${prefix}/cash-register`, resolveTenant, cashRegisterRoutes);
+	app.use(`${prefix}/pos`, resolveTenant, posRoutes);
 	app.use(`${prefix}/shop-the-look`, resolveTenant, shopTheLookRoutes);
 	app.use(`${prefix}/provider`, resolveTenant, providerRoutes);
 	app.use(`${prefix}/addresses`, resolveTenant, addressRoutes);

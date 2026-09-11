@@ -101,6 +101,9 @@ export class ImageService {
 	}
 
 	static async DeleteImage(publicID: string) {
-		return cloudinary.uploader.destroy(publicID);
+		if (!publicID || typeof publicID !== 'string' || !publicID.trim()) {
+			return;
+		}
+		return cloudinary.uploader.destroy(publicID.trim());
 	}
 }

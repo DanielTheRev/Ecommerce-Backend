@@ -121,6 +121,8 @@ export interface IBeautyProduct extends IProduct {
 
 export interface IGeneralProduct extends IProduct {
 	productType: ProductType.GENERAL;
+	barcode?: string;
+	isSoldByWeight?: boolean;
 	unit?: string;
 	weight?: string;
 	variants: IVariant[];
@@ -261,6 +263,7 @@ export interface IProductCreateDTO {
 	features: string | string[];
 	specifications: string | IProductSpec[];
 	variants: string | IClothingVariant[] | ITechVariant[] | IVariant[];
+	images?: IProductImage[];
 	linkProductProvider?: string;
 	status?: ProductStatus | string;
 	isFeatured?: boolean | string;
@@ -291,6 +294,8 @@ export interface IProductCreateDTO {
 	applicationArea?: string;
 
 	// General-specific (opcionales a nivel DTO)
+	barcode?: string;
+	isSoldByWeight?: boolean;
 	unit?: string;
 	weight?: string;
 

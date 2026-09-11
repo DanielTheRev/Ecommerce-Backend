@@ -14,7 +14,7 @@ export interface IBaseVariant {
 	sku: string;
 	color?: IVariantColor;
 	stock: number;
-	reservedStock: number;
+	reservedStock?: number;
 	isActive: boolean;
 	imageReference?: { url: string; public_id: string };
 	barcode?: string;
@@ -30,5 +30,11 @@ export interface ITechVariant extends IBaseVariant {
 	attributes: IVariantAttribute[];
 }
 
+// General / Kiosco / Almacén (GeneralProduct)
+export interface IGeneralVariant extends IBaseVariant {
+	size?: string;
+	volume?: string;
+}
+
 // Union type para contextos donde no se discrimina el tipo
-export type IVariant = IClothingVariant | ITechVariant;
+export type IVariant = IClothingVariant | ITechVariant | IGeneralVariant | IBaseVariant;

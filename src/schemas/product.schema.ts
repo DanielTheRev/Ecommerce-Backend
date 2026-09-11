@@ -16,6 +16,16 @@ const jsonString = z.string().transform((str, ctx) => {
 	}
 });
 
+const optionalJsonString = z.string().optional().transform((str, ctx) => {
+	if (!str || str.trim() === '') return undefined;
+	try {
+		return JSON.parse(str);
+	} catch (e) {
+		ctx.addIssue({ code: 'custom', message: 'Invalid JSON string' });
+		return z.NEVER;
+	}
+});
+
 // Size Guide Schemas
 const SizeGuideRowSchema = z.object({
 	size: z.string().min(1, 'El talle es requerido'),
@@ -98,98 +108,132 @@ const GeneralVariantZodSchema = z.object({
 	imageIndex: z.coerce.number().int().min(0).optional().nullable(),
 });
 
+// ============ BASE PRODUCT FIELDS ============
+const BaseProductFields = {
+	provider: z.string().optional(),
+	linkProductProvider: z.string().optional(),
+	brand: z.string().min(1, 'Brand is required').max(200),
+	model: z.string().min(1, 'Model is required').max(200),
+	category: z.string().min(1, 'Category is required'),
+	price: z.string().or(z.number()).transform(v => Number(v)).optional(),
+	providerCost: z.string().or(z.number()).transform(v => Number(v)).optional(),
+	useCustomProfit: z.string().or(z.boolean()).transform(v => typeof v === 'string' ? v === 'true' : Boolean(v)).optional(),
+	pricingMethodChoice: z.enum(['markup', 'margin']).optional(),
+	customProfitMargin: z.string().or(z.number()).transform(v => v === '' ? undefined : Number(v)).optional(),
+	customProfitMargin1Pay: z.string().or(z.number()).transform(v => v === '' ? undefined : Number(v)).optional(),
+	customProfitMarginInstallments: z.string().or(z.number()).transform(v => v === '' ? undefined : Number(v)).optional(),
+	discount: z.string().or(z.number()).transform(v => Number(v)).default(0),
+	tags: optionalJsonString.pipe(z.array(z.string()).optional()),
+	seo: optionalJsonString.pipe(z.object({
+		metaDescription: z.string().optional(),
+		metaTitle: z.string().optional(),
+	}).optional()),
+	status: z.enum(['published', 'draft', 'paused', 'archived']).default('draft').optional(),
+	isFeatured: z.string().or(z.boolean()).transform(v => v === 'true' || v === true).optional(),
+};
+
+// 1. General Product Schema (Kioscos, Almacén, Bazar - Ultra Liviano)
+export const GeneralProductCreateSchema = z.object({
+	...BaseProductFields,
+	productType: z.literal(ProductType.GENERAL),
+	shortDescription: z.string().optional().default(''),
+	largeDescription: z.string().optional().default(''),
+	barcode: z.string().optional(),
+	isSoldByWeight: z.string().or(z.boolean()).transform(v => typeof v === 'string' ? v === 'true' : Boolean(v)).optional().default(false),
+	unit: z.string().optional().default('Unidad'),
+	weight: z.string().optional(),
+	features: optionalJsonString.pipe(z.array(z.string()).optional()).default([]),
+	specifications: optionalJsonString.pipe(z.array(SpecSchema).optional()).default([]),
+	variants: optionalJsonString.pipe(z.array(GeneralVariantZodSchema).optional()).default([]),
+});
+
+// 2. Clothing Product Schema (Indumentaria / Moda - Vura - Estricto)
+export const ClothingProductCreateSchema = z.object({
+	...BaseProductFields,
+	productType: z.literal(ProductType.CLOTHING),
+	shortDescription: z.string().min(1, 'Short description is required'),
+	largeDescription: z.string().min(1, 'Large description is required'),
+	features: optionalJsonString.pipe(z.array(z.string()).optional()).default([]),
+	specifications: optionalJsonString.pipe(z.array(SpecSchema).optional()).default([]),
+	variants: jsonString.pipe(z.array(ClothingVariantZodSchema)).default([]),
+	gender: z.string().optional(),
+	fit: z.string().optional(),
+	material: z.string().optional(),
+	sizeType: z.enum(sizeTypeValues).optional(),
+	composition: optionalJsonString.pipe(z.array(z.object({
+		material: z.string().min(1),
+		percentage: z.number().min(0).max(100)
+	})).optional()),
+	sizeGuide: optionalJsonString.pipe(SizeGuideZodSchema.optional()),
+	careInstructions: optionalJsonString.pipe(z.array(z.string())).optional(),
+	season: z.string().optional(),
+});
+
+// 3. Tech Product Schema (Electrónica / Tecnología)
+export const TechProductCreateSchema = z.object({
+	...BaseProductFields,
+	productType: z.literal(ProductType.TECH),
+	shortDescription: z.string().min(1, 'Short description is required'),
+	largeDescription: z.string().min(1, 'Large description is required'),
+	features: optionalJsonString.pipe(z.array(z.string()).optional()).default([]),
+	specifications: optionalJsonString.pipe(z.array(SpecSchema).optional()).default([]),
+	variants: jsonString.pipe(z.array(TechVariantZodSchema)).default([]),
+	storage: optionalJsonString.pipe(z.array(z.string())).optional(),
+	ram: z.string().optional(),
+	processor: z.string().optional(),
+	screenSize: z.string().optional(),
+	os: z.string().optional(),
+});
+
+// 4. Beauty Product Schema (Cosmética / Perfumería)
+export const BeautyProductCreateSchema = z.object({
+	...BaseProductFields,
+	productType: z.literal(ProductType.BEAUTY),
+	shortDescription: z.string().min(1, 'Short description is required'),
+	largeDescription: z.string().min(1, 'Large description is required'),
+	features: optionalJsonString.pipe(z.array(z.string()).optional()).default([]),
+	specifications: optionalJsonString.pipe(z.array(SpecSchema).optional()).default([]),
+	variants: optionalJsonString.pipe(z.array(GeneralVariantZodSchema).optional()).default([]),
+	volume: z.string().optional(),
+	concentration: z.string().optional(),
+	fragranceFamily: z.string().optional(),
+	scentNotes: optionalJsonString.pipe(z.object({
+		top: z.string().optional(),
+		heart: z.string().optional(),
+		base: z.string().optional()
+	}).optional()),
+	applicationArea: z.string().optional(),
+});
+
+export const CreateProductBodySchema = z.discriminatedUnion('productType', [
+	GeneralProductCreateSchema,
+	ClothingProductCreateSchema,
+	TechProductCreateSchema,
+	BeautyProductCreateSchema
+]).superRefine((data, ctx) => {
+	const cost = data.providerCost ?? data.price;
+	if (cost === undefined || cost <= 0 || isNaN(cost)) {
+		ctx.addIssue({
+			code: 'custom',
+			path: ['providerCost'],
+			message: 'El costo del proveedor (providerCost) es requerido y debe ser mayor a 0'
+		});
+	}
+
+	if (data.productType === ProductType.CLOTHING && Array.isArray(data.variants)) {
+		data.variants.forEach((v: any, i: number) => {
+			if (!v.size) ctx.addIssue({
+				code: 'custom',
+				path: ['variants', i, 'size'],
+				message: 'El talle (size) es requerido para productos de indumentaria'
+			});
+		});
+	}
+});
+
 // Create Product Schema
 export const CreateProductSchema = z.object({
-	body: z.object({
-		productType: z.enum(ProductType),
-		provider: z.string().optional(),
-		linkProductProvider: z.string().optional(),
-		brand: z.string().min(1, 'Brand is required').max(200),
-		model: z.string().min(1, 'Model is required').max(200),
-		category: z.string(),
-		shortDescription: z.string().min(1, 'Short description is required'),
-		largeDescription: z.string().min(1, 'Large description is required'),
-		price: z.string().or(z.number()).transform(v => Number(v)).optional(),
-		providerCost: z.string().or(z.number()).transform(v => Number(v)).optional(),
-		useCustomProfit: z.string().or(z.boolean()).transform(v => typeof v === 'string' ? v === 'true' : Boolean(v)).optional(),
-		pricingMethodChoice: z.enum(['markup', 'margin']).optional(),
-		customProfitMargin: z.string().or(z.number()).transform(v => v === '' ? undefined : Number(v)).optional(),
-		customProfitMargin1Pay: z.string().or(z.number()).transform(v => v === '' ? undefined : Number(v)).optional(),
-		customProfitMarginInstallments: z.string().or(z.number()).transform(v => v === '' ? undefined : Number(v)).optional(),
-		discount: z.string().or(z.number()).transform(v => Number(v)).default(0),
-
-		features: jsonString.pipe(z.array(z.string())),
-		specifications: jsonString.pipe(z.array(SpecSchema)),
-		variants: jsonString.pipe(
-			z.array(z.union([ClothingVariantZodSchema, TechVariantZodSchema, GeneralVariantZodSchema]))
-		).default([]),
-		tags: jsonString.pipe(z.array(z.string())).optional(),
-
-		// Tech-specific (opcionales)
-		storage: jsonString.pipe(z.array(z.string())).optional(),
-		ram: z.string().optional(),
-		processor: z.string().optional(),
-		screenSize: z.string().optional(),
-		os: z.string().optional(),
-
-		// Clothing-specific (opcionales)
-		gender: z.string().optional(),
-		fit: z.string().optional(),
-		material: z.string().optional(),
-		sizeType: z.enum(sizeTypeValues).optional(),
-		composition: jsonString.pipe(z.array(z.object({
-			material: z.string().min(1),
-			percentage: z.number().min(0).max(100)
-		}))).optional(),
-		sizeGuide: jsonString.pipe(SizeGuideZodSchema).optional(),
-		careInstructions: jsonString.pipe(z.array(z.string())).optional(),
-
-		// Beauty-specific (opcionales)
-		volume: z.string().optional(),
-		concentration: z.string().optional(),
-		fragranceFamily: z.string().optional(),
-		scentNotes: jsonString.pipe(z.object({
-			top: z.string().optional(),
-			heart: z.string().optional(),
-			base: z.string().optional()
-		})).optional().or(z.object({
-			top: z.string().optional(),
-			heart: z.string().optional(),
-			base: z.string().optional()
-		})).optional(),
-		applicationArea: z.string().optional(),
-
-		// General-specific (opcionales)
-		unit: z.string().optional(),
-		weight: z.string().optional(),
-
-		// SEO (og_image llega como archivo separado, no se valida aquí)
-		seo: jsonString.pipe(z.object({
-			metaDescription: z.string().optional(),
-			metaTitle: z.string().optional(),
-		})).optional(),
-		status: z.enum(['published', 'draft', 'paused', 'archived']).default('draft').optional(),
-		isFeatured: z.string().or(z.boolean()).transform(v => v === 'true' || v === true).optional(),
-	}).superRefine((data, ctx) => {
-		const cost = data.providerCost ?? data.price;
-		if (cost === undefined || cost <= 0 || isNaN(cost)) {
-			ctx.addIssue({
-				code: 'custom',
-				path: ['providerCost'],
-				message: 'El costo del proveedor (providerCost) es requerido y debe ser mayor a 0'
-			});
-		}
-
-		if (data.productType === 'ClothingProduct' && Array.isArray(data.variants)) {
-			data.variants.forEach((v: any, i: number) => {
-				if (!v.size) ctx.addIssue({
-					code: 'custom',
-					path: ['variants', i, 'size'],
-					message: 'El talle (size) es requerido para productos de indumentaria'
-				});
-			});
-		}
-	})
+	body: CreateProductBodySchema
 });
 
 // Update Product Schema
@@ -256,6 +300,8 @@ export const UpdateProductSchema = z.object({
 		applicationArea: z.string().optional(),
 
 		// General-specific
+		barcode: z.string().optional(),
+		isSoldByWeight: z.string().or(z.boolean()).transform(v => typeof v === 'string' ? v === 'true' : Boolean(v)).optional(),
 		unit: z.string().optional(),
 		weight: z.string().optional(),
 

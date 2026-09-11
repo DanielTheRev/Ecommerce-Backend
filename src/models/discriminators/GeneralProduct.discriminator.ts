@@ -3,6 +3,8 @@ import { Product } from '../Product.model';
 import { GeneralVariantSchema } from '../schemas/generalVariant.schema';
 
 const GeneralProductSchema = new Schema({
+	barcode: { type: String, trim: true, sparse: true, index: true },
+	isSoldByWeight: { type: Boolean, default: false },
 	unit: { type: String, trim: true, default: 'Unidad' },
 	weight: { type: String, trim: true },
 	variants: {

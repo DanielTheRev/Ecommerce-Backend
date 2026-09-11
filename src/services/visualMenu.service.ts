@@ -251,8 +251,10 @@ export class VisualMenuService {
 
     // Invalidar cachés
     const { CacheService } = await import('./cache.service');
-    CacheService.invalidate(tenantSlug, 'visual-menu:config');
-    CacheService.invalidate(tenantSlug, 'bento:config');
+    CacheService.invalidatePrefix(tenantSlug, 'visual-menu');
+    CacheService.invalidatePrefix(tenantSlug, 'bento');
+    CacheService.invalidatePrefix(tenantSlug, 'home');
+    CacheService.invalidatePrefix(tenantSlug, 'menus');
 
     return updatedConfig;
   }

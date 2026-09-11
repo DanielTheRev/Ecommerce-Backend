@@ -29,12 +29,14 @@ const BaseProductSchema = new Schema(
 		},
 		shortDescription: {
 			type: String,
-			required: true,
+			required: false,
+			default: '',
 			trim: true,
 		},
 		largeDescription: {
 			type: String,
-			required: true,
+			required: false,
+			default: '',
 			trim: true,
 		},
 		slug: { type: String, unique: true },
@@ -173,6 +175,8 @@ BaseProductSchema.set('toObject', { virtuals: true });
 BaseProductSchema.index({ slug: -1 });
 BaseProductSchema.index({ brand: 1, model: 1 });
 BaseProductSchema.index({ productType: 1 });
+BaseProductSchema.index({ 'variants.barcode': 1 }, { sparse: true });
+BaseProductSchema.index({ barcode: 1 }, { sparse: true });
 
 // Schema exportado para multi-tenancy (model registry)
 export { BaseProductSchema };

@@ -206,11 +206,11 @@ export class MenuService {
       isActive: data.isActive !== false
     });
 
-    if (tenantSlug) {
-      const { CacheService } = await import('./cache.service');
-      CacheService.invalidate(tenantSlug, 'menus:*');
-      CacheService.invalidate(tenantSlug, `menus:${slug}`);
-    }
+    const { CacheService } = await import('./cache.service');
+    CacheService.invalidatePrefix(tenantSlug, 'menus');
+    CacheService.invalidatePrefix(tenantSlug, 'home');
+    CacheService.invalidatePrefix(tenantSlug, 'bento');
+    CacheService.invalidatePrefix(tenantSlug, 'visual-menu');
 
     return newMenu.toObject() as unknown as IMenu;
   }
@@ -225,7 +225,13 @@ export class MenuService {
     files?: any[],
     tenantSlug?: string
   ): Promise<IMenu> {
-    const menu = await models.Menu.findById(menuId);
+    let menu: any = null;
+    if (isValidObjectId(menuId)) {
+      menu = await models.Menu.findById(menuId);
+    }
+    if (!menu) {
+      menu = await models.Menu.findOne({ slug: menuId.trim().toLowerCase() });
+    }
     if (!menu) {
       throw new AppError('Menú no encontrado.', 'Menú no encontrado.', 404);
     }
@@ -234,7 +240,7 @@ export class MenuService {
     if (data.slug) {
       const slug = this.slugify(data.slug);
       if (slug !== menu.slug) {
-        const existing = await models.Menu.findOne({ slug, _id: { $ne: menuId } }).lean();
+        const existing = await models.Menu.findOne({ slug, _id: { $ne: menu._id } }).lean();
         if (existing) {
           throw new AppError(`Ya existe otro menú con el identificador "${slug}".`, `Ya existe otro menú con el identificador "${slug}".`, 400);
         }
@@ -246,17 +252,16 @@ export class MenuService {
 
     if (data.items) {
       menu.items = (await this.processItemsImages(data.items, files, menu.items)) as any;
+      menu.markModified('items');
     }
 
     await menu.save();
 
-    if (tenantSlug) {
-      const { CacheService } = await import('./cache.service');
-      CacheService.invalidate(tenantSlug, 'menus:*');
-      CacheService.invalidate(tenantSlug, `menus:${menu.slug}`);
-      CacheService.invalidate(tenantSlug, `menus:${menuId}`);
-      CacheService.invalidate(tenantSlug, 'home:full:*');
-    }
+    const { CacheService } = await import('./cache.service');
+    CacheService.invalidatePrefix(tenantSlug, 'menus');
+    CacheService.invalidatePrefix(tenantSlug, 'home');
+    CacheService.invalidatePrefix(tenantSlug, 'bento');
+    CacheService.invalidatePrefix(tenantSlug, 'visual-menu');
 
     return menu.toObject() as unknown as IMenu;
   }
@@ -269,18 +274,22 @@ export class MenuService {
     menuId: string,
     tenantSlug?: string
   ): Promise<boolean> {
-    const menu = await models.Menu.findByIdAndDelete(menuId);
+    let menu: any = null;
+    if (isValidObjectId(menuId)) {
+      menu = await models.Menu.findByIdAndDelete(menuId);
+    }
+    if (!menu) {
+      menu = await models.Menu.findOneAndDelete({ slug: menuId.trim().toLowerCase() });
+    }
     if (!menu) {
       throw new AppError('Menú no encontrado.', 'Menú no encontrado.', 404);
     }
 
-    if (tenantSlug) {
-      const { CacheService } = await import('./cache.service');
-      CacheService.invalidate(tenantSlug, 'menus:*');
-      CacheService.invalidate(tenantSlug, `menus:${menu.slug}`);
-      CacheService.invalidate(tenantSlug, `menus:${menuId}`);
-      CacheService.invalidate(tenantSlug, 'home:full:*');
-    }
+    const { CacheService } = await import('./cache.service');
+    CacheService.invalidatePrefix(tenantSlug, 'menus');
+    CacheService.invalidatePrefix(tenantSlug, 'home');
+    CacheService.invalidatePrefix(tenantSlug, 'bento');
+    CacheService.invalidatePrefix(tenantSlug, 'visual-menu');
 
     return true;
   }
@@ -321,6 +330,11 @@ export class MenuService {
             height: uploaded[0].height
           };
         }
+      } else if (item.image?.public_id === 'existing' && currentItem?.image?.public_id) {
+        image = {
+          ...item.image,
+          public_id: currentItem.image.public_id
+        };
       } else if (item.image === undefined && currentItem?.image) {
         image = currentItem.image;
       } else if (!item.image || !item.image.url) {
@@ -329,6 +343,7 @@ export class MenuService {
 
       // Procesar subítems / children
       const children: IMenuItemChild[] = (item.children || []).map((child, childIdx) => ({
+        ...(child._id && isValidObjectId(child._id) ? { _id: child._id } : {}),
         label: child.label?.trim() || `Subítem ${childIdx + 1}`,
         link: child.link?.trim() || '/products',
         badge: child.badge?.trim() || '',
@@ -338,6 +353,7 @@ export class MenuService {
       }));
 
       processed.push({
+        ...(item._id && isValidObjectId(item._id) ? { _id: item._id } : {}),
         label: item.label?.trim() || `Ítem ${i + 1}`,
         link: item.link?.trim() || '/products',
         badge: item.badge?.trim() || '',

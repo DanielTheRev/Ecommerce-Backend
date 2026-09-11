@@ -518,6 +518,47 @@ export class ProductService {
 		}
 	}
 
+	static async findByBarcode(
+		models: TenantModels,
+		rawBarcode: string
+	): Promise<{ product: IProduct; matchedVariant: any | null }> {
+		try {
+			const barcode = rawBarcode.trim();
+			if (!barcode) {
+				throw new AppError('Barcode is required', 'El código de barras es requerido', 400);
+			}
+
+			// Busca por barcode a nivel raíz (GeneralProduct) o en cualquier variante / SKU
+			const product = (await models.Product.findOne({
+				$or: [
+					{ barcode: barcode },
+					{ 'variants.barcode': barcode },
+					{ 'variants.sku': barcode }
+				]
+			})
+				.select('+provider +finance +linkProductProvider')
+				.populate('provider')
+				.lean()) as unknown as IProduct;
+
+			if (!product) {
+				throw new AppError('Product not found for barcode', 'Producto no encontrado para el código de barras', 404);
+			}
+
+			// Encontrar la variante específica coincidente si existe
+			let matchedVariant: any = null;
+			if (Array.isArray(product.variants) && product.variants.length > 0) {
+				matchedVariant = product.variants.find(
+					(v: any) => v.barcode === barcode || v.sku === barcode
+				) || product.variants[0];
+			}
+
+			return { product, matchedVariant };
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError('Failed to fetch product by barcode', 'Error al buscar producto por código de barras', 500);
+		}
+	}
+
 	static async processOrderItems(
 		models: TenantModels,
 		items: { _id: string; sku: string; quantity: number }[]
@@ -741,7 +782,9 @@ export class ProductService {
 							{ category: regex },
 							{ clothingType: regex },
 							{ tags: regex },
-							{ 'variants.sku': regex }
+							{ 'variants.sku': regex },
+							{ 'variants.barcode': regex },
+							{ barcode: regex }
 						]
 					});
 				} else if (terms.length > 1) {
@@ -756,7 +799,9 @@ export class ProductService {
 								{ category: regex },
 								{ clothingType: regex },
 								{ tags: regex },
-								{ 'variants.sku': regex }
+								{ 'variants.sku': regex },
+								{ 'variants.barcode': regex },
+								{ barcode: regex }
 							]
 						};
 					});
@@ -1217,7 +1262,10 @@ export class ProductService {
 						{ model: qRegex },
 						{ category: qRegex },
 						{ clothingType: qRegex },
-						{ tags: qRegex }
+						{ tags: qRegex },
+						{ 'variants.sku': qRegex },
+						{ 'variants.barcode': qRegex },
+						{ barcode: qRegex }
 					]
 				});
 			}
@@ -1378,12 +1426,34 @@ export class ProductService {
 				}
 			);
 
-			if (imagesDTO.length === 0) throw new AppError('No images provided', 'No se proporcionaron imágenes', 400);
-			const rawImages = imagesDTO.map((image) => ({
-				id: `${data.brand}-${data.model}`,
-				source: image
-			}));
-			const images = await ImageService.UploadImages(rawImages, `${tenantSlug}/product-images`);
+			let images: any[] = [];
+			if (imagesDTO && imagesDTO.length > 0) {
+				const rawImages = imagesDTO.map((image) => ({
+					id: `${data.brand}-${data.model}`,
+					source: image
+				}));
+				images = await ImageService.UploadImages(rawImages, `${tenantSlug}/product-images`);
+			} else if (Array.isArray(data.images) && data.images.length > 0) {
+				images = data.images;
+			} else if (data.productType !== ProductType.GENERAL) {
+				throw new AppError('No images provided', 'No se proporcionaron imágenes', 400);
+			}
+
+			// Para productos de tipo GENERAL: inicializar variante por defecto si no vino ninguna
+			if (data.productType === ProductType.GENERAL) {
+				const variantsArr = Array.isArray(data.variants) ? data.variants : [];
+				if (variantsArr.length === 0) {
+					data.variants = [{
+						sku: '',
+						stock: (data as any).stock !== undefined ? Number((data as any).stock) : 0,
+						reservedStock: 0,
+						barcode: data.barcode ? data.barcode.trim() : undefined,
+						isActive: true
+					}] as any[];
+				} else if (variantsArr.length === 1 && data.barcode && !(variantsArr[0] as any).barcode) {
+					(variantsArr[0] as any).barcode = data.barcode.trim();
+				}
+			}
 
 			if (data.variants && data.variants.length > 0 && Array.isArray(data.variants)) {
 				data.variants = data.variants.map((v: any) => {
@@ -1435,29 +1505,31 @@ export class ProductService {
 			// Elegir modelo según el tipo de producto
 			const Model = this.getModel(models, data.productType);
 
-
 			// Campos comunes
 			const baseData: any = {
 				slug,
-				provider: data.provider || '',
 				linkProductProvider: data.linkProductProvider || '',
 				brand: data.brand,
-				shortDescription: this.sanitizeDescription(data.shortDescription),
-				largeDescription: this.sanitizeDescription(data.largeDescription),
+				shortDescription: data.shortDescription ? this.sanitizeDescription(data.shortDescription) : `${data.brand} ${data.model}`,
+				largeDescription: data.largeDescription ? this.sanitizeDescription(data.largeDescription) : '',
 				model: data.model,
 				category: data.category,
-				features: data.features,
+				features: data.features || [],
 
 				price,
 				finance,
 				images,
-				specifications: data.specifications,
+				specifications: data.specifications || [],
 				variants: data.variants || [],
 				status: data.status || 'draft',
 				isFeatured: Boolean(data.isFeatured),
 				tags: data.tags || [],
 				seo: seoData
 			};
+
+			if (data.provider && data.provider !== '') {
+				baseData.provider = data.provider;
+			}
 
 			// Campos específicos de tech
 			if (data.productType === ProductType.TECH) {
@@ -1490,14 +1562,18 @@ export class ProductService {
 				if (data.applicationArea) baseData.applicationArea = data.applicationArea;
 			}
 
-			// Campos específicos de general
+			// Campos específicos de general (Kiosco / Almacén / Bazar)
 			if (data.productType === ProductType.GENERAL) {
+				if (data.barcode) baseData.barcode = data.barcode.trim();
+				if (data.isSoldByWeight !== undefined) baseData.isSoldByWeight = Boolean(data.isSoldByWeight);
 				if (data.unit) baseData.unit = data.unit;
 				if (data.weight) baseData.weight = data.weight;
 			}
 
-			const newProduct = await Model.create(baseData)
-			await newProduct.populate('provider');
+			const newProduct = await Model.create(baseData);
+			if (baseData.provider) {
+				await newProduct.populate('provider');
+			}
 			return newProduct.toObject() as unknown as IProduct;
 		} catch (error) {
 			console.log(error);
@@ -1717,7 +1793,19 @@ export class ProductService {
 		console.log('Data:');
 		console.log(updateData);
 		try {
-			const imagesToDelete = JSON.parse((updateData.deletedImages || '[]') as string) as string[];
+			let imagesToDelete: string[] = [];
+			if (updateData.deletedImages) {
+				try {
+					const parsed = typeof updateData.deletedImages === 'string'
+						? JSON.parse(updateData.deletedImages)
+						: updateData.deletedImages;
+					if (Array.isArray(parsed)) {
+						imagesToDelete = parsed.filter((pubId): pubId is string => typeof pubId === 'string' && pubId.trim().length > 0);
+					}
+				} catch (err) {
+					console.error('Error parsing deletedImages in updateProductById:', err);
+				}
+			}
 
 			// Traemos +prices.costPrice explícitamente (select: false en el schema).
 			// Es necesario como fallback cuando el admin solo cambia customProfitMargin
@@ -1747,6 +1835,36 @@ export class ProductService {
 			}
 
 			const imagesOrderStr = (updateData as any).imagesOrder;
+			let parsedImagesOrder: string[] | null = null;
+			if (imagesOrderStr) {
+				try {
+					const parsed = typeof imagesOrderStr === 'string' ? JSON.parse(imagesOrderStr) : imagesOrderStr;
+					if (Array.isArray(parsed)) {
+						parsedImagesOrder = parsed;
+					}
+				} catch (error) {
+					console.error('Error parsing imagesOrder', error);
+				}
+			}
+
+			// If imagesOrder was sent, prune any existing images that were removed by the user in the UI
+			if (parsedImagesOrder) {
+				const imagesToDrop = currentImages.filter(img => {
+					const url = img.url;
+					const secUrl = (img as any).secure_url;
+					return !parsedImagesOrder!.includes(url) && (!secUrl || !parsedImagesOrder!.includes(secUrl));
+				});
+				for (const dropped of imagesToDrop) {
+					if (dropped.public_id && !imagesToDelete.includes(dropped.public_id)) {
+						await ImageService.DeleteImage(dropped.public_id);
+					}
+				}
+				currentImages = currentImages.filter(img => {
+					const url = img.url;
+					const secUrl = (img as any).secure_url;
+					return parsedImagesOrder!.includes(url) || (secUrl && parsedImagesOrder!.includes(secUrl));
+				});
+			}
 
 			if (files && files.length > 0) {
 				const brand = updateData.brand || product.brand;
@@ -1758,31 +1876,50 @@ export class ProductService {
 				}));
 
 				const newImages = await ImageService.UploadImages(rawImages, `${tenantSlug}/product-images`);
-				updateData.images = [...currentImages, ...newImages];
-			} else if (imagesToDelete.length > 0 || imagesOrderStr) {
-				updateData.images = currentImages;
-			}
 
-			if (imagesOrderStr && updateData.images) {
-				try {
-					const orderArray = JSON.parse(imagesOrderStr as string) as string[];
-					if (orderArray.length > 0) {
-						updateData.images.sort((a: any, b: any) => {
-							const urlA = a.url || a.secure_url;
-							const urlB = b.url || b.secure_url;
-							const idxA = orderArray.indexOf(urlA);
-							const idxB = orderArray.indexOf(urlB);
+				if (parsedImagesOrder && parsedImagesOrder.length > 0) {
+					let newImgIdx = 0;
+					const finalOrderMap = parsedImagesOrder.map(link => {
+						if (typeof link === 'string' && link.startsWith('blob:') && newImgIdx < newImages.length) {
+							const uploadedImg = newImages[newImgIdx++];
+							return uploadedImg.url;
+						}
+						return link;
+					});
 
-							if (idxA === -1 && idxB === -1) return 0;
-							if (idxA === -1) return 1;
-							if (idxB === -1) return -1;
+					const combined = [...currentImages, ...newImages];
+					combined.sort((a: any, b: any) => {
+						const urlA = a.url || a.secure_url;
+						const urlB = b.url || b.secure_url;
+						const idxA = finalOrderMap.indexOf(urlA);
+						const idxB = finalOrderMap.indexOf(urlB);
 
-							return idxA - idxB;
-						});
-					}
-				} catch (error) {
-					console.error('Error parsing imagesOrder', error);
+						if (idxA === -1 && idxB === -1) return 0;
+						if (idxA === -1) return 1;
+						if (idxB === -1) return -1;
+
+						return idxA - idxB;
+					});
+					updateData.images = combined;
+				} else {
+					updateData.images = [...currentImages, ...newImages];
 				}
+			} else if (imagesToDelete.length > 0 || parsedImagesOrder) {
+				if (parsedImagesOrder && parsedImagesOrder.length > 0) {
+					currentImages.sort((a: any, b: any) => {
+						const urlA = a.url || a.secure_url;
+						const urlB = b.url || b.secure_url;
+						const idxA = parsedImagesOrder!.indexOf(urlA);
+						const idxB = parsedImagesOrder!.indexOf(urlB);
+
+						if (idxA === -1 && idxB === -1) return 0;
+						if (idxA === -1) return 1;
+						if (idxB === -1) return -1;
+
+						return idxA - idxB;
+					});
+				}
+				updateData.images = currentImages;
 			}
 
 			if (updateData.brand || updateData.model) {

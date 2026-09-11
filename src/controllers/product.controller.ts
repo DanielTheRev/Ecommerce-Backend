@@ -188,30 +188,56 @@ export class ProductController {
 		const imageFiles = uploadedFiles?.images ?? [];
 		const ogImageFile = uploadedFiles?.seoImage?.[0] ?? null;
 		try {
-			data.specifications = JSON.parse(data.specifications as string) as IProductSpec[];
-			data.features = JSON.parse(data.features as string) as string[];
+			if (typeof data.specifications === 'string') {
+				data.specifications = JSON.parse(data.specifications) as IProductSpec[];
+			} else if (!data.specifications) {
+				data.specifications = [];
+			}
+
+			if (typeof data.features === 'string') {
+				data.features = JSON.parse(data.features) as string[];
+			} else if (!data.features) {
+				data.features = [];
+			}
+
 			// Parsear Variantes con polimorfismo estricto
-			const parsedVariants = JSON.parse(data.variants as string);
+			let parsedVariants: any[] = [];
+			if (typeof data.variants === 'string') {
+				parsedVariants = JSON.parse(data.variants);
+			} else if (Array.isArray(data.variants)) {
+				parsedVariants = data.variants;
+			}
 
 			if (data.productType === ProductType.TECH) {
 				data.variants = parsedVariants as ITechVariant[];
-			}
-			if (data.productType === ProductType.CLOTHING) {
+			} else if (data.productType === ProductType.CLOTHING) {
 				data.variants = parsedVariants as IClothingVariant[];
 				if (data.season) data.season = data.season;
+			} else {
+				data.variants = parsedVariants as any[];
 			}
-			if (data.tags) data.tags = JSON.parse(data.tags as string) as string[];
+
+			if (typeof data.tags === 'string') {
+				data.tags = JSON.parse(data.tags) as string[];
+			}
 
 			// Tech-specific: parsear storage si viene
-			if (data.storage) data.storage = JSON.parse(data.storage as string) as string[];
+			if (typeof data.storage === 'string') {
+				data.storage = JSON.parse(data.storage) as string[];
+			}
 
 			// Clothing-specific: parsear arrays si vienen
-			if (data.composition) data.composition = JSON.parse(data.composition as string);
-			if (data.careInstructions)
-				data.careInstructions = JSON.parse(data.careInstructions as string);
+			if (typeof data.composition === 'string') {
+				data.composition = JSON.parse(data.composition);
+			}
+			if (typeof data.careInstructions === 'string') {
+				data.careInstructions = JSON.parse(data.careInstructions);
+			}
 
 			// SEO: parsear el JSON string (og_image llega como archivo separado)
-			if (data.seo) data.seo = JSON.parse(data.seo as unknown as string);
+			if (typeof data.seo === 'string') {
+				data.seo = JSON.parse(data.seo as unknown as string);
+			}
 
 			const newProduct = await ProductService.createProduct(
 				req.models!,
@@ -228,6 +254,20 @@ export class ProductController {
 			}
 
 			res.status(201).json(newProduct);
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// GET /api/products/by-barcode/:barcode - Búsqueda ultrarrápida para escáneres
+	static async getProductByBarcode(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { barcode } = req.params;
+			const result = await ProductService.findByBarcode(req.models!, barcode);
+			res.status(200).json({
+				success: true,
+				data: result
+			});
 		} catch (error) {
 			next(error);
 		}

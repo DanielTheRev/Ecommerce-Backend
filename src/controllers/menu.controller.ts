@@ -53,7 +53,7 @@ export class MenuController {
   static async createMenu(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const models = (req as any).models;
-      const tenantSlug = (req as any).tenant?.slug;
+      const tenantSlug = (req as any).tenant?.slug || (req as any).tenantSlug || req.body?.tenantSlug;
       const files = req.files as Express.Multer.File[];
 
       let payload = req.body;
@@ -88,7 +88,7 @@ export class MenuController {
     try {
       const models = (req as any).models;
       const { id } = req.params;
-      const tenantSlug = (req as any).tenant?.slug;
+      const tenantSlug = (req as any).tenant?.slug || (req as any).tenantSlug || req.body?.tenantSlug;
       const files = req.files as Express.Multer.File[];
 
       let payload = req.body;
@@ -123,7 +123,7 @@ export class MenuController {
     try {
       const models = (req as any).models;
       const { id } = req.params;
-      const tenantSlug = (req as any).tenant?.slug;
+      const tenantSlug = (req as any).tenant?.slug || (req as any).tenantSlug || req.body?.tenantSlug;
 
       await MenuService.deleteMenu(models, id, tenantSlug);
 
