@@ -155,6 +155,9 @@ export class AuthService {
 			if (!user) {
 				throw new AuthError('Invalid credentials', 'Credenciales invalidas', 401);
 			}
+			if (user.isActive === false) {
+				throw new AuthError('Account suspended', 'Esta cuenta se encuentra suspendida o inactiva. Contactá al administrador.', 403);
+			}
 			const isMatch = await user.comparePassword(loginData.password);
 			if (!isMatch) {
 				throw new AuthError('Invalid credentials', 'Credenciales inválidas', 401);

@@ -78,9 +78,13 @@ export class PosController {
 				pairingCode: `${tenantSlug.toUpperCase()}-${cleanTerminal.toUpperCase()}`,
 				wsPath: '/api/socket.io',
 				qrPayload: JSON.stringify({
+					type: 'NEXO_POS_TERMINAL',
+					version: '1.0',
 					action: 'pos_pair',
 					tenant: tenantSlug,
+					tenantSlug,
 					terminal: cleanTerminal,
+					terminalId: cleanTerminal,
 					timestamp: Date.now()
 				})
 			};

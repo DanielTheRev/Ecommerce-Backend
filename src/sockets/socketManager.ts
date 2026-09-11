@@ -167,8 +167,8 @@ class SocketManager {
 				const models = getModelsForConnection(tenantDb);
 
 				const user = await models.User.findById(decoded.userID).lean() as IUser;
-				if (!user) {
-					return next(new Error('[WS] User not found'));
+				if (!user || user.isActive === false) {
+					return next(new Error('[WS] User not found or account is suspended'));
 				}
 
 				socket.user = user;

@@ -56,4 +56,163 @@ export class UserController {
 			next(error);
 		}
 	}
+
+	/* ========================================================== */
+	/*             CONTROLADORES DE EMPLEADOS / STAFF             */
+	/* ========================================================== */
+
+	// GET /api/users/staff - Obtener lista de personal (admin)
+	static async getStaff(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { search, role, isActive } = req.query;
+			const parsedIsActive = isActive !== undefined ? isActive === 'true' : undefined;
+
+			const staff = await UserService.getStaffMembers(req.models!, {
+				search: search as string,
+				role: role as string,
+				isActive: parsedIsActive
+			});
+
+			res.status(200).json({
+				success: true,
+				data: staff
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// GET /api/users/staff/:id - Obtener detalle de empleado (admin)
+	static async getStaffById(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { id } = req.params;
+			const staff = await UserService.getStaffMemberById(req.models!, id);
+
+			res.status(200).json({
+				success: true,
+				data: staff
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// POST /api/users/staff - Dar de alta a un empleado (admin)
+	static async createStaff(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { name, lastName, dni, phone, email, password, role, position, pinCode } = req.body;
+
+			const newStaff = await UserService.createStaffMember(req.models!, {
+				name,
+				lastName,
+				dni,
+				phone,
+				email,
+				password,
+				role,
+				position,
+				pinCode
+			});
+
+			res.status(201).json({
+				success: true,
+				message: 'Empleado creado exitosamente',
+				data: newStaff
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// PUT /api/users/staff/:id - Actualizar datos de un empleado (admin)
+	static async updateStaff(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { id } = req.params;
+			const { name, lastName, dni, phone, email, password, role, position, pinCode, isActive } = req.body;
+
+			const updatedStaff = await UserService.updateStaffMember(
+				req.models!,
+				id,
+				{
+					name,
+					lastName,
+					dni,
+					phone,
+					email,
+					password,
+					role,
+					position,
+					pinCode,
+					isActive
+				},
+				req.user?._id ? String(req.user._id) : undefined
+			);
+
+			res.status(200).json({
+				success: true,
+				message: 'Empleado actualizado exitosamente',
+				data: updatedStaff
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// PATCH /api/users/staff/:id/toggle-status - Activar / Revocar acceso de empleado (admin)
+	static async toggleStaffStatus(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { id } = req.params;
+			const result = await UserService.toggleStaffStatus(
+				req.models!,
+				id,
+				req.user?._id ? String(req.user._id) : undefined
+			);
+
+			res.status(200).json({
+				success: true,
+				...result
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// DELETE /api/users/staff/:id - Eliminar empleado (admin)
+	static async deleteStaff(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { id } = req.params;
+			const result = await UserService.deleteStaffMember(
+				req.models!,
+				id,
+				req.user?._id ? String(req.user._id) : undefined
+			);
+
+			res.status(200).json(result);
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// POST /api/users/staff/verify-pin - Validar PIN de mostrador para desbloqueo rápido
+	static async verifyPin(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { pinCode, staffId } = req.body;
+			const result = await UserService.verifyStaffPin(req.models!, pinCode, staffId);
+
+			if (!result.valid) {
+				res.status(401).json({
+					success: false,
+					message: result.message || 'PIN incorrecto o inválido'
+				});
+				return;
+			}
+
+			res.status(200).json({
+				success: true,
+				user: result.user
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
 }

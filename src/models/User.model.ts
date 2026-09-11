@@ -46,6 +46,16 @@ const userSchema = new Schema<IUser>(
 			enum: Role,
 			default: Role.user
 		},
+		position: {
+			type: String,
+			trim: true,
+			default: 'Cajero'
+		},
+		pinCode: {
+			type: String,
+			select: false,
+			default: null
+		},
 		password: {
 			type: String,
 			minlength: [6, 'La contraseña debe tener al menos 6 caracteres'],
@@ -76,13 +86,17 @@ const userSchema = new Schema<IUser>(
 	}
 );
 
-// Middleware to hash password before save
+// Middleware to hash password and pinCode before save
 userSchema.pre('save', async function (next) {
-	if (!this.isModified('password') || !this.password) return next();
-
 	try {
-		const salt = await bcrypt.genSalt(12);
-		this.password = await bcrypt.hash(this.password, salt);
+		if (this.isModified('password') && this.password) {
+			const salt = await bcrypt.genSalt(12);
+			this.password = await bcrypt.hash(this.password, salt);
+		}
+		if (this.isModified('pinCode') && this.pinCode) {
+			const salt = await bcrypt.genSalt(10);
+			this.pinCode = await bcrypt.hash(this.pinCode, salt);
+		}
 		next();
 	} catch (error) {
 		next(error as Error);
@@ -93,6 +107,12 @@ userSchema.pre('save', async function (next) {
 userSchema.methods.comparePassword = async function (candidatePassword: string): Promise<boolean> {
 	if (!this.password) return false;
 	return bcrypt.compare(candidatePassword, this.password);
+};
+
+// Método para comparar PIN de mostrador
+userSchema.methods.comparePin = async function (candidatePin: string): Promise<boolean> {
+	if (!this.pinCode) return false;
+	return bcrypt.compare(candidatePin, this.pinCode);
 };
 
 userSchema.index({ isActive: 1 });

@@ -54,6 +54,7 @@ export const protect = async (
 
 		const user = await req.models.User.findById(decoded.userID).lean() as IUser;
 		if (!user) throw new AppError('User not found', 'Usuario no encontrado', 401);
+		if (user.isActive === false) throw new AppError('User suspended', 'Tu cuenta se encuentra suspendida o revocada por el administrador', 403);
 
 		// add user to every request
 		req.user = user;

@@ -29,6 +29,8 @@ export interface ISecureUser {
 	profilePhoto: string;
 	isEmailVerified?: boolean;
 	rewards?: IUserRewards;
+	position?: string;
+	hasPin?: boolean;
 	isActive: boolean;
 	createdAt: Date;
 	updatedAt: Date;
@@ -43,6 +45,8 @@ export interface IUser {
 	phone?: string;
 	email: string;
 	role: Role;
+	position?: string;
+	pinCode?: string;
 	googleID: string;
 	profilePhoto: string;
 	password?: string;
@@ -52,5 +56,6 @@ export interface IUser {
 	createdAt: Date;
 	updatedAt: Date;
 	comparePassword(candidatePassword: string): Promise<boolean>;
+	comparePin?(candidatePin: string): Promise<boolean>;
 	hasPassword(password: string): Promise<string>;
 }

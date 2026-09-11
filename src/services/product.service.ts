@@ -2751,25 +2751,192 @@ export class ProductService {
 
 				const pAny = product as any;
 
-				// If simple fields updated
-				if (item.model !== undefined) pAny.model = String(item.model).trim();
-				if (item.brand !== undefined) pAny.brand = String(item.brand).trim();
-				if (item.category !== undefined) pAny.category = String(item.category).trim();
-				if (item.shortDescription !== undefined) pAny.shortDescription = String(item.shortDescription);
+				// Basic & General Product fields
+				if (item.model !== undefined) {
+					pAny.model = String(item.model).trim();
+				}
+				if (item.brand !== undefined) {
+					pAny.brand = String(item.brand).trim();
+				}
+				if (item.model !== undefined || item.brand !== undefined) {
+					pAny.slug = this.generateSlug(pAny.brand, pAny.model);
+				}
+				if (item.subtitle !== undefined) {
+					pAny.subtitle = item.subtitle ? String(item.subtitle).trim() : '';
+				}
+				if (item.category !== undefined) {
+					pAny.category = String(item.category).trim();
+				}
+				if (item.shortDescription !== undefined) {
+					pAny.shortDescription = String(item.shortDescription).trim();
+				}
 				if (item.largeDescription !== undefined) {
 					const window = new JSDOM('').window;
 					const purify = createDOMPurify(window);
 					pAny.largeDescription = purify.sanitize(item.largeDescription, this.purifyConfig);
 				}
-				if (item.sizeGuide !== undefined) pAny.sizeGuide = item.sizeGuide;
+				if (item.status !== undefined) {
+					pAny.status = item.status;
+				}
+				if (item.isFeatured !== undefined) {
+					pAny.isFeatured = Boolean(item.isFeatured);
+				}
+				if (item.linkProductProvider !== undefined) {
+					pAny.linkProductProvider = String(item.linkProductProvider).trim();
+				}
+
+				// Specifications / Ficha Técnica (Array de { key, value } o Record<string, string>)
+				if (item.specifications !== undefined) {
+					let specs: { key: string; value: string }[] = [];
+					if (Array.isArray(item.specifications)) {
+						specs = item.specifications.map((s: any) => ({
+							key: String(s.key || s.nombre || s.name || '').trim(),
+							value: String(s.value || s.valor || '').trim()
+						})).filter((s: any) => s.key && s.value);
+					} else if (typeof item.specifications === 'object' && item.specifications !== null) {
+						specs = Object.entries(item.specifications).map(([k, v]) => ({
+							key: String(k).trim(),
+							value: String(v).trim()
+						})).filter((s: any) => s.key && s.value);
+					} else if (typeof item.specifications === 'string' && item.specifications.trim()) {
+						specs = item.specifications.split(/[,;\n]+/).map((part: string) => {
+							const [k, ...v] = part.split(/[:=]/);
+							return { key: (k || '').trim(), value: (v.join(':') || '').trim() };
+						}).filter((s: any) => s.key && s.value);
+					}
+					pAny.specifications = specs;
+				}
+
+				// Features (viñetas destacadas)
+				if (item.features !== undefined) {
+					if (Array.isArray(item.features)) {
+						pAny.features = item.features.map((f: any) => String(f).trim()).filter(Boolean);
+					} else if (typeof item.features === 'string' && item.features.trim()) {
+						pAny.features = item.features.split(/[,;\n]+/).map((f: string) => f.trim()).filter(Boolean);
+					}
+				}
+
+				// Tags (etiquetas de búsqueda)
+				if (item.tags !== undefined) {
+					if (Array.isArray(item.tags)) {
+						pAny.tags = item.tags.map((t: any) => String(t).trim()).filter(Boolean);
+					} else if (typeof item.tags === 'string' && item.tags.trim()) {
+						pAny.tags = item.tags.split(/[,;\n]+/).map((t: string) => t.trim()).filter(Boolean);
+					}
+				}
+
+				// SEO (Meta Título y Meta Descripción)
+				if (item.seo !== undefined && typeof item.seo === 'object') {
+					pAny.seo = {
+						...(pAny.seo || {}),
+						...(item.seo.metaTitle !== undefined ? { metaTitle: String(item.seo.metaTitle).trim() } : {}),
+						...(item.seo.metaDescription !== undefined ? { metaDescription: String(item.seo.metaDescription).trim() } : {}),
+						...(item.seo.metaImage ? { metaImage: item.seo.metaImage } : {})
+					};
+				}
+				if (item.seoTitle !== undefined || item.seoMetaTitle !== undefined || item.metaTitle !== undefined) {
+					const titleVal = item.seoTitle ?? item.seoMetaTitle ?? item.metaTitle;
+					pAny.seo = { ...(pAny.seo || {}), metaTitle: String(titleVal).trim() };
+				}
+				if (item.seoDescription !== undefined || item.seoMetaDescription !== undefined || item.metaDescription !== undefined) {
+					const descVal = item.seoDescription ?? item.seoMetaDescription ?? item.metaDescription;
+					pAny.seo = { ...(pAny.seo || {}), metaDescription: String(descVal).trim() };
+				}
+
+				// ClothingProduct Fields
 				if (item.gender !== undefined) pAny.gender = item.gender;
-				if (item.fit !== undefined) pAny.fit = item.fit;
-				if (item.material !== undefined) pAny.material = item.material;
+				if (item.fit !== undefined) pAny.fit = String(item.fit).trim();
+				if (item.material !== undefined) pAny.material = String(item.material).trim();
 				if (item.sizeType !== undefined) pAny.sizeType = item.sizeType;
-				if (item.status !== undefined) pAny.status = item.status;
-				if (item.isFeatured !== undefined) pAny.isFeatured = Boolean(item.isFeatured);
-				if (item.tags !== undefined && Array.isArray(item.tags)) pAny.tags = item.tags;
-				if (item.seo !== undefined) pAny.seo = { ...pAny.seo, ...item.seo };
+				if (item.season !== undefined) pAny.season = String(item.season).trim();
+
+				// Composition (Array de { material: string, percentage: number } o parsing de texto ej: "95% Algodón, 5% Elastano")
+				if (item.composition !== undefined) {
+					let composition: { material: string; percentage: number }[] = [];
+					if (Array.isArray(item.composition)) {
+						composition = item.composition.map((c: any) => ({
+							material: String(c.material || '').trim(),
+							percentage: Number(c.percentage || 0)
+						})).filter((c: any) => c.material && !isNaN(c.percentage));
+					} else if (typeof item.composition === 'string' && item.composition.trim()) {
+						const parts = item.composition.split(/[,;\n/]+/);
+						for (const part of parts) {
+							const m1 = part.match(/(\d+(?:\.\d+)?)\s*%\s*(.*)/);
+							const m2 = part.match(/(.*?)\s*(\d+(?:\.\d+)?)\s*%/);
+							if (m1 && m1[2].trim()) {
+								composition.push({ percentage: Number(m1[1]), material: m1[2].trim() });
+							} else if (m2 && m2[1].trim()) {
+								composition.push({ percentage: Number(m2[2]), material: m2[1].trim() });
+							}
+						}
+					}
+					pAny.composition = composition;
+				}
+
+				// Care instructions
+				if (item.careInstructions !== undefined) {
+					if (Array.isArray(item.careInstructions)) {
+						pAny.careInstructions = item.careInstructions.map((ci: any) => String(ci).trim()).filter(Boolean);
+					} else if (typeof item.careInstructions === 'string' && item.careInstructions.trim()) {
+						pAny.careInstructions = item.careInstructions.split(/[,;\n]+/).map((ci: string) => ci.trim()).filter(Boolean);
+					}
+				}
+
+				// Size Guide (Guía de medidas)
+				if (item.sizeGuide !== undefined) {
+					if (item.sizeGuide && typeof item.sizeGuide === 'object' && Array.isArray(item.sizeGuide.headers) && Array.isArray(item.sizeGuide.rows) && item.sizeGuide.rows.length > 0) {
+						pAny.sizeGuide = {
+							headers: item.sizeGuide.headers.map((h: any) => String(h).trim()),
+							rows: item.sizeGuide.rows.map((r: any) => ({
+								size: String(r.size || '').trim(),
+								values: Array.isArray(r.values) ? r.values.map((v: any) => String(v).trim()) : []
+							})),
+							tolerance: item.sizeGuide.tolerance ? String(item.sizeGuide.tolerance).trim() : undefined
+						};
+					} else if (item.sizeGuide === null) {
+						pAny.sizeGuide = undefined;
+					}
+				}
+
+				// TechProduct Fields
+				if (item.processor !== undefined) pAny.processor = String(item.processor).trim();
+				if (item.ram !== undefined) pAny.ram = String(item.ram).trim();
+				if (item.screenSize !== undefined) pAny.screenSize = String(item.screenSize).trim();
+				if (item.os !== undefined) pAny.os = String(item.os).trim();
+				if (item.storage !== undefined) {
+					if (Array.isArray(item.storage)) {
+						pAny.storage = item.storage.map((s: any) => String(s).trim()).filter(Boolean);
+					} else if (typeof item.storage === 'string' && item.storage.trim()) {
+						pAny.storage = item.storage.split(/[,;\n]+/).map((s: string) => s.trim()).filter(Boolean);
+					}
+				}
+				if (item.connectivity !== undefined) {
+					if (Array.isArray(item.connectivity)) {
+						pAny.connectivity = item.connectivity.map((c: any) => String(c).trim()).filter(Boolean);
+					} else if (typeof item.connectivity === 'string' && item.connectivity.trim()) {
+						pAny.connectivity = item.connectivity.split(/[,;\n]+/).map((c: string) => c.trim()).filter(Boolean);
+					}
+				}
+
+				// BeautyProduct Fields
+				if (item.volume !== undefined) pAny.volume = String(item.volume).trim();
+				if (item.concentration !== undefined) pAny.concentration = String(item.concentration).trim();
+				if (item.fragranceFamily !== undefined) pAny.fragranceFamily = String(item.fragranceFamily).trim();
+				if (item.applicationArea !== undefined) pAny.applicationArea = String(item.applicationArea).trim();
+				if (item.scentNotes !== undefined && typeof item.scentNotes === 'object') {
+					pAny.scentNotes = {
+						...(pAny.scentNotes || {}),
+						top: item.scentNotes.top ? String(item.scentNotes.top).trim() : pAny.scentNotes?.top,
+						heart: item.scentNotes.heart ? String(item.scentNotes.heart).trim() : pAny.scentNotes?.heart,
+						base: item.scentNotes.base ? String(item.scentNotes.base).trim() : pAny.scentNotes?.base
+					};
+				}
+
+				// GeneralProduct Fields
+				if (item.barcode !== undefined) pAny.barcode = String(item.barcode).trim();
+				if (item.weight !== undefined) pAny.weight = String(item.weight).trim();
+				if (item.unit !== undefined) pAny.unit = String(item.unit).trim();
+				if (item.isSoldByWeight !== undefined) pAny.isSoldByWeight = Boolean(item.isSoldByWeight);
 
 				const saved = await product.save();
 				updated.push(saved.toObject() as unknown as IProduct);
