@@ -252,9 +252,9 @@ export class ResendService {
 			});
 
 			if (error) throw error;
-			console.log('✅ Order confirmation email sent:', data);
+			console.log(`📧 [Email Enviado] ✅ Confirmación de Compra enviada al cliente "${clientEmail}" (${clientFullName || clientFirstName || 'Cliente'}) | Orden #${order.orderNumber}`);
 		} catch (error: any) {
-			console.error('❌ Failed to send order confirmation email:', error);
+			console.error('❌ [Email Error] Falló el envío de confirmación de compra a ' + (order?.buyerData?.email || 'cliente') + ':', error);
 		}
 	}
 
@@ -315,9 +315,9 @@ export class ResendService {
 			});
 
 			if (error) throw error;
-			console.log('✅ Payment in process email sent:', data);
+			console.log(`📧 [Email Enviado] ⏳ Aviso de Pago en Proceso enviado al cliente "${clientEmail}" (${clientFullName || 'Cliente'}) | Orden #${order.orderNumber}`);
 		} catch (error: any) {
-			console.error('❌ Failed to send payment in process email:', error);
+			console.error('❌ [Email Error] Falló el envío de pago en proceso a ' + (order?.buyerData?.email || 'cliente') + ':', error);
 		}
 	}
 
@@ -435,9 +435,9 @@ export class ResendService {
 			});
 
 			if (error) throw error;
-			console.log('✅ Transfer instructions email sent:', resData);
+			console.log(`📧 [Email Enviado] 🏦 Instrucciones de Transferencia enviadas al cliente "${clientEmail}" | Orden #${data.order.orderNumber}`);
 		} catch (error: any) {
-			console.error('❌ Failed to send transfer email:', error);
+			console.error('❌ [Email Error] Falló el envío de instrucciones de transferencia a ' + (data?.order?.buyerData?.email || 'cliente') + ':', error);
 		}
 	}
 
@@ -468,8 +468,8 @@ export class ResendService {
 
 			const subject = this.replaceTemplateVariables(tpl?.subject || 'Tu pedido #{{numero_orden}} fue registrado con éxito 💵', vars);
 			const heading = this.replaceTemplateVariables(tpl?.heading || '¡Pedido registrado, {{cliente_nombre}}!', vars);
-			const message = this.replaceTemplateVariables(tpl?.message || 'Tu pedido ya fue cargado en nuestro sistema para pago en efectivo al momento del retiro.', vars);
-			const extra = tpl?.extraInstructions ? `<div style="background-color: #f3f4f6; padding: 12px; border-radius: 8px; font-size: 13px; margin: 15px 0;">${this.replaceTemplateVariables(tpl.extraInstructions, vars)}</div>` : '';
+			const message = this.replaceTemplateVariables(tpl?.message || 'Hola {{cliente_nombre}}, tu pedido fue reservado. Te esperamos en {{punto_retiro}} para abonar y retirar.', vars);
+			const extra = tpl?.extraInstructions ? `<p style="font-size: 14px; color: #555; margin-top: 15px;">${this.replaceTemplateVariables(tpl.extraInstructions, vars)}</p>` : '';
 			const logoHtml = this.buildEmailHeader(store);
 
 			const emailHtml = `
@@ -485,13 +485,14 @@ export class ResendService {
           </p>
           ${extra}
 
-          <div style="background-color: #eef2ff; border: 1px solid #c7d2fe; padding: 18px; border-radius: 8px; margin-bottom: 25px;">
-            ${pickupName ? `<p style="font-size: 14px; margin: 0 0 8px 0;"><strong>Punto de retiro:</strong> ${pickupName}</p>` : ''}
-            <p style="font-size: 14px; margin: 0 0 8px 0;"><strong>Dirección:</strong> ${pickupAddress}</p>
-            <p style="font-size: 15px; font-weight: bold; margin: 0; color: #4338ca;"><strong>Total a abonar en efectivo:</strong> ${order.finance.total.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</p>
+          <div style="background-color: #fefce8; border: 1px solid #fef08a; padding: 18px; border-radius: 8px; margin-bottom: 25px;">
+            <p style="font-size: 13px; color: #854d0e; font-weight: bold; margin: 0 0 5px 0; text-transform: uppercase;">Punto de Retiro & Pago:</p>
+            <p style="font-size: 15px; font-weight: bold; margin: 0 0 5px 0; color: #111;">${pickupName}</p>
+            <p style="font-size: 13px; color: #555; margin: 0 0 10px 0;">${pickupAddress}</p>
+            <p style="font-size: 14px; font-weight: bold; color: #111; margin: 0;">Total a abonar: ${order.finance.total.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</p>
           </div>
 
-          <h2 style="font-size: 16px; font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 25px 0 15px 0;">Tu Pedido:</h2>
+          <h2 style="font-size: 16px; font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 25px 0 15px 0;">Artículos:</h2>
           <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; margin-bottom: 25px;">
             ${itemsHtml}
           </table>
@@ -511,9 +512,9 @@ export class ResendService {
 			});
 
 			if (error) throw error;
-			console.log('✅ Cash instructions email sent:', data);
+			console.log(`📧 [Email Enviado] 💵 Instrucciones de Pago en Efectivo enviadas al cliente "${clientEmail}" (${clientFullName || 'Cliente'}) | Orden #${order.orderNumber}`);
 		} catch (error: any) {
-			console.error('❌ Failed to send cash instructions email:', error);
+			console.error('❌ [Email Error] Falló el envío de instrucciones en efectivo a ' + (order?.buyerData?.email || 'cliente') + ':', error);
 		}
 	}
 
@@ -574,9 +575,9 @@ export class ResendService {
 			});
 
 			if (error) throw error;
-			console.log('✅ Payment received email sent:', data);
+			console.log(`📧 [Email Enviado] 💳 Confirmación de Pago Acreditado enviada al cliente "${clientEmail}" (${clientFullName || 'Cliente'}) | Orden #${order.orderNumber}`);
 		} catch (error: any) {
-			console.error('❌ Failed to send payment received email:', error);
+			console.error('❌ [Email Error] Falló el envío de confirmación de pago acreditado a ' + (order?.buyerData?.email || 'cliente') + ':', error);
 		}
 	}
 
@@ -650,9 +651,9 @@ export class ResendService {
 			});
 
 			if (error) throw error;
-			console.log('✅ Order shipped email sent:', data);
+			console.log(`📧 [Email Enviado] 🚚 Aviso de Pedido Despachado / En Camino enviado al cliente "${clientEmail}" (${clientFullName || 'Cliente'}) | Orden #${order.orderNumber}`);
 		} catch (error: any) {
-			console.error('❌ Failed to send order shipped email:', error);
+			console.error('❌ [Email Error] Falló el envío de pedido despachado a ' + (order?.buyerData?.email || 'cliente') + ':', error);
 		}
 	}
 
@@ -709,9 +710,9 @@ export class ResendService {
 			});
 
 			if (error) throw error;
-			console.log('✅ Order delivered email sent:', data);
+			console.log(`📧 [Email Enviado] 🛍️ Aviso de Pedido Entregado enviado al cliente "${clientEmail}" (${clientFullName || 'Cliente'}) | Orden #${order.orderNumber}`);
 		} catch (error: any) {
-			console.error('❌ Failed to send order delivered email:', error);
+			console.error('❌ [Email Error] Falló el envío de pedido entregado a ' + (order?.buyerData?.email || 'cliente') + ':', error);
 		}
 	}
 
@@ -798,9 +799,9 @@ export class ResendService {
 			});
 
 			if (error) throw error;
-			console.log('✅ Abandoned cart email sent:', data);
+			console.log(`📧 [Email Enviado] 🛒 Recordatorio de Carrito Abandonado enviado al cliente "${userEmail}" (${userName || 'Cliente'})`);
 		} catch (error: any) {
-			console.error('❌ Failed to send abandoned cart email:', error);
+			console.error('❌ [Email Error] Falló el envío de carrito abandonado a ' + userEmail + ':', error);
 		}
 	}
 
@@ -904,10 +905,10 @@ export class ResendService {
 			});
 
 			if (error) throw error;
-			console.log('✅ Back in stock email sent:', data);
+			console.log(`📧 [Email Enviado] ⭐ Aviso de Producto en Stock enviado al cliente "${userEmail}" (${userName || 'Cliente'}) | Producto: "${productName}"`);
 			return true;
 		} catch (error: any) {
-			console.error('❌ Failed to send back in stock email:', error);
+			console.error('❌ [Email Error] Falló el envío de producto en stock a ' + userEmail + ':', error);
 			return false;
 		}
 	}
@@ -969,10 +970,10 @@ export class ResendService {
 			});
 
 			if (error) throw error;
-			console.log('✅ OTP email sent to:', email, data);
+			console.log(`📧 [Email Enviado] 🔑 Código de Acceso OTP enviado al usuario "${email}"`);
 			return true;
 		} catch (error: any) {
-			console.error('❌ Failed to send OTP email:', error);
+			console.error('❌ [Email Error] Falló el envío de código OTP a ' + email + ':', error);
 			return false;
 		}
 	}
@@ -1063,9 +1064,10 @@ export class ResendService {
 					break;
 			}
 
+			console.log(`📧 [Email Enviado] 🧪 Email de Prueba enviado exitosamente a "${recipientEmail}" | Plantilla: ${templateKey}`);
 			return true;
 		} catch (error: any) {
-			console.error('❌ Error sending test email:', error);
+			console.error(`❌ [Email Error] Falló el envío de email de prueba a ${recipientEmail}:`, error);
 			throw error;
 		}
 	}

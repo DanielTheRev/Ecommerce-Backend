@@ -30,6 +30,7 @@ import { CouponSchema } from '@/models/Coupon.model';
 import { NewsletterSchema } from '@/models/Newsletter.model';
 import { MenuSchema } from '@/models/Menu.model';
 import { CategoryGroupSchema } from '@/models/CategoryGroup.model';
+import { invoiceSchema, IInvoiceDocument } from '@/models/Invoice.model';
 
 // Interfaces
 import { ICashRegisterDocument, ICashRegisterModel } from '@/interfaces/cash-register.interface';
@@ -80,6 +81,7 @@ export interface TenantModels {
 	VisualMenu: Model<IVisualMenuDocument>;
 	Menu: Model<IMenuDocument>;
 	CategoryGroup: Model<ICategoryGroupDocument>;
+	Invoice: Model<IInvoiceDocument>;
 }
 
 export function getModelsForConnection(db: Connection): TenantModels {
@@ -210,6 +212,11 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		? db.model<ICategoryGroupDocument>('CategoryGroup')
 		: db.model<ICategoryGroupDocument>('CategoryGroup', CategoryGroupSchema);
 
+	// Invoice (ARCA / AFIP)
+	const InvoiceModel = db.models.Invoice
+		? (db.model('Invoice') as Model<IInvoiceDocument>)
+		: db.model<IInvoiceDocument>('Invoice', invoiceSchema);
+
 	return {
 		Product: ProductModel,
 		TechProduct: TechProductModel,
@@ -236,6 +243,7 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		Newsletter: NewsletterModel,
 		VisualMenu: VisualMenuModel,
 		Menu: MenuModel,
-		CategoryGroup: CategoryGroupModel
+		CategoryGroup: CategoryGroupModel,
+		Invoice: InvoiceModel
 	};
 }

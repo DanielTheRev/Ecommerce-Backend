@@ -72,7 +72,11 @@ export class FinanceService {
 				? Number(customProfitMargin)
 				: Number(EcommerceConfig.profit);
 
-		let totalAdditionalCostsRaw = 0;
+		let fixedExpensesRaw = 0;
+		let percentOverProviderExpensesRaw = 0;
+		let fixedTaxesRaw = 0;
+		let percentOverProviderTaxesRaw = 0;
+		let taxRateOnSaleFactor = 0;
 
 		const strategyMethod =
 			isCustomProfit && pricingMethodChoice
@@ -80,17 +84,31 @@ export class FinanceService {
 				: EcommerceConfig.pricingStrategy.method;
 
 		const processedAdditionalCosts = additionalCosts.map((item) => {
-			let costRaw = 0;
-			const itemValue = Number(item.value);
-			if (item.type === 'fixed') {
-				costRaw = itemValue;
-			} else if (item.type === 'percent_over_provider') {
-				costRaw = Number(providerCost) * (itemValue / 100);
+			const itemValue = Number(item.value) || 0;
+			const category = item.category || 'expense';
+			const type = item.type || 'fixed';
+
+			if (type === 'fixed') {
+				if (category === 'tax') {
+					fixedTaxesRaw += itemValue;
+				} else {
+					fixedExpensesRaw += itemValue;
+				}
+			} else if (type === 'percent_over_provider') {
+				const cost = Number(providerCost) * (itemValue / 100);
+				if (category === 'tax') {
+					percentOverProviderTaxesRaw += cost;
+				} else {
+					percentOverProviderExpensesRaw += cost;
+				}
+			} else if (type === 'percent_over_price') {
+				taxRateOnSaleFactor += this.normalizePercentage(itemValue);
 			}
-			totalAdditionalCostsRaw += costRaw;
+
 			return {
 				concept: item.concept,
-				type: item.type,
+				type,
+				category,
 				value: itemValue
 			};
 		});
@@ -103,25 +121,32 @@ export class FinanceService {
 		const baseCommFactor = this.normalizePercentage(Number(rawBaseComm));
 		const cft3Factor = this.normalizePercentage(Number(rawCFT3));
 		const cft6Factor = this.normalizePercentage(Number(rawCFT6));
-		const ivaFactor = 1 + Number(EcommerceConfig.taxes.iva) / 100;
+		const ivaFactor = 1 + Number(EcommerceConfig.taxes?.iva || 21) / 100;
 
 		const isARS = EcommerceConfig.costCurrency === 'ARS';
-		const totalCostRaw = Number(providerCost) + totalAdditionalCostsRaw;
+		const totalOperationalExpensesRaw = fixedExpensesRaw + percentOverProviderExpensesRaw;
+		const totalTaxesOverProviderRaw = fixedTaxesRaw + percentOverProviderTaxesRaw;
 
 		// Convertimos los costos a ambas monedas
 		let providerCostInUSD = 0;
 		let providerCostInARS = 0;
-		let totalCostInARS = 0;
+		let operationalExpensesInARS = 0;
+		let taxesOverProviderInARS = 0;
 
 		if (isARS) {
 			providerCostInARS = Number(providerCost);
 			providerCostInUSD = Number(providerCost) / Number(dolar);
-			totalCostInARS = totalCostRaw;
+			operationalExpensesInARS = totalOperationalExpensesRaw;
+			taxesOverProviderInARS = totalTaxesOverProviderRaw;
 		} else {
 			providerCostInUSD = Number(providerCost);
 			providerCostInARS = Number(providerCost) * Number(dolar);
-			totalCostInARS = totalCostRaw * Number(dolar);
+			operationalExpensesInARS = totalOperationalExpensesRaw * Number(dolar);
+			taxesOverProviderInARS = totalTaxesOverProviderRaw * Number(dolar);
 		}
+
+		// Costo base total en ARS antes de comisiones y antes de impuestos sobre venta
+		const totalCostInARS = providerCostInARS + operationalExpensesInARS + taxesOverProviderInARS;
 
 		// Tasas de pasarela con IVA incluido
 		const totalTasa1 = baseCommFactor * ivaFactor; // 1 pago
@@ -144,17 +169,21 @@ export class FinanceService {
 		let priceTarget = 0;
 
 		// =========================================================
-		// CÁLCULO DE PRECIOS FINALES (Gross-up Unificado)
+		// CÁLCULO DE PRECIOS FINALES (Gross-up Unificado con Impuestos)
 		// =========================================================
+		const denomList = Math.max(0.05, 1 - worstCaseTasa - taxRateOnSaleFactor - (strategyMethod === 'margin' ? profitFactor : 0));
+		const denom1Pay = Math.max(0.05, 1 - totalTasa1 - taxRateOnSaleFactor - (strategyMethod === 'margin' ? profitFactor : 0));
+		const denomTarget = Math.max(0.05, 1 - taxRateOnSaleFactor - (strategyMethod === 'margin' ? profitFactor : 0));
+
 		if (strategyMethod === 'margin') {
-			listPrice = totalCostInARS / (1 - profitFactor - worstCaseTasa);
-			card_ticket1PayPrice = totalCostInARS / (1 - profitFactor - totalTasa1);
-			priceTarget = totalCostInARS / (1 - profitFactor);
+			listPrice = totalCostInARS / denomList;
+			card_ticket1PayPrice = totalCostInARS / denom1Pay;
+			priceTarget = totalCostInARS / denomTarget;
 		} else {
 			const baseMarkupPrice = totalCostInARS * (1 + profitFactor);
-			listPrice = baseMarkupPrice / (1 - worstCaseTasa);
-			card_ticket1PayPrice = baseMarkupPrice / (1 - totalTasa1);
-			priceTarget = baseMarkupPrice;
+			listPrice = baseMarkupPrice / denomList;
+			card_ticket1PayPrice = baseMarkupPrice / denom1Pay;
+			priceTarget = baseMarkupPrice / denomTarget;
 		}
 
 		// Redondeos finales de cara al público (Charm Pricing .000, .500, .900)
@@ -168,10 +197,13 @@ export class FinanceService {
 		// =========================================================
 		// GANANCIAS NETAS REALES EN ARS (Cobrando Precio de Lista)
 		// =========================================================
+		const listPriceTaxesOnSale = listPrice * taxRateOnSaleFactor;
 		const card_ticket1PayProfit =
-			listPrice - totalCostInARS - listPrice * totalTasa1;
-		const card3InstallmentsProfit = listPrice - totalCostInARS - listPrice * totalTasa3;
-		const card6InstallmentsProfit = listPrice - totalCostInARS - listPrice * totalTasa6;
+			listPrice - totalCostInARS - listPrice * totalTasa1 - listPriceTaxesOnSale;
+		const card3InstallmentsProfit =
+			listPrice - totalCostInARS - listPrice * totalTasa3 - listPriceTaxesOnSale;
+		const card6InstallmentsProfit =
+			listPrice - totalCostInARS - listPrice * totalTasa6 - listPriceTaxesOnSale;
 
 		// El Descuento Máximo Seguro es exactamente la tasa de pasarela absorbida en el Precio de Lista
 		const maxSafeDiscount = Math.round(worstCaseTasa * 100);
@@ -179,11 +211,8 @@ export class FinanceService {
 		// =========================================================
 		// DESGLOSE ESTRATÉGICO PARA LOS BLOQUES DE LA UI
 		// =========================================================
-		const additionalCostsInARS = isARS
-			? totalAdditionalCostsRaw
-			: totalAdditionalCostsRaw * dolar;
-
 		const pasarelaAmount = Math.round(listPrice * worstCaseTasa);
+		const totalTaxesInARS = Math.round(taxesOverProviderInARS + listPriceTaxesOnSale);
 		const tuGananciaPura = Math.round(
 			maxInstallments >= 6 ? card6InstallmentsProfit :
 			maxInstallments >= 3 ? card3InstallmentsProfit :
@@ -194,22 +223,32 @@ export class FinanceService {
 			{
 				label: 'Costo Proveedor',
 				value: Math.round(providerCostInARS),
-				percentage: listPrice > 0 ? Math.round((providerCostInARS / listPrice) * 100) : 0
+				percentage: listPrice > 0 ? Math.round((providerCostInARS / listPrice) * 100) : 0,
+				category: 'provider'
 			},
 			{
-				label: 'Gastos Adicionales',
-				value: Math.round(additionalCostsInARS),
-				percentage: listPrice > 0 ? Math.round((additionalCostsInARS / listPrice) * 100) : 0
+				label: 'Gastos Operativos',
+				value: Math.round(operationalExpensesInARS),
+				percentage: listPrice > 0 ? Math.round((operationalExpensesInARS / listPrice) * 100) : 0,
+				category: 'expense'
 			},
 			{
-				label: `Tu Ganancia (${profitMargin}%)`,
-				value: tuGananciaPura,
-				percentage: listPrice > 0 ? Math.round((tuGananciaPura / listPrice) * 100) : 0
+				label: `Impuestos & Retenciones (${Math.round(taxRateOnSaleFactor * 100)}%)`,
+				value: totalTaxesInARS,
+				percentage: listPrice > 0 ? Math.round((totalTaxesInARS / listPrice) * 100) : 0,
+				category: 'tax'
 			},
 			{
 				label: `Pasarela MP (Tarifa Base + CFT ${maxInstallments >= 6 ? '6 Cuotas' : maxInstallments >= 3 ? '3 Cuotas' : '1 Pago'} - ${Math.round(worstCaseTasa * 100)}%)`,
 				value: pasarelaAmount,
-				percentage: listPrice > 0 ? Math.round((pasarelaAmount / listPrice) * 100) : 0
+				percentage: listPrice > 0 ? Math.round((pasarelaAmount / listPrice) * 100) : 0,
+				category: 'gateway'
+			},
+			{
+				label: `Tu Ganancia (${profitMargin}%)`,
+				value: tuGananciaPura,
+				percentage: listPrice > 0 ? Math.round((tuGananciaPura / listPrice) * 100) : 0,
+				category: 'profit'
 			}
 		];
 
@@ -244,6 +283,9 @@ export class FinanceService {
 				totalCostInARS,
 				providerCostInARS,
 				providerCostInUSD,
+				operationalExpensesInARS,
+				totalTaxesInARS,
+				taxRateOnSaleFactor,
 				priceTarget,
 				processedAdditionalCosts,
 				profitMargin,
@@ -279,6 +321,7 @@ export class FinanceService {
 		discountPercentageTransfer?: number;
 		maxSafeDiscount: number;
 		totalCostInARS: number;
+		taxRateOnSaleFactor?: number;
 	}): {
 		cashTransferPrice: number;
 		discountPercentageTransfer: number;
@@ -289,7 +332,8 @@ export class FinanceService {
 			: Number(data.maxSafeDiscount);
 
 		const cashTransferPrice = this.roundCharmPrice(Number(data.listPrice) * (1 - discount / 100));
-		const transferProfit = cashTransferPrice - Number(data.totalCostInARS);
+		const taxOnSale = cashTransferPrice * (Number(data.taxRateOnSaleFactor) || 0);
+		const transferProfit = cashTransferPrice - Number(data.totalCostInARS) - taxOnSale;
 
 		return {
 			cashTransferPrice,
@@ -337,6 +381,7 @@ export class FinanceService {
 				discountPercentageTransfer: data.discountPercentageTransfer !== undefined ? Number(data.discountPercentageTransfer) : undefined,
 				maxSafeDiscount: listResult.maxSafeDiscount,
 				totalCostInARS: listResult._internal.totalCostInARS,
+				taxRateOnSaleFactor: listResult._internal.taxRateOnSaleFactor,
 			});
 
 			// 3. Ensamblar resultado

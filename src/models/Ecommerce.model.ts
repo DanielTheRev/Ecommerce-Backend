@@ -1,4 +1,5 @@
 import { model, Schema } from 'mongoose';
+import { CostConceptSchema } from './schemas/costConcept.schema';
 
 const EcommerceSchema = new Schema(
 	{
@@ -21,6 +22,28 @@ const EcommerceSchema = new Schema(
 		},
 		taxes: {
 			iva: { type: Number, default: 21 } // en argentina es 21%
+		},
+		fiscalProfile: {
+			taxRegime: {
+				type: String,
+				enum: ['monotributo', 'responsable_inscripto', 'exento'],
+				default: 'monotributo'
+			},
+			monotributoCategory: {
+				type: String,
+				enum: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K'],
+				default: 'C'
+			},
+			cuit: { type: String, default: '' },
+			businessName: { type: String, default: '' },
+			legalName: { type: String, default: '' },
+			grossIncomeNumber: { type: String, default: '' },
+			iibbPercentage: { type: Number, default: 3.5, min: 0 },
+			previousExternalBilling: { type: Number, default: 0, min: 0 }
+		},
+		defaultAdditionalCosts: {
+			type: [CostConceptSchema],
+			default: []
 		},
 		// Estrategia de Pricing — configurable por el vendedor
 		pricingStrategy: {
@@ -91,6 +114,22 @@ const EcommerceSchema = new Schema(
 				apiKey: { type: String, default: '', select: false },
 				fromEmail: { type: String, default: '' },
 				fromName: { type: String, default: '' }
+			},
+			arca: {
+				active: { type: Boolean, default: false },
+				cuit: { type: String, default: '' },
+				businessName: { type: String, default: '' },
+				taxRegime: {
+					type: String,
+					enum: ['monotributo', 'responsable_inscripto', 'exento'],
+					default: 'monotributo'
+				},
+				grossIncomeNumber: { type: String, default: '' },
+				ptoVta: { type: Number, default: 1 },
+				isProduction: { type: Boolean, default: false },
+				cert: { type: String, default: '', select: false },
+				key: { type: String, default: '', select: false },
+				autoInvoiceOnSuccess: { type: Boolean, default: false }
 			}
 		},
 		// Configuración de Autenticación de Clientes en Tienda Web

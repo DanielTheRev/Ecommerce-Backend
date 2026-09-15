@@ -689,26 +689,46 @@ export class OrderService {
 				}
 				order.finance.paymentGatewayFee = Math.round(order.finance.total * (tasa * ivaFactor));
 
-				// 2. Calcular gastos adicionales totales de los productos (reposición, arca, bolsas)
-				const totalAdditionalCosts = order.items.reduce((acc, item) => {
+				// 2. Calcular gastos operativos e impuestos totales de los productos
+				let totalOperationalExpenses = 0;
+				let totalTaxes = 0;
+
+				for (const item of order.items) {
 					const providerCost = item.productSnapshot?.finance?.providerCost?.inARS || 0;
 					const additionalCosts = item.productSnapshot?.finance?.additionalCosts;
-					if (!additionalCosts || !Array.isArray(additionalCosts)) return acc;
-					let itemAddCost = 0;
+					if (!additionalCosts || !Array.isArray(additionalCosts)) continue;
+
+					let itemOpExp = 0;
+					let itemTax = 0;
+
 					for (const c of additionalCosts) {
+						const val = Number(c.value) || 0;
+						const isTax = c.category === 'tax';
+
 						if (c.type === 'percent_over_provider') {
-							itemAddCost += providerCost * (c.value / 100);
+							const cost = providerCost * (val / 100);
+							if (isTax) itemTax += cost;
+							else itemOpExp += cost;
 						} else if (c.type === 'fixed') {
-							itemAddCost += c.value;
+							if (isTax) itemTax += val;
+							else itemOpExp += val;
+						} else if (c.type === 'percent_over_price') {
+							const itemPrice = item.price || 0;
+							const taxOnPrice = itemPrice * (val / 100);
+							itemTax += taxOnPrice;
 						}
 					}
-					return acc + (itemAddCost * item.quantity);
-				}, 0);
+					totalOperationalExpenses += (itemOpExp * item.quantity);
+					totalTaxes += (itemTax * item.quantity);
+				}
 
-				// 3. Calcular Ganancia Neta Real (Total Abonado - Costo Base - Gastos Adicionales - Comisión MP - Envío)
+				order.finance.operationalExpenses = Math.round(totalOperationalExpenses);
+				order.finance.taxes = Math.round(totalTaxes);
+
+				// 3. Calcular Ganancia Neta Real (Total Abonado - Costo Base - Gastos Operativos - Impuestos - Comisión MP - Envío)
 				const shippingCost = order.shippingInfo?.cost || 0;
 				const realEarnings = Math.round(
-					order.finance.total - order.finance.baseCost - totalAdditionalCosts - order.finance.paymentGatewayFee - shippingCost
+					order.finance.total - order.finance.baseCost - totalOperationalExpenses - totalTaxes - order.finance.paymentGatewayFee - shippingCost
 				);
 				const earningsVal = Math.max(0, realEarnings);
 				order.finance.earnings = earningsVal;

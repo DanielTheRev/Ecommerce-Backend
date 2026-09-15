@@ -38,4 +38,14 @@ router.delete('/staff/:id', protect, adminOnly, UserController.deleteStaff);
 // POST /api/users/staff/verify-pin - Validar PIN de mostrador (staff)
 router.post('/staff/verify-pin', protect, UserController.verifyPin);
 
+/* ========================================================== */
+/*             NOTIFICACIONES PUSH MÓVILES (EXPO)             */
+/* ========================================================== */
+
+// POST /api/users/push-token - Registrar token de notificación móvil
+router.post('/push-token', protect, UserController.registerPushToken);
+
+// DELETE /api/users/push-token - Desvincular token de notificación móvil (logout)
+router.delete('/push-token', protect, UserController.removePushToken);
+
 export default router;

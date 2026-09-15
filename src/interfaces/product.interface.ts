@@ -188,10 +188,17 @@ export interface IProductSpec {
 export interface ICostConcept {
 	concept: string;
 	value: number;
-	/** * 'fixed': Monto fijo (Ej: $5.000 de envío)
-	 * 'percent_over_provider': Porcentaje sobre el costo del proveedor (Ej: 25% de reposición)
+	/**
+	 * 'fixed': Monto fijo en ARS (Ej: $1.500 de packaging)
+	 * 'percent_over_provider': Porcentaje sobre el costo del proveedor (Ej: 10% flete)
+	 * 'percent_over_price': Porcentaje sobre el precio de venta (Ej: 3.5% IIBB, 1.2% Ley Cheque)
 	 */
-	type: 'fixed' | 'percent_over_provider';
+	type: 'fixed' | 'percent_over_provider' | 'percent_over_price';
+	/**
+	 * 'expense': Gasto operativo (packaging, logística, etiquetas)
+	 * 'tax': Impuesto o retención fiscal (IIBB, etc.)
+	 */
+	category?: 'expense' | 'tax';
 }
 
 export interface IProductFinance {

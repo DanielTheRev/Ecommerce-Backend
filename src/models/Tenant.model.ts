@@ -21,6 +21,11 @@ export const TenantSchema = new Schema<ITenant>(
 			unique: true,
 			trim: true
 		},
+		businessType: {
+			type: String,
+			enum: ['fashion', 'kiosk_grocery', 'gastronomy', 'tech_electronics', 'general'],
+			default: 'general'
+		},
 		domain: {
 			type: String,
 			trim: true,
@@ -31,6 +36,11 @@ export const TenantSchema = new Schema<ITenant>(
 			unique: true,
 			sparse: true,
 			trim: true
+		},
+		ownerContact: {
+			email: { type: String, trim: true, lowercase: true },
+			name: { type: String, trim: true },
+			phone: { type: String, trim: true }
 		},
 		isActive: {
 			type: Boolean,

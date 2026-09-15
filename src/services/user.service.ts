@@ -639,4 +639,40 @@ export class UserService {
 			throw new AppError('Error verifying PIN', 'Error al validar el PIN de mostrador', 500);
 		}
 	}
+
+	/**
+	 * Registra o actualiza el pushToken de Expo para el usuario autenticado
+	 */
+	static async registerPushToken(
+		models: TenantModels,
+		userId: string,
+		pushToken: string,
+		_platform?: string
+	): Promise<boolean> {
+		if (!pushToken || typeof pushToken !== 'string') return false;
+		const trimmedToken = pushToken.trim();
+		if (!trimmedToken.startsWith('ExponentPushToken[') && !trimmedToken.startsWith('ExpoPushToken[')) {
+			return false;
+		}
+
+		await models.User.findByIdAndUpdate(userId, {
+			$addToSet: { pushTokens: trimmedToken }
+		});
+		return true;
+	}
+
+	/**
+	 * Remueve el pushToken de Expo del usuario (por ejemplo al cerrar sesión)
+	 */
+	static async removePushToken(
+		models: TenantModels,
+		userId: string,
+		pushToken: string
+	): Promise<boolean> {
+		if (!pushToken || typeof pushToken !== 'string') return false;
+		await models.User.findByIdAndUpdate(userId, {
+			$pull: { pushTokens: pushToken.trim() }
+		});
+		return true;
+	}
 }

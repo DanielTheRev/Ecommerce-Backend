@@ -31,6 +31,7 @@ import couponRoutes from './routes/coupon.routes';
 import newsletterRoutes from './routes/newsletter.routes';
 import categoryGroupRoutes from './routes/categoryGroup.routes';
 import { getnetRoutes } from './routes/getnet.routes';
+import arcaRoutes from './routes/arca.routes';
 
 // Cargar variables de entorno según el entorno (development vs production)
 const currentEnv = process.env.NODE_ENV || 'development';
@@ -144,6 +145,11 @@ app.get('/health', (req: Request, res: Response) => {
 
 import cashRegisterRoutes from './routes/cashRegisterRoutes.routes';
 import posRoutes from './routes/pos.routes';
+import masterRoutes from './routes/master.routes';
+
+// Rutas maestras de plataforma (SuperAdmin VEX — NO requieren resolveTenant)
+app.use('/api/master', masterRoutes);
+app.use('/master', masterRoutes);
 
 const registerRoutes = (prefix: string) => {
 	app.use(`${prefix}/products`, resolveTenant, productRoutes);
@@ -172,6 +178,7 @@ const registerRoutes = (prefix: string) => {
 	app.use(`${prefix}/newsletter`, resolveTenant, newsletterRoutes);
 	app.use(`${prefix}/getnet`, resolveTenant, getnetRoutes);
 	app.use(`${prefix}/webhooks/getnet`, resolveTenant, getnetRoutes);
+	app.use(`${prefix}/arca`, resolveTenant, arcaRoutes);
 };
 
 // Soportar tanto /api/... como /... (compatible con api.vura.com.ar)

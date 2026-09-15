@@ -93,6 +93,14 @@ const orderSchema = new Schema<IOrder, IOrderModel>(
 		isThirdPartyPayer: {
 			type: Boolean,
 			default: false
+		},
+		invoice: {
+			type: Schema.Types.ObjectId,
+			ref: 'Invoice'
+		},
+		isFacturado: {
+			type: Boolean,
+			default: false
 		}
 	},
 	{

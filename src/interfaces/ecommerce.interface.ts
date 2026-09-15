@@ -1,4 +1,30 @@
+import { ICostConcept } from './product.interface';
+
 export type PricingMethod = 'markup' | 'margin';
+
+export interface IFiscalProfile {
+	taxRegime: 'monotributo' | 'responsable_inscripto' | 'exento';
+	monotributoCategory?: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K';
+	cuit?: string;
+	businessName?: string;
+	legalName?: string;
+	grossIncomeNumber?: string;
+	iibbPercentage?: number;
+	previousExternalBilling?: number;
+}
+
+export interface IArcaIntegrationConfig {
+	active: boolean;
+	cuit?: string;
+	businessName?: string;
+	taxRegime?: 'monotributo' | 'responsable_inscripto' | 'exento';
+	grossIncomeNumber?: string;
+	ptoVta: number;
+	isProduction: boolean;
+	cert?: string;
+	key?: string;
+	autoInvoiceOnSuccess?: boolean;
+}
 
 export interface IMetaPixelConfig {
 	active: boolean;
@@ -68,6 +94,7 @@ export interface IEcommerceIntegrations {
 	googleAnalytics?: IGoogleAnalyticsConfig;
 	googleAuth?: IGoogleAuthConfig;
 	resend?: IResendConfig;
+	arca?: IArcaIntegrationConfig;
 }
 
 export interface IPricingStrategy {
@@ -120,6 +147,8 @@ export interface IEcommerceConfig {
 		percentage: number;
 	};
 	pricingStrategy: IPricingStrategy;
+	fiscalProfile?: IFiscalProfile;
+	defaultAdditionalCosts?: ICostConcept[];
 	posConfig?: IPOSConfig;
 	paymentGateways: IEcommercePaymentGateway;
 	integrations?: IEcommerceIntegrations;

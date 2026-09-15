@@ -214,6 +214,8 @@ export interface IOrderFinance {
 	total: number;
 	baseCost: number;
 	earnings: number;
+	operationalExpenses?: number;
+	taxes?: number;
 	totalOppositeCurrency?: number;
 	earningsOppositeCurrency?: number;
 	exchangeRateSnapshot?: number;
@@ -241,6 +243,8 @@ export interface IOrder {
 	orderNumber: string;
 	notes?: string;
 	isThirdPartyPayer?: boolean;
+	invoice?: mongoose.Types.ObjectId;
+	isFacturado?: boolean;
 	createdAt: Date;
 	updatedAt: Date;
 }

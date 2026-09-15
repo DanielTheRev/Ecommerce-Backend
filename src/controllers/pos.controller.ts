@@ -72,11 +72,13 @@ export class PosController {
 			const terminalId = (req.query.terminalId as string) || 'caja-principal';
 			const cleanTerminal = terminalId.trim().toLowerCase();
 
+			const serverUrl = `${req.protocol}://${req.get('host')}`;
 			const pairingInfo = {
 				tenantSlug,
 				terminalId: cleanTerminal,
 				pairingCode: `${tenantSlug.toUpperCase()}-${cleanTerminal.toUpperCase()}`,
 				wsPath: '/api/socket.io',
+				serverUrl,
 				qrPayload: JSON.stringify({
 					type: 'NEXO_POS_TERMINAL',
 					version: '1.0',
@@ -85,6 +87,7 @@ export class PosController {
 					tenantSlug,
 					terminal: cleanTerminal,
 					terminalId: cleanTerminal,
+					serverUrl,
 					timestamp: Date.now()
 				})
 			};

@@ -78,6 +78,10 @@ const userSchema = new Schema<IUser>(
 		isActive: {
 			type: Boolean,
 			default: true
+		},
+		pushTokens: {
+			type: [String],
+			default: []
 		}
 	},
 	{

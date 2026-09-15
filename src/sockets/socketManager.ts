@@ -10,6 +10,7 @@ import { IUser, Role } from '@/interfaces/user.interface';
 import { connectionManager } from '@/config/multitenancy';
 import { getModelsForConnection, TenantModels } from '@/config/modelRegistry';
 import { NotificationService } from '@/services/notification.service';
+import { PushNotificationService } from '@/services/pushNotification.service';
 import { parse } from 'cookie';
 import { Server as HTTPServer } from 'http';
 import jwt from 'jsonwebtoken';
@@ -517,16 +518,32 @@ class SocketManager {
 	notifyNewOrderToAdmins(tenantSlug: string, order: any) {
 		if (!this.io || !tenantSlug) return;
 
+		const total = order.finance?.total ?? order.total ?? 0;
+		const orderNum = order.orderNumber || (order._id ? String(order._id).slice(-6) : '');
+		const buyerName = order.buyerData?.firstName
+			? `${order.buyerData.firstName} ${order.buyerData.lastName || ''}`.trim()
+			: (order.buyerData?.name || 'Cliente');
+
 		const notification: CreateAdminNotificationDto = {
 			type: NotificationType.NEW_ORDER,
 			title: 'Nueva Orden Recibida',
-			message: `Orden #${order.orderNumber || order._id} creada por valor de $${order.finance.total}`,
+			message: `Orden #${orderNum} creada por valor de $${new Intl.NumberFormat('es-AR').format(total)}`,
 			severity: NotificationSeverity.INFO,
 			data: order,
 			actionUrl: `/home/client-orders`
 		};
 
-	this.io.to(`admins_${tenantSlug}`).emit('admin-notification', this.buildNotification(notification, NotificationAudience.ADMIN));
+		this.io.to(`admins_${tenantSlug}`).emit('admin-notification', this.buildNotification(notification, NotificationAudience.ADMIN));
+		console.log(`🌐 [Notificación Web / Socket] 🛒 Notificación de Nueva Venta emitida a admins de "${tenantSlug}" | Orden #${orderNum} por $${new Intl.NumberFormat('es-AR').format(total)} | Comprador: ${buyerName}`);
+
+		// Disparo Push a Dispositivos Móviles (Expo)
+		PushNotificationService.sendAdminPushNotification({
+			tenantSlug,
+			title: `¡Nueva Venta! 🛒 #${orderNum}`,
+			body: `${buyerName} compró por $ ${new Intl.NumberFormat('es-AR').format(total)}`,
+			channelId: 'store_orders',
+			data: { orderId: String(order._id), orderNumber: orderNum, type: 'new_order' }
+		});
 	}
 
 	/**
@@ -535,16 +552,63 @@ class SocketManager {
 	notifyOrderUpdatedToAdmins(tenantSlug: string, order: any, updateType: 'payment' | 'shipping' = 'payment') {
 		if (!this.io || !tenantSlug) return;
 
+		const total = order.finance?.total ?? order.total ?? 0;
+		const orderNum = order.orderNumber || (order._id ? String(order._id).slice(-6) : '');
+		const formattedTotal = new Intl.NumberFormat('es-AR').format(total);
+
 		const notification: CreateAdminNotificationDto = {
 			type: NotificationType.ORDER_STATUS_CHANGED,
 			title: updateType === 'payment' ? 'Pago Actualizado' : 'Envio Actualizado',
-			message: `La orden #${order.orderNumber || order._id} ha cambiado de estado.`,
+			message: `La orden #${orderNum} ha cambiado de estado.`,
 			severity: NotificationSeverity.SUCCESS,
 			data: order,
 			actionUrl: `/home/client-orders`
 		};
 
 		this.io.to(`admins_${tenantSlug}`).emit('admin-notification', this.buildNotification(notification, NotificationAudience.ADMIN));
+		console.log(`🌐 [Notificación Web / Socket] 🔄 Notificación de Orden #${orderNum} (${updateType}) emitida a admins de "${tenantSlug}"`);
+
+		// Disparo Push a Dispositivos Móviles (Expo)
+		if (updateType === 'payment') {
+			const paymentStatus = order.paymentInfo?.status || order.paymentStatus;
+			const isApproved = paymentStatus === 'approved' || paymentStatus === 'PAID';
+			const isRejected = paymentStatus === 'rejected' || paymentStatus === 'REJECTED';
+
+			if (isApproved) {
+				PushNotificationService.sendAdminPushNotification({
+					tenantSlug,
+					title: `Pago Aprobado 💳 #${orderNum}`,
+					body: `Se acreditaron $ ${formattedTotal} de la orden #${orderNum}`,
+					channelId: 'store_orders',
+					data: { orderId: String(order._id), orderNumber: orderNum, type: 'payment_success' }
+				});
+			} else if (isRejected) {
+				PushNotificationService.sendAdminPushNotification({
+					tenantSlug,
+					title: `Pago Rechazado ❌ #${orderNum}`,
+					body: `El pago de la orden #${orderNum} fue rechazado.`,
+					channelId: 'store_orders',
+					data: { orderId: String(order._id), orderNumber: orderNum, type: 'payment_failed' }
+				});
+			} else {
+				PushNotificationService.sendAdminPushNotification({
+					tenantSlug,
+					title: `Actualización de Pago 💳 #${orderNum}`,
+					body: `Nuevo estado de pago: ${paymentStatus || 'pendiente'}`,
+					channelId: 'store_orders',
+					data: { orderId: String(order._id), orderNumber: orderNum, type: 'payment_status_changed' }
+				});
+			}
+		} else {
+			const shippingStatus = order.shippingInfo?.status || order.shippingStatus || 'actualizado';
+			PushNotificationService.sendAdminPushNotification({
+				tenantSlug,
+				title: `Envío Actualizado 🚚 #${orderNum}`,
+				body: `El envío de la orden #${orderNum} ahora está: ${shippingStatus}`,
+				channelId: 'store_orders',
+				data: { orderId: String(order._id), orderNumber: orderNum, type: 'order_status_changed' }
+			});
+		}
 	}
 
 	/**
@@ -553,22 +617,36 @@ class SocketManager {
 	notifyReceiptUploadedToAdmins(tenantSlug: string, order: any) {
 		if (!this.io || !tenantSlug) return;
 
+		const total = order.finance?.total ?? order.total ?? 0;
+		const orderNum = order.orderNumber || (order._id ? String(order._id).slice(-6) : '');
+		const formattedTotal = new Intl.NumberFormat('es-AR').format(total);
+
 		const notification: CreateAdminNotificationDto = {
 			type: NotificationType.ORDER_STATUS_CHANGED,
 			title: '🧾 Comprobante de Pago Cargado',
-			message: `El cliente cargó un comprobante de pago para la orden #${order.orderNumber || order._id}.`,
+			message: `El cliente cargó un comprobante de pago para la orden #${orderNum}.`,
 			severity: NotificationSeverity.INFO,
 			data: order,
 			actionUrl: `/home/client-orders`
 		};
 
 		this.io.to(`admins_${tenantSlug}`).emit('admin-notification', this.buildNotification(notification, NotificationAudience.ADMIN));
+		console.log(`🌐 [Notificación Web / Socket] 📄 Notificación de Comprobante Subido emitida a admins de "${tenantSlug}" | Orden #${orderNum}`);
+
+		// Disparo Push a Dispositivos Móviles (Expo)
+		PushNotificationService.sendAdminPushNotification({
+			tenantSlug,
+			title: `Comprobante de Transferencia 📄 #${orderNum}`,
+			body: `El cliente subió el comprobante por $ ${formattedTotal}. Pendiente de revisión.`,
+			channelId: 'store_orders',
+			data: { orderId: String(order._id), orderNumber: orderNum, type: 'receipt_uploaded' }
+		});
 	}
 
 	/**
 	 * Notifica cualquier alerta de sistema a los administradores
 	 */
-	notifyAdminAlert(title: string, message: string, severity: NotificationSeverity = NotificationSeverity.INFO) {
+	notifyAdminAlert(title: string, message: string, severity: NotificationSeverity = NotificationSeverity.INFO, tenantSlug?: string) {
 		if (!this.io) return;
 
 		const notification: CreateAdminNotificationDto = {
@@ -578,7 +656,20 @@ class SocketManager {
 			severity
 		};
 
-		this.io.to('admins').emit('admin-notification', this.buildNotification(notification, NotificationAudience.ADMIN));
+		if (tenantSlug) {
+			this.io.to(`admins_${tenantSlug}`).emit('admin-notification', this.buildNotification(notification, NotificationAudience.ADMIN));
+			console.log(`🌐 [Notificación Web / Socket] 🚨 Alerta de Sistema emitida a admins de "${tenantSlug}": "${title}" - ${message}`);
+			PushNotificationService.sendAdminPushNotification({
+				tenantSlug,
+				title,
+				body: message,
+				channelId: 'store_alerts',
+				data: { type: 'system_alert', severity }
+			});
+		} else {
+			this.io.to('admins').emit('admin-notification', this.buildNotification(notification, NotificationAudience.ADMIN));
+			console.log(`🌐 [Notificación Web / Socket] 🚨 Alerta de Sistema emitida a admins globales: "${title}" - ${message}`);
+		}
 	}
 
 	/**
@@ -602,11 +693,12 @@ class SocketManager {
 			read: false,
 			audience: NotificationAudience.USER,
 			...notificationPayload
-		} as INotification;
+		};
 
 		this.io
 			.to(`client_${userId}`)
 			.emit('client-notification', finalNotification);
+		console.log(`🌐 [Notificación Web / Socket] 👤 Notificación emitida al cliente "${userId}": "${notificationPayload.title}" | "${notificationPayload.message}"`);
 	}
 
 	/**
@@ -626,6 +718,7 @@ class SocketManager {
 		for (const socket of this.connectedClients.values()) {
 			socket.emit('client-notification', finalNotification);
 		}
+		console.log(`🌐 [Notificación Web / Socket] 👥 Notificación masiva emitida a todos los clientes conectados: "${notificationPayload.title}"`);
 	}
 
 	// Helper unificado

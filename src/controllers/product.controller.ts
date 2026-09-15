@@ -613,4 +613,23 @@ export class ProductController {
 			next(error);
 		}
 	}
+
+	// GET /api/products/admin/check-supplier-link?url=...&excludeId=...
+	static async checkSupplierLink(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const url = req.query.url as string;
+			const excludeId = req.query.excludeId as string | undefined;
+
+			if (!url || typeof url !== 'string' || !url.trim()) {
+				res.status(200).json({ exists: false });
+				return;
+			}
+
+			const result = await ProductService.checkDuplicateBySupplierUrl(req.models!, url, excludeId);
+			res.status(200).json(result);
+		} catch (error) {
+			next(error);
+		}
+	}
 }
+

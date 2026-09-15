@@ -15,6 +15,7 @@ import { SkuService } from './sku.service';
 import { EcommerceService, DEFAULT_RECOMMENDATION_RULES } from './ecommerce.service';
 import { CategoryGroupService } from './categoryGroup.service';
 import { ICategoryGroup } from '@/interfaces/categoryGroup.interface';
+import { PushNotificationService } from './pushNotification.service';
 
 
 export class ProductService {
@@ -769,27 +770,49 @@ export class ProductService {
 			const andConditions: any[] = [];
 
 			if (q && typeof q === 'string' && q.trim() !== '') {
-				// Soporte de búsqueda multi-término (ej: "Aura, Viena, Fiore" o "BLU-010, REM-540")
-				const terms = q.split(/[,;|]+/).map(t => t.trim()).filter(Boolean);
+				const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+				const trimmedQ = q.trim();
+				const isUrl = /^https?:\/\//i.test(trimmedQ) || trimmedQ.includes('www.');
+
+				// Si es una URL completa, no la fragmentamos por comas ni delimitadores
+				const terms = isUrl ? [trimmedQ] : trimmedQ.split(/[,;|]+/).map(t => t.trim()).filter(Boolean);
+
 				if (terms.length === 1) {
-					const regex = { $regex: terms[0], $options: 'i' };
-					andConditions.push({
-						$or: [
-							{ brand: regex },
-							{ model: regex },
-							{ subtitle: regex },
-							{ name: regex },
-							{ category: regex },
-							{ clothingType: regex },
-							{ tags: regex },
-							{ 'variants.sku': regex },
-							{ 'variants.barcode': regex },
-							{ barcode: regex }
-						]
-					});
+					const escapedTerm = escapeRegex(terms[0]);
+					const regex = { $regex: escapedTerm, $options: 'i' };
+					const orConditions: any[] = [
+						{ brand: regex },
+						{ model: regex },
+						{ subtitle: regex },
+						{ name: regex },
+						{ category: regex },
+						{ clothingType: regex },
+						{ tags: regex },
+						{ 'variants.sku': regex },
+						{ 'variants.barcode': regex },
+						{ barcode: regex },
+						{ linkProductProvider: regex }
+					];
+
+					// Si parece una URL, también buscamos por la URL base limpia sin query params
+					if (isUrl) {
+						let cleanUrl = terms[0];
+						try {
+							const parsed = new URL(terms[0]);
+							cleanUrl = `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '');
+						} catch {
+							cleanUrl = terms[0].split('?')[0].split('#')[0].replace(/\/+$/, '');
+						}
+						const escapedClean = escapeRegex(cleanUrl);
+						if (escapedClean !== escapedTerm) {
+							orConditions.push({ linkProductProvider: { $regex: escapedClean, $options: 'i' } });
+						}
+					}
+
+					andConditions.push({ $or: orConditions });
 				} else if (terms.length > 1) {
 					const orTerms = terms.map(term => {
-						const regex = { $regex: term, $options: 'i' };
+						const regex = { $regex: escapeRegex(term), $options: 'i' };
 						return {
 							$or: [
 								{ brand: regex },
@@ -801,7 +824,8 @@ export class ProductService {
 								{ tags: regex },
 								{ 'variants.sku': regex },
 								{ 'variants.barcode': regex },
-								{ barcode: regex }
+								{ barcode: regex },
+								{ linkProductProvider: regex }
 							]
 						};
 					});
@@ -1405,9 +1429,13 @@ export class ProductService {
 			const config = await EcommerceService.getConfig(models);
 			const { venta } = await getDolar(config.dollarQuoteType || 'oficial', config.customDollarRate || 0);
 
-			const additionalCosts = typeof data.additionalCosts === 'string'
+			const parsedAdditionalCosts = typeof data.additionalCosts === 'string'
 				? JSON.parse(data.additionalCosts)
 				: data.additionalCosts;
+
+			const additionalCosts = (Array.isArray(parsedAdditionalCosts) && parsedAdditionalCosts.length > 0)
+				? parsedAdditionalCosts
+				: (config.defaultAdditionalCosts || []);
 
 			const discountPercentageTransfer = data.discountPercentageTransfer !== undefined
 				? Number(data.discountPercentageTransfer)
@@ -2257,6 +2285,47 @@ export class ProductService {
 				);
 			}
 
+			// Verificación asíncrona de alertas de Stock Bajo/Agotado para Notificaciones Push (Expo)
+			(async () => {
+				try {
+					const prodIds = [...new Set(items.map((i) => new Types.ObjectId(i._id)))];
+					const updatedProducts = await models.Product.find({ _id: { $in: prodIds } })
+						.select('brand model variants lowStockThreshold')
+						.lean();
+
+					for (const prod of updatedProducts) {
+						const threshold = (prod as any).lowStockThreshold ?? 3;
+						for (const v of ((prod as any).variants || [])) {
+							const matched = items.find(
+								(it) => String(it._id) === String((prod as any)._id) && it.sku === v.sku
+							);
+							if (matched && v.stock !== undefined && v.stock <= threshold) {
+								const isOutOfStock = v.stock <= 0;
+								const variantLabel = v.sku || v.size || v.color || '';
+								PushNotificationService.sendAdminPushNotification({
+									models,
+									title: isOutOfStock
+										? `❌ Sin Stock: ${(prod as any).model}`
+										: `⚠️ Stock Crítico: ${(prod as any).model}`,
+									body: isOutOfStock
+										? `La variante ${variantLabel} se quedó sin stock (0 unidades).`
+										: `Quedan solo ${v.stock} unidad(es) disponible(s) de ${variantLabel}.`,
+									channelId: 'store_alerts',
+									data: {
+										productId: String((prod as any)._id),
+										sku: v.sku,
+										currentStock: v.stock,
+										type: 'low_stock'
+									}
+								});
+							}
+						}
+					}
+				} catch (err) {
+					console.warn('[PushNotification] Error en verificación de stock bajo:', err);
+				}
+			})();
+
 			return true;
 		} catch (error) {
 			console.log(error);
@@ -2485,9 +2554,14 @@ export class ProductService {
 				const productType = item.productType || ProductType.CLOTHING;
 				const costPriceARS = Number(item.costPriceARS || item.price || item.providerCost || 0);
 
+				const rawAdditionalCosts = item.additionalCosts;
+				const additionalCosts = (Array.isArray(rawAdditionalCosts) && rawAdditionalCosts.length > 0)
+					? rawAdditionalCosts
+					: (config.defaultAdditionalCosts || []);
+
 				const { price, finance } = await FinanceService.CalculatePrices({
 					providerCost: costPriceARS,
-					additionalCosts: item.additionalCosts || [],
+					additionalCosts: additionalCosts,
 					discountPercentageTransfer: item.discountPercentageTransfer ? Number(item.discountPercentageTransfer) : undefined,
 					dolar: venta,
 					models,
@@ -2947,4 +3021,73 @@ export class ProductService {
 
 		return { success: errors.length === 0, updatedCount: updated.length, updated, errors };
 	}
+
+	/**
+	 * Verifica si ya existe un producto con el mismo link de proveedor (o URL base limpia).
+	 * Permite excluir un ID si se está editando un producto existente.
+	 */
+	static async checkDuplicateBySupplierUrl(
+		models: TenantModels,
+		url: string,
+		excludeId?: string
+	): Promise<{ exists: boolean; product?: any }> {
+		if (!url || typeof url !== 'string' || !url.trim()) {
+			return { exists: false };
+		}
+
+		const cleanInput = url.trim();
+		let cleanBaseUrl = cleanInput;
+		try {
+			const parsed = new URL(cleanInput);
+			cleanBaseUrl = `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '');
+		} catch {
+			cleanBaseUrl = cleanInput.split('?')[0].split('#')[0].replace(/\/+$/, '');
+		}
+
+		const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+		const filter: any = {
+			$or: [
+				{ linkProductProvider: cleanInput },
+				{ linkProductProvider: cleanBaseUrl },
+				{ linkProductProvider: { $regex: `^${escapeRegex(cleanBaseUrl)}`, $options: 'i' } },
+				{ linkProductProvider: { $regex: escapeRegex(cleanBaseUrl), $options: 'i' } }
+			]
+		};
+
+		if (excludeId && typeof excludeId === 'string' && excludeId.trim()) {
+			filter._id = { $ne: excludeId.trim() };
+		}
+
+		const product = await models.Product.findOne(filter)
+			.select('+linkProductProvider brand model subtitle category productType status price images variants')
+			.lean() as any;
+
+		if (!product) {
+			return { exists: false };
+		}
+
+		const primaryImage =
+			product.images && product.images.length > 0
+				? (typeof product.images[0] === 'string' ? product.images[0] : product.images[0]?.url || '')
+				: '';
+
+		return {
+			exists: true,
+			product: {
+				_id: String(product._id),
+				brand: product.brand || '',
+				model: product.model || '',
+				subtitle: product.subtitle || '',
+				category: product.category || '',
+				productType: product.productType || 'clothing',
+				status: product.status || 'published',
+				price: product.price?.listPrice || product.price?.card_ticket1PayPrice || 0,
+				image: primaryImage,
+				linkProductProvider: product.linkProductProvider || '',
+				variantsCount: Array.isArray(product.variants) ? product.variants.length : 0
+			}
+		};
+	}
 }
+

@@ -5,6 +5,8 @@ export const orderFinanceSchema = new Schema<IOrderFinance>({
 	total: { type: Number, required: true },
 	baseCost: { type: Number, required: true, select: false },
 	earnings: { type: Number, required: true, default: 0, select: false },
+	operationalExpenses: { type: Number, default: 0 },
+	taxes: { type: Number, default: 0 },
 	totalOppositeCurrency: { type: Number },
 	earningsOppositeCurrency: { type: Number, select: false },
 	exchangeRateSnapshot: { type: Number },

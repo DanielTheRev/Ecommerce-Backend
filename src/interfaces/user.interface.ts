@@ -31,6 +31,7 @@ export interface ISecureUser {
 	rewards?: IUserRewards;
 	position?: string;
 	hasPin?: boolean;
+	pushTokens?: string[];
 	isActive: boolean;
 	createdAt: Date;
 	updatedAt: Date;
@@ -47,6 +48,7 @@ export interface IUser {
 	role: Role;
 	position?: string;
 	pinCode?: string;
+	pushTokens?: string[];
 	googleID: string;
 	profilePhoto: string;
 	password?: string;

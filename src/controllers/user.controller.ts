@@ -1,5 +1,6 @@
 import { AuthRequest } from '@/middleware/auth';
 import { UserService } from '@/services/user.service';
+import { AuthService } from '@/services/auth.service';
 import { NextFunction, Response } from 'express';
 
 export class UserController {
@@ -207,9 +208,80 @@ export class UserController {
 				return;
 			}
 
+			const tenantSlug = req.tenant?.slug || (req.headers['x-tenant-id'] as string) || req.body?.tenantSlug;
+			const token = AuthService.generateToken(String(result.user!._id), tenantSlug, result.user!.role);
+
 			res.status(200).json({
 				success: true,
-				user: result.user
+				user: result.user,
+				token
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// POST /api/users/push-token - Registrar token de notificación móvil
+	static async registerPushToken(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { pushToken, platform = 'android' } = req.body;
+			if (!pushToken) {
+				res.status(400).json({ success: false, message: 'Se requiere el pushToken' });
+				return;
+			}
+
+			const userId = req.user?._id ? String(req.user._id) : '';
+			if (!userId || !req.models) {
+				res.status(401).json({ success: false, message: 'No autorizado' });
+				return;
+			}
+
+			const saved = await UserService.registerPushToken(req.models, userId, pushToken, platform);
+			const userName = `${req.user?.name || ''} ${req.user?.lastName || ''}`.trim() || req.user?.email || userId;
+			const tenantSlug = req.tenant?.slug || (req.headers['x-tenant-id'] as string) || 'tenant';
+
+			if (!saved) {
+				console.warn(`⚠️ [Push Token Móvil] Rechazado token inválido de "${userName}" (${req.user?.role}): "${pushToken}"`);
+				res.status(400).json({
+					success: false,
+					message: 'Formato de pushToken inválido (debe comenzar con ExponentPushToken o ExpoPushToken)'
+				});
+				return;
+			}
+
+			console.log(`📱 [Push Token Móvil] ✅ Token registrado exitosamente en el servidor:`);
+			console.log(`   └─ Usuario: "${userName}" | Email: ${req.user?.email} | Rol: ${req.user?.role}`);
+			console.log(`   └─ Dispositivo: ${platform} | Token: ${pushToken.slice(0, 35)}... | Comercio: ${tenantSlug}`);
+
+			res.status(200).json({
+				success: true,
+				message: 'Push token registrado correctamente'
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// DELETE /api/users/push-token - Desvincular token de notificación móvil (logout)
+	static async removePushToken(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { pushToken } = req.body;
+			const userId = req.user?._id ? String(req.user._id) : '';
+			if (!userId || !req.models) {
+				res.status(401).json({ success: false, message: 'No autorizado' });
+				return;
+			}
+
+			if (pushToken) {
+				await UserService.removePushToken(req.models, userId, pushToken);
+			}
+
+			const userName = `${req.user?.name || ''} ${req.user?.lastName || ''}`.trim() || req.user?.email || userId;
+			console.log(`📱 [Push Token Móvil] 🚪 Token desvinculado (Logout) para "${userName}" (${req.user?.email})`);
+
+			res.status(200).json({
+				success: true,
+				message: 'Push token eliminado correctamente'
 			});
 		} catch (error) {
 			next(error);
