@@ -36,7 +36,7 @@ import { PaymentElement } from '@/interfaces/mp_payment.interface';
 import { ResendService } from './resend.service';
 import { IVariant } from '@/interfaces/variant.interface';
 import { MetaService } from './meta.service';
-import { isEligibleForFreeShipping } from '@/utils/provinces';
+import { isEligibleForFreeShipping, calculateDynamicShippingCost, detectShippingZone } from '@/utils/provinces';
 import { getDolar } from './dolar.service';
 
 
@@ -213,18 +213,41 @@ export class OrderService {
 				installments = data.mercadopagoData.installments;
 			}
 
-			/* calculate free shipping logic */
+			/* calculate dynamic shipping logic */
 			const config = await EcommerceService.getConfig(models);
-			const threshold = config.shippingConfig?.freeShippingThreshold ?? 50000;
+			const threshold = config.shippingConfig?.freeShippingThreshold ?? 80000;
 			const subtotalBase = processedOrderItems.reduce((acc, item) => acc + ((item.data.price?.cashTransferPrice || 0) * item.quantity), 0);
-			
-			let isEligible = true;
-			if (shippingMethod.type === ShippingType.HOME_DELIVERY) {
-				const state = data.shippingMethod.address?.state;
-				isEligible = isEligibleForFreeShipping(state || '');
-			}
+			const totalItems = processedOrderItems.reduce((acc, item) => acc + item.quantity, 0);
 
-			const appliedShippingCost = (isEligible && subtotalBase >= threshold) ? 0 : shippingMethod.cost;
+			let appliedShippingCost = shippingMethod.cost;
+
+			if (shippingMethod.type === ShippingType.HOME_DELIVERY) {
+				const state = data.shippingMethod.address?.state || '';
+				const zipCode = data.shippingMethod.address?.zipCode;
+				const accumulatedSubsidy = processedOrderItems.reduce((acc, item) => {
+					const itemSubsidy = (item.data.price as any)?.shippingSubsidy ?? config.shippingConfig?.defaultItemSubsidy ?? 4000;
+					return acc + (itemSubsidy * item.quantity);
+				}, 0);
+
+				const calc = calculateDynamicShippingCost({
+					subtotal: subtotalBase,
+					itemCount: totalItems,
+					accumulatedSubsidy,
+					stateOrProvince: state,
+					zipCode,
+					shippingConfig: config.shippingConfig
+				});
+
+				appliedShippingCost = calc.finalShippingCost;
+			} else if (shippingMethod.type === ShippingType.PICKUP || shippingMethod.type === ShippingType.STORE_PICKUP) {
+				appliedShippingCost = 0;
+			} else if (shippingMethod.type === ShippingType.BRANCH_PICKUP) {
+				if (subtotalBase >= threshold) {
+					appliedShippingCost = 0;
+				} else {
+					appliedShippingCost = shippingMethod.cost || (config.shippingConfig?.minShippingFloor ?? 5000);
+				}
+			}
 
 			/* creating payment service instance */
 			const paymentService = new PaymentService(
@@ -312,7 +335,7 @@ export class OrderService {
 						pickupPoint: data.shippingMethod.pickupPoint,
 						shippingAddress: data.shippingMethod.address,
 						cost: appliedShippingCost,
-						freeShippingApplied: isEligible && subtotalBase >= threshold && shippingMethod.cost > 0
+						freeShippingApplied: appliedShippingCost === 0 && shippingMethod.type !== ShippingType.PICKUP && shippingMethod.type !== ShippingType.STORE_PICKUP
 					},
 					paymentInfo: {
 						method: paymentMethod.type,
@@ -593,7 +616,7 @@ export class OrderService {
 
 				throw new AppError(
 					'Payment failed',
-					`El pago falló: ${error || 'Error al procesar el pago'}. Podés intentarlo de nuevo.`,
+					'No pudimos procesar el pago con tu tarjeta. Por favor chequeá que los datos estén bien escritos y que cuentes con saldo o límite disponible.',
 					402
 				);
 			}
@@ -916,7 +939,7 @@ export class OrderService {
 
 			if (data.status === PaymentStatus.APPROVED) {
 				await ResendService.sendPaymentReceivedEmail(orderUpdated.toObject() as unknown as IOrder, models);
-				MetaService.trackPurchaseFromOrder(orderUpdated.toObject())
+				MetaService.trackPurchaseFromOrder(orderUpdated.toObject(), undefined, undefined, undefined, models)
 					.catch(err => console.error('[Meta CAPI] Error enviando Purchase event:', err));
 			}
 
@@ -1204,7 +1227,7 @@ export class OrderService {
 			// Trigger emails & Meta CAPI Purchase
 			if (order.paymentInfo.status === PaymentStatus.APPROVED && oldPaymentStatus !== PaymentStatus.APPROVED) {
 				await ResendService.sendOrderConfirmationEmail(order.toObject() as unknown as IOrder, models);
-				MetaService.trackPurchaseFromOrder(order.toObject())
+				MetaService.trackPurchaseFromOrder(order.toObject(), undefined, undefined, undefined, models)
 					.catch(err => console.error('[Meta CAPI] Error enviando Purchase event:', err));
 			} else if (order.paymentInfo.status === PaymentStatus.PENDING && isFirstPaymentUpdate) {
 				await ResendService.sendPaymentInProcessEmail(order.toObject() as unknown as IOrder, models);
@@ -1294,7 +1317,7 @@ export class OrderService {
 			// Emails & Meta CAPI Purchase
 			if (order.paymentInfo.status === PaymentStatus.APPROVED && oldPaymentStatus !== PaymentStatus.APPROVED) {
 				await ResendService.sendOrderConfirmationEmail(order.toObject() as unknown as IOrder, models);
-				MetaService.trackPurchaseFromOrder(order.toObject())
+				MetaService.trackPurchaseFromOrder(order.toObject(), undefined, undefined, undefined, models)
 					.catch(err => console.error('[Meta CAPI] Error enviando Purchase event:', err));
 			} else if (order.paymentInfo.status === PaymentStatus.PENDING && isFirstPaymentUpdate) {
 				await ResendService.sendPaymentInProcessEmail(order.toObject() as unknown as IOrder, models);
@@ -1614,8 +1637,8 @@ export class OrderService {
 					? (item.data.finance?.providerCost?.inARS || 0) 
 					: (item.data.finance?.providerCost?.inUSD || 0);
 
-				totalCost += (price * item.quantity);
-				totalEarnings += ((price - costPrice) * item.quantity);
+				totalCost += Math.round(price * item.quantity);
+				totalEarnings += Math.round((price - costPrice) * item.quantity);
 
 				return {
 					productSnapshot: {
@@ -1624,10 +1647,12 @@ export class OrderService {
 						model: item.data.model,
 						image: item.data.images?.[0]?.url || '',
 						slug: item.data.slug || '',
+						isSoldByWeight: Boolean((item.data as any).isSoldByWeight),
+						unit: (item.data as any).unit || 'Unidad',
 						price: item.data.price
 					},
 					variantSnapshot: {
-						sku: variant?.sku || item.variantSku,
+						sku: variant?.sku || item.variantSku || 'DEFAULT',
 						size: variant?.size,
 						attributes: variant?.attributes,
 						color: variant?.color
@@ -1643,7 +1668,7 @@ export class OrderService {
 
 			// 4. Validar pagos parciales
 			const totalPaid = data.splitPayments.reduce((acc, p) => acc + p.amount, 0);
-			if (totalPaid < totalCost) {
+			if (totalPaid < totalCost && (totalCost - totalPaid) > 1) {
 				throw new AppError('Monto insuficiente', `El pago total sumado ($${totalPaid}) no alcanza a cubrir el costo del pedido ($${totalCost})`, 400);
 			}
 
@@ -1732,6 +1757,7 @@ export class OrderService {
 
 			order.paymentInfo.status = PaymentStatus.APPROVED;
 			order.paymentInfo.paymentDate = new Date();
+			order.status = OrderStatus.PROCESSING_SHIPPING;
 			order.history.push({
 				status: order.status,
 				timestamp: new Date(),

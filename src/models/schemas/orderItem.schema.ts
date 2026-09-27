@@ -15,6 +15,8 @@ export const orderItemSchema = new Schema<IOrderItem>({
 		model: { type: String, required: true },
 		image: { type: String, default: '' },
 		slug: { type: String, default: '' },
+		isSoldByWeight: { type: Boolean, default: false },
+		unit: { type: String, default: 'Unidad' },
 		providerSnapshot: {
 			type: providerSchema,
 			...ADMIN_ONLY
@@ -43,7 +45,7 @@ export const orderItemSchema = new Schema<IOrderItem>({
 	quantity: {
 		type: Number,
 		required: true,
-		min: 1
+		min: 0.0001
 	},
 	price: {
 		type: Number,

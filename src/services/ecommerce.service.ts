@@ -85,6 +85,7 @@ export class EcommerceService {
 			const data: IEcommerceConfigPublic = {
 				name: publicConfig.name || 'Mi Tienda',
 				logo: publicConfig.logo || '',
+				businessType: publicConfig.businessType || 'general',
 				contact: publicConfig.contact || { email: '', phone: '', address: '', whatsapp: '' },
 				social: publicConfig.social || { instagram: '', facebook: '', twitter: '', tiktok: '' },
 				brands: publicConfig.brands || [],

@@ -23,8 +23,12 @@ class ConnectionManager {
 		this.baseConnection = await mongoose.createConnection(mongoURI).asPromise();
 		this.masterDb = this.baseConnection.useDb('master_db', { useCache: true });
 
-		// Registrar modelo Tenant en master_db
+		// Registrar modelo Tenant y MasterProduct en master_db
 		this.masterDb.model<ITenant>('Tenant', TenantSchema);
+		if (!this.masterDb.models.MasterProduct) {
+			const { MasterProductSchema } = await import('@/models/MasterProduct.model');
+			this.masterDb.model('MasterProduct', MasterProductSchema);
+		}
 
 		console.log('✅ MongoDB conectado exitosamente (Multi-Tenant)');
 		console.log('📊 Master DB: master_db');

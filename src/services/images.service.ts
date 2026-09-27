@@ -59,9 +59,6 @@ export class ImageService {
 				overwrite: true,
 				folder: folder,
 				resource_type: 'auto',
-				transformation: [
-					{ quality: 'auto', fetch_format: 'auto' }
-				]
 			});
 
 			return img_uploaded;

@@ -17,19 +17,20 @@ export class CartService {
 			try {
 				const product = await models.Product.findOne({
 					_id: item.productId,
-					isActive: true
+					status: { $ne: 'archived' }
 				}).lean() as any;
 
 				if (!product) continue;
 
 				const variant = product.variants?.find(
-					(v: any) => v.sku === item.sku && v.isActive
+					(v: any) => v.sku === item.sku && v.isActive !== false
 				);
 
 				if (!variant) continue;
 
 				const imageUrl = variant.imageReference?.url || product.images?.[0]?.url || item.image;
-				const maxQty = Math.max(1, Math.min(item.quantity || 1, variant.stock));
+				const stock = variant.stock != null ? variant.stock : 999;
+				const maxQty = Math.max(1, Math.min(item.quantity || 1, Math.max(1, stock)));
 
 				sanitizedItems.push({
 					productId: product._id,

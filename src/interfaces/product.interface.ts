@@ -59,6 +59,9 @@ export interface IProduct {
 	brand: string;
 	model: string;
 	subtitle?: string;
+	barcode?: string;
+	isSoldByWeight?: boolean;
+	unit?: string;
 	price: IProductPrices;
 	finance: IProductFinance;
 	discount: number;
@@ -102,6 +105,7 @@ export interface IClothingProduct extends IProduct {
 	careInstructions?: string[];
 	season?: string;
 	variants: IClothingVariant[];
+	combineWith?: (string | IProduct)[];
 }
 
 export interface IBeautyProduct extends IProduct {
@@ -195,10 +199,11 @@ export interface ICostConcept {
 	 */
 	type: 'fixed' | 'percent_over_provider' | 'percent_over_price';
 	/**
-	 * 'expense': Gasto operativo (packaging, logística, etiquetas)
+	 * 'expense': Gasto operativo (packaging, etiquetas)
 	 * 'tax': Impuesto o retención fiscal (IIBB, etc.)
+	 * 'shipping': Colchón o subsidio de envío por unidad
 	 */
-	category?: 'expense' | 'tax';
+	category?: 'expense' | 'tax' | 'shipping';
 }
 
 export interface IProductFinance {
@@ -233,6 +238,7 @@ export interface IProductPrices {
 	cashTransferPrice: number; // El precio final con descuento por transferencia
 	discountPercentageTransfer: number;
 	updatedAt?: Date;
+	shippingSubsidy?: number; // 🚚 Subsidio logístico individual de esta prenda
 	installments: {
 		threePaymentsAmount: number;
 		sixPaymentsAmount: number;
@@ -292,6 +298,7 @@ export interface IProductCreateDTO {
 	sizeGuide?: string | ISizeGuide;
 	careInstructions?: string | string[];
 	season?: string;
+	combineWith?: string[] | string;
 
 	// Beauty-specific (opcionales a nivel DTO)
 	volume?: string;

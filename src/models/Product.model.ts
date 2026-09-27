@@ -23,6 +23,22 @@ const BaseProductSchema = new Schema(
 			trim: true,
 			maxlength: 200
 		},
+		barcode: {
+			type: String,
+			trim: true,
+			sparse: true,
+			index: true
+		},
+		isSoldByWeight: {
+			type: Boolean,
+			default: false,
+			index: true
+		},
+		unit: {
+			type: String,
+			trim: true,
+			default: 'Unidad'
+		},
 		category: {
 			type: String,
 			required: [true, 'La categoría es obligatoria'],
@@ -46,6 +62,7 @@ const BaseProductSchema = new Schema(
 			cashTransferPrice: { type: Number, required: true, default: 0 },
 			discountPercentageTransfer: { type: Number, required: true, default: 0 },
 			updatedAt: { type: Date, default: Date.now },
+			shippingSubsidy: { type: Number, default: 0 },
 			installments: {
 				threePaymentsAmount: { type: Number, required: true, default: 0 },
 				sixPaymentsAmount: { type: Number, required: true, default: 0 },

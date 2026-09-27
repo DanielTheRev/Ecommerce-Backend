@@ -19,7 +19,7 @@ export const CostConceptSchema = new Schema({
 	},
 	category: {
 		type: String,
-		enum: ['expense', 'tax'],
+		enum: ['expense', 'tax', 'shipping'],
 		default: 'expense'
 	}
 }, { _id: false });

@@ -1,5 +1,14 @@
 import { ICostConcept } from './product.interface';
 
+export type BusinessType =
+	| 'kiosk_grocery'
+	| 'fashion'
+	| 'tech_electronics'
+	| 'butcher'
+	| 'bakery'
+	| 'gastronomy'
+	| 'general';
+
 export type PricingMethod = 'markup' | 'margin';
 
 export interface IFiscalProfile {
@@ -130,6 +139,7 @@ export interface IEcommerceConfig {
 	key: string;
 	name?: string;
 	logo?: string;
+	businessType?: BusinessType;
 	/** @deprecated Usar profit1Pay / profitInstallments. Se mantiene como fallback. */
 	profit: number;
 	/** Margen global para contado / transferencia / débito / 1 pago */
@@ -173,12 +183,21 @@ export interface IEcommerceConfig {
 	brands: string[],
 	categories: string[],
 	clothingFits?: string[],
-	shippingConfig?: {
-		freeShippingThreshold: number;
-	};
+	shippingConfig?: IShippingConfig;
 	workingHours?: IWorkingHoursConfig;
 	recommendationConfig?: IRecommendationConfig;
 	emailTemplates?: IEmailTemplatesConfig;
+}
+
+export interface IShippingConfig {
+	freeShippingThreshold: number;
+	defaultItemSubsidy?: number; // Subsidio por ítem por defecto (ej: 4000)
+	minShippingFloor?: number; // Piso mínimo de envío / Salvavidas (ej: 5000)
+	zoneRates?: {
+		caba: number; // Tarifa base CABA (ej: 8900)
+		buenosAires: number; // Tarifa base Bs As (ej: 9900)
+		interior: number; // Tarifa base Interior (ej: 11900)
+	};
 }
 
 export interface IEcommercePaymentGateway {
@@ -260,6 +279,7 @@ export interface IWorkingHoursConfig {
 export interface IEcommerceConfigPublic {
 	name?: string;
 	logo?: string;
+	businessType?: BusinessType;
 	contact: {
 		email: string;
 		phone: string;

@@ -6,6 +6,11 @@ const EcommerceSchema = new Schema(
 		key: { type: String, default: 'global_config' },
 		name: { type: String, required: false, default: 'Mi Tienda' },
 		logo: { type: String, required: false, default: '' },
+		businessType: {
+			type: String,
+			enum: ['kiosk_grocery', 'fashion', 'tech_electronics', 'butcher', 'bakery', 'gastronomy', 'general'],
+			default: 'general'
+		},
 		// Configuración de Ganancias
 		profit: {
 			type: Number,
@@ -251,7 +256,14 @@ const EcommerceSchema = new Schema(
 			default: ['Regular', 'Slim', 'Oversized', 'Relaxed', 'Boxy', 'Straight', 'Tapered', 'Baggy']
 		}],
 		shippingConfig: {
-			freeShippingThreshold: { type: Number, default: 50000 }
+			freeShippingThreshold: { type: Number, default: 80000 },
+			defaultItemSubsidy: { type: Number, default: 4000 },
+			minShippingFloor: { type: Number, default: 5000 },
+			zoneRates: {
+				caba: { type: Number, default: 8900 },
+				buenosAires: { type: Number, default: 9900 },
+				interior: { type: Number, default: 11900 }
+			}
 		},
 		recommendationConfig: {
 			limit: { type: Number, default: 8, min: 1, max: 24 },

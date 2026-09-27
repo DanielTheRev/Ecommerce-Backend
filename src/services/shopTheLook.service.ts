@@ -14,6 +14,7 @@ export class ShopTheLookService {
 			}
 
 			const looks = await models.ShopTheLook.find()
+				.sort({ createdAt: -1 })
 				.populate({
 					path: 'looks.hotspots.product',
 					match: { status: 'published' }

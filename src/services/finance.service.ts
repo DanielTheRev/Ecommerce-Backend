@@ -386,6 +386,11 @@ export class FinanceService {
 
 			// 3. Ensamblar resultado
 			const { _internal: i } = listResult;
+			const EcommerceConfig = data.config || (data.models ? await EcommerceService.getConfig(data.models) : null);
+			const shippingConcept = (data.additionalCosts || []).find((c) => c.category === 'shipping');
+			const shippingSubsidy = shippingConcept
+				? Number(shippingConcept.value) || 0
+				: (EcommerceConfig?.shippingConfig?.defaultItemSubsidy ?? 4000);
 
 			const price: IProductPrices = {
 				listPrice: listResult.listPrice,
@@ -393,6 +398,7 @@ export class FinanceService {
 				cashTransferPrice: transferResult.cashTransferPrice,
 				discountPercentageTransfer: transferResult.discountPercentageTransfer,
 				updatedAt: new Date(),
+				shippingSubsidy,
 				installments: {
 					threePaymentsAmount: listResult.installments.threePaymentsAmount,
 					sixPaymentsAmount: listResult.installments.sixPaymentsAmount,

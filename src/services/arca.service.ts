@@ -112,6 +112,19 @@ export class ArcaService {
 				try {
 					details = await afipClient.RegisterScopeFour.getTaxpayerDetails(Number(cleaned));
 				} catch (err: any) {
+					const isAuthError =
+						err?.message?.includes('401') ||
+						err?.status === 401 ||
+						err?.response?.status === 401;
+
+					if (isAuthError) {
+						throw new AppError(
+							'ARCA certificate required',
+							'Para consultar el padrón oficial en tiempo real se requiere tener configurado el Certificado Digital de ARCA/AFIP. Podés ingresar tu categoría y datos manualmente en el formulario.',
+							400
+						);
+					}
+
 					throw new AppError(
 						'Taxpayer not found in ARCA records',
 						err.message || 'No se encontraron datos para el CUIT en el padrón de ARCA',

@@ -8,6 +8,7 @@ const router: Router = Router();
 
 // Rutas públicas
 router.get('/', ShippingController.getAllShippingOptions);
+router.post('/calculate', ShippingController.calculateShipping);
 // router.get('/by-payment-method', ShippingController.getShippingOptionsByPaymentMethod);
 
 // Rutas protegidas (solo administradores)

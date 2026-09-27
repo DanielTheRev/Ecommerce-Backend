@@ -168,6 +168,7 @@ export const ClothingProductCreateSchema = z.object({
 	sizeGuide: optionalJsonString.pipe(SizeGuideZodSchema.optional()),
 	careInstructions: optionalJsonString.pipe(z.array(z.string())).optional(),
 	season: z.string().optional(),
+	combineWith: optionalJsonString.pipe(z.array(z.string()).optional()).default([]),
 });
 
 // 3. Tech Product Schema (Electrónica / Tecnología)
@@ -285,6 +286,7 @@ export const UpdateProductSchema = z.object({
 		sizeGuide: jsonString.pipe(SizeGuideZodSchema.nullable()).optional(),
 		careInstructions: jsonString.pipe(z.array(z.string())).optional(),
 		season: z.string().optional(),
+		combineWith: optionalJsonString.pipe(z.array(z.string())).optional(),
 
 		// Beauty-specific
 		volume: z.string().optional(),

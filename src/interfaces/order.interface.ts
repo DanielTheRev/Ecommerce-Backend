@@ -145,6 +145,8 @@ export interface IProductSnapshot {
 	model: string;
 	image?: string;
 	slug?: string;
+	isSoldByWeight?: boolean;
+	unit?: string;
 	price: IProductPrices;
 	finance?: IProductFinance;
 	providerSnapshot?: IProvider;

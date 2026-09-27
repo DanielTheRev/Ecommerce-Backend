@@ -500,6 +500,10 @@ export class ProductService {
 			const product = await Model.findById(id)
 				.select('+provider +finance +linkProductProvider')
 				.populate('provider')
+				.populate({
+					path: 'combineWith',
+					select: 'model brand price images category status slug'
+				})
 				.lean() as unknown as IProduct;
 			return product;
 		} catch (error) {
@@ -510,7 +514,13 @@ export class ProductService {
 
 	static async getProductById(models: TenantModels, id: string): Promise<IProduct> {
 		try {
-			const product = (await models.Product.findById(id).select('+provider +finance +linkProductProvider').lean()) as unknown as IProduct;
+			const product = (await models.Product.findById(id)
+				.select('+provider +finance +linkProductProvider')
+				.populate({
+					path: 'combineWith',
+					select: 'model brand price images category status slug'
+				})
+				.lean()) as unknown as IProduct;
 			if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
 			return product;
 		} catch (error) {
@@ -910,9 +920,10 @@ export class ProductService {
 					limit,
 					sort,
 					select: '+provider +finance +linkProductProvider',
-					populate: {
-						path: 'provider',
-					}
+					populate: [
+						{ path: 'provider' },
+						{ path: 'combineWith', select: 'model brand category slug images' }
+					]
 				}),
 				Model.aggregate([
 					{
@@ -1026,7 +1037,13 @@ export class ProductService {
 
 	static async getProductBySlug(models: TenantModels, slug: string): Promise<IProduct> {
 		try {
-			const product = (await models.Product.findOne({ slug, status: 'published' }).lean()) as unknown as IProduct;
+			const product = (await models.Product.findOne({ slug, status: 'published' })
+				.populate({
+					path: 'combineWith',
+					select: 'model brand price salePrice images category status slug fit',
+					match: { status: 'published' }
+				})
+				.lean()) as unknown as IProduct;
 			if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
 			return product;
 		} catch (error) {
@@ -1228,15 +1245,31 @@ export class ProductService {
 
 	static async getProductMetadata(models: TenantModels, productType?: string) {
 		const Model = this.getModel(models, productType);
-		const matchQuery = productType ? { productType } : {};
+		const matchQuery: any = { status: 'published' };
+		if (productType) {
+			matchQuery.productType = productType;
+		}
 
 		try {
-			const [brands, categories, tags] = await Promise.all([
+			const [brands, categories, tags, rawFits] = await Promise.all([
 				Model.distinct('brand', matchQuery),
 				Model.distinct('category', matchQuery),
-				Model.distinct('tags', matchQuery)
+				Model.distinct('tags', matchQuery),
+				Model.distinct('fit', matchQuery),
 			]);
-			return { brands, categories, tags };
+			const cleanBrands = (brands || []).filter(Boolean);
+			const cleanCategories = (categories || []).filter(Boolean);
+			const cleanTags = (tags || []).filter(Boolean);
+			const cleanFits = (rawFits || [])
+				.map((f: any) => (typeof f === 'string' ? f.trim() : ''))
+				.filter((f: string) => Boolean(f));
+
+			return {
+				brands: cleanBrands,
+				categories: cleanCategories,
+				tags: cleanTags,
+				fits: Array.from(new Set(cleanFits)),
+			};
 		} catch (error) {
 			throw new AppError('Failed to fetch metadata', 'Error al obtener metadata', 500);
 		}
@@ -1578,6 +1611,11 @@ export class ProductService {
 				if (data.sizeGuide) baseData.sizeGuide = typeof data.sizeGuide === 'string' ? JSON.parse(data.sizeGuide) : data.sizeGuide;
 				if (data.careInstructions) baseData.careInstructions = data.careInstructions;
 				if (data.season) baseData.season = data.season;
+				if (data.combineWith) {
+					baseData.combineWith = Array.isArray(data.combineWith)
+						? data.combineWith
+						: (typeof data.combineWith === 'string' ? JSON.parse(data.combineWith) : []);
+				}
 			}
 
 			// Campos específicos de belleza / perfumería
@@ -1602,6 +1640,27 @@ export class ProductService {
 			if (baseData.provider) {
 				await newProduct.populate('provider');
 			}
+
+			// Crowdsourcing silencioso al catálogo global de NexoCommerce
+			const barcodeToSync = baseData.barcode || baseData.variants?.[0]?.barcode;
+			if (barcodeToSync) {
+				try {
+					const { MasterCatalogService } = await import('./masterCatalog.service');
+					MasterCatalogService.silentlyUpsertFromProduct({
+						barcode: barcodeToSync,
+						model: baseData.model,
+						brand: baseData.brand,
+						category: baseData.category,
+						imageUrl: baseData.images?.[0]?.url || '',
+						unit: baseData.unit || 'un',
+						isSoldByWeight: baseData.isSoldByWeight,
+						price: baseData.price?.card_ticket1PayPrice || baseData.price?.listPrice || 0
+					});
+				} catch {
+					// Ignorar errores en background sync
+				}
+			}
+
 			return newProduct.toObject() as unknown as IProduct;
 		} catch (error) {
 			console.log(error);
@@ -2123,6 +2182,19 @@ export class ProductService {
 			if (updateData.composition) updateData.composition = JSON.parse(updateData.composition as string);
 			if (updateData.sizeGuide) updateData.sizeGuide = typeof updateData.sizeGuide === 'string' ? JSON.parse(updateData.sizeGuide) : updateData.sizeGuide;
 			if (updateData.season) updateData.season = updateData.season as string;
+			if ((updateData as any).combineWith !== undefined) {
+				try {
+					const raw = typeof (updateData as any).combineWith === 'string'
+						? JSON.parse((updateData as any).combineWith)
+						: (updateData as any).combineWith;
+					(updateData as any).combineWith = Array.isArray(raw)
+						? raw.map((item: any) => typeof item === 'string' ? item : item?._id).filter(Boolean)
+						: [];
+				} catch (err) {
+					console.error('Error parsing combineWith in updateProductById:', err);
+					(updateData as any).combineWith = [];
+				}
+			}
 			// Parsear SEO si viene como JSON string
 			if (updateData.seo) updateData.seo = JSON.parse(updateData.seo as unknown as string);
 
@@ -2220,25 +2292,40 @@ export class ProductService {
 				const product = await models.Product.findById(item._id).lean() as any;
 				if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
 
-				const variant = product.variants.find(
-					(v: any) => v.sku === item.sku && v.isActive
-				);
+				const hasVariants = Array.isArray(product.variants) && product.variants.length > 0;
+				if (hasVariants) {
+					const variant = product.variants.find(
+						(v: any) => v.sku === item.sku && v.isActive
+					) || (item.sku ? null : product.variants[0]);
 
-				if (!variant) {
-					throw new AppError(
-						`Variant ${item.sku} not found`,
-						`Variante ${item.sku} no encontrada o inactiva`,
-						404
-					);
-				}
+					if (!variant) {
+						throw new AppError(
+							`Variant ${item.sku} not found`,
+							`Variante ${item.sku || 'predeterminada'} no encontrada o inactiva en "${product.model}"`,
+							404
+						);
+					}
 
-				const availableStock = variant.stock - variant.reservedStock;
-				if (availableStock < item.quantity) {
-					throw new AppError(
-						`Insufficient stock for variant ${item.sku}`,
-						`Stock insuficiente para la variante ${item.sku}`,
-						400
-					);
+					const availableStock = variant.stock - (variant.reservedStock || 0);
+					if (availableStock < item.quantity) {
+						throw new AppError(
+							`Insufficient stock for variant ${item.sku}`,
+							`Stock insuficiente para "${product.model}" (disponible: ${availableStock})`,
+							400
+						);
+					}
+				} else {
+					// Producto simple o al peso sin variantes
+					if (typeof product.stock === 'number') {
+						const availableStock = product.stock - (product.reservedStock || 0);
+						if (availableStock < item.quantity) {
+							throw new AppError(
+								`Insufficient stock for product ${product.model}`,
+								`Stock insuficiente para "${product.model}" (disponible: ${availableStock})`,
+								400
+							);
+						}
+					}
 				}
 			}
 			return true;
@@ -2246,7 +2333,7 @@ export class ProductService {
 			if (error instanceof AppError) throw error;
 			throw new AppError(
 				'Failed to verify variant stock',
-				'Error al verificar el stock de la variante',
+				'Error al verificar el stock del producto',
 				500
 			);
 		}
@@ -2257,30 +2344,54 @@ export class ProductService {
 		items: { _id: string; sku: string; quantity: number }[]
 	): Promise<boolean> {
 		try {
-			const operations = items.map((item) => ({
-				updateOne: {
-					filter: {
-						// Transformamos el string a ObjectId manualmente para el driver nativo
-						_id: new Types.ObjectId(item._id),
-						'variants.sku': item.sku,
-						'variants.stock': { $gte: item.quantity }
-					},
-					update: {
-						$inc: {
-							'variants.$[elem].stock': -item.quantity
-						}
-					},
-					arrayFilters: [{ 'elem.sku': item.sku }]
-				}
-			}));
+			const productIds = items.map(i => new Types.ObjectId(i._id));
+			const products = await models.Product.collection.find({ _id: { $in: productIds } }).toArray();
+			const productMap = new Map<string, any>(products.map(p => [p._id.toString(), p]));
 
-			// MAGIA: models.Product.collection salta el filtro restrictivo del Schema Base
+			const operations = items.map((item) => {
+				const product = productMap.get(item._id);
+				const hasVariants = Array.isArray(product?.variants) && product.variants.length > 0;
+				const matchedVariant = hasVariants ? (product.variants.find((v: any) => v.sku === item.sku) || product.variants[0]) : null;
+
+				if (hasVariants && matchedVariant) {
+					return {
+						updateOne: {
+							filter: {
+								_id: new Types.ObjectId(item._id),
+								'variants.sku': matchedVariant.sku,
+								'variants.stock': { $gte: item.quantity }
+							},
+							update: {
+								$inc: {
+									'variants.$[elem].stock': -item.quantity
+								}
+							},
+							arrayFilters: [{ 'elem.sku': matchedVariant.sku }]
+						}
+					};
+				} else {
+					return {
+						updateOne: {
+							filter: {
+								_id: new Types.ObjectId(item._id),
+								...(typeof product?.stock === 'number' ? { stock: { $gte: item.quantity } } : {})
+							},
+							update: {
+								$inc: {
+									stock: -item.quantity
+								}
+							}
+						}
+					};
+				}
+			});
+
 			const result = await models.Product.collection.bulkWrite(operations, { ordered: true });
 
 			if (result.modifiedCount !== items.length) {
 				throw new AppError(
 					'Stock reduction failed for one or more variants',
-					'No se pudo reducir el stock de una o más variantes',
+					'No se pudo reducir el stock de uno o más productos',
 					400
 				);
 			}

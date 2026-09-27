@@ -42,7 +42,11 @@ const ClothingProductSchema = new Schema({
 	variants: {
 		type: [ClothingVariantSchema],
 		default: []
-	}
+	},
+	combineWith: [{
+		type: Schema.Types.ObjectId,
+		ref: 'Product'
+	}]
 });
 
 // SKU único por variante (scoped a la colección completa para evitar duplicados)
