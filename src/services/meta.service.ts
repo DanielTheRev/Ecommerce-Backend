@@ -194,6 +194,7 @@ export class MetaService {
     if (!order) return {};
     const buyer = order.buyerData || {};
     const addr = order.shippingInfo?.shippingAddress || {};
+    const tracking = order.metaTracking || {};
 
     return {
       email: buyer.email,
@@ -204,9 +205,11 @@ export class MetaService {
       state: addr.state,
       zip: addr.zipCode,
       country: 'AR',
-      externalId: order.user ? (order.user._id ? order.user._id.toString() : order.user.toString()) : undefined,
-      clientIp: reqIp,
-      clientUserAgent: reqUserAgent,
+      externalId: tracking.externalId || (order.user ? (order.user._id ? order.user._id.toString() : order.user.toString()) : undefined),
+      clientIp: tracking.clientIp || reqIp,
+      clientUserAgent: tracking.clientUserAgent || reqUserAgent,
+      fbc: tracking.fbc,
+      fbp: tracking.fbp,
     };
   }
 

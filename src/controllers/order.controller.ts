@@ -10,6 +10,7 @@ import { UalaWebhook } from '@/interfaces/ualaWebhook.interface';
 import { AuthRequest } from '@/middleware/auth';
 import { EcommerceService } from '@/services/ecommerce.service';
 import { MercadoPagoService } from '@/services/mercadopago.service';
+import { MetaService } from '@/services/meta.service';
 import { OrderService } from '@/services/order.service';
 import { ReceiptService } from '@/services/receipt.service';
 import { socketManager } from '@/sockets/socketManager';
@@ -187,7 +188,25 @@ export const createOrder = async (req: AuthRequest, res: Response, next: NextFun
 		const userId = req.user ? req.user._id : undefined;
 		const newOrderDTO = req.body as CreateOrderDTO;
 		const baseUrl = `${req.protocol}://${req.get('host')}`;
-		const { order, safeOrder, extras } = await OrderService.createOrder(req.models!, newOrderDTO, userId, req.tenant!.slug, baseUrl);
+
+		// Extraer datos de Meta Tracking del request (IP real Cloudflare, cookies _fbc/_fbp, headers, User-Agent)
+		const reqUserData = MetaService.extractUserDataFromReq(req) || {};
+		const metaTracking = {
+			fbc: newOrderDTO.metaTracking?.fbc || reqUserData.fbc,
+			fbp: newOrderDTO.metaTracking?.fbp || reqUserData.fbp,
+			clientIp: reqUserData.clientIp,
+			clientUserAgent: reqUserData.clientUserAgent,
+			externalId: newOrderDTO.metaTracking?.externalId || (Array.isArray(reqUserData.externalId) ? reqUserData.externalId[0] : reqUserData.externalId),
+		};
+
+		const { order, safeOrder, extras } = await OrderService.createOrder(
+			req.models!,
+			newOrderDTO,
+			userId,
+			req.tenant!.slug,
+			baseUrl,
+			metaTracking
+		);
 
 		if (req.tenant) {
 			socketManager.notifyNewOrderToAdmins(req.tenant.slug, order);

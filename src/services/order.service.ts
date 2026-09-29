@@ -122,7 +122,20 @@ export class OrderService {
 		}
 	}
 
-	static async createOrder(models: TenantModels, data: CreateOrderDTO, userId: string | undefined, tenantSlug: string, baseUrl: string): Promise<CreateOrderResponse> {
+	static async createOrder(
+		models: TenantModels,
+		data: CreateOrderDTO,
+		userId: string | undefined,
+		tenantSlug: string,
+		baseUrl: string,
+		metaTracking?: {
+			fbc?: string;
+			fbp?: string;
+			clientIp?: string;
+			clientUserAgent?: string;
+			externalId?: string;
+		}
+	): Promise<CreateOrderResponse> {
 		try {
 			if (!data || data.items.length === 0)
 				throw new AppError(
@@ -362,6 +375,7 @@ export class OrderService {
 					},
 					orderNumber: this.generateOrderNumber(),
 					isThirdPartyPayer: data.isThirdPartyPayer || false,
+					metaTracking: metaTracking || data.metaTracking,
 					history: [{
 						status: status,
 						timestamp: new Date(),

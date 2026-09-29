@@ -37,7 +37,14 @@ export interface CreateOrderDTO {
 			type: string;
 			number: string;
 		}
-	}
+	};
+	metaTracking?: {
+		fbc?: string;
+		fbp?: string;
+		clientIp?: string;
+		clientUserAgent?: string;
+		externalId?: string;
+	};
 }
 
 export interface IFormPayerData {
@@ -251,6 +258,13 @@ export interface IOrder {
 	isThirdPartyPayer?: boolean;
 	invoice?: mongoose.Types.ObjectId;
 	isFacturado?: boolean;
+	metaTracking?: {
+		fbc?: string;
+		fbp?: string;
+		clientIp?: string;
+		clientUserAgent?: string;
+		externalId?: string;
+	};
 	createdAt: Date;
 	updatedAt: Date;
 }

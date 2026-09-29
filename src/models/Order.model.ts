@@ -101,6 +101,13 @@ const orderSchema = new Schema<IOrder, IOrderModel>(
 		isFacturado: {
 			type: Boolean,
 			default: false
+		},
+		metaTracking: {
+			fbc: { type: String, trim: true },
+			fbp: { type: String, trim: true },
+			clientIp: { type: String, trim: true },
+			clientUserAgent: { type: String, trim: true },
+			externalId: { type: String, trim: true },
 		}
 	},
 	{
