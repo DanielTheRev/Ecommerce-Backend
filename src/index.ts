@@ -148,6 +148,7 @@ import cashRegisterRoutes from './routes/cashRegisterRoutes.routes';
 import posRoutes from './routes/pos.routes';
 import masterRoutes from './routes/master.routes';
 import masterCatalogRoutes from './routes/masterCatalog.routes';
+import feedRoutes from './routes/feed.routes';
 
 // Rutas maestras de plataforma (SuperAdmin VEX — NO requieren resolveTenant)
 app.use('/api/master', masterRoutes);
@@ -186,6 +187,7 @@ const registerRoutes = (prefix: string) => {
 	app.use(`${prefix}/webhooks/getnet`, resolveTenant, getnetRoutes);
 	app.use(`${prefix}/arca`, resolveTenant, arcaRoutes);
 	app.use(`${prefix}/master-catalog`, masterCatalogRoutes);
+	app.use(`${prefix}/feeds`, feedRoutes);
 };
 
 // Soportar tanto /api/... como /... (compatible con api.vura.com.ar)

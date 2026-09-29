@@ -387,9 +387,9 @@ export const updatePaymentStatus = async (req: AuthRequest, res: Response, next:
 
 export const updateShippingStatus = async (req: AuthRequest, res: Response, next: NextFunction) => {
 	console.log('Update shipping status');
-	const { orderID, status } = req.body as updateShippingStatusDTO;
+	const { orderID, status, trackingNumber, carrier } = req.body as updateShippingStatusDTO;
 	try {
-		const order = await OrderService.updateOrderShippingStatus(req.models!, { orderID, status });
+		const order = await OrderService.updateOrderShippingStatus(req.models!, { orderID, status, trackingNumber, carrier });
 		if (order.user) {
 			socketManager.notifyClient(order.user._id.toString(), {
 				type: NotificationType.ORDER_STATUS_CHANGED,

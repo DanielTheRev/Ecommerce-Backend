@@ -312,6 +312,7 @@ export interface IEcommerceConfigPublic {
 		metaPixel?: {
 			active: boolean;
 			pixelId: string;
+			testEventCode?: string;
 		};
 		googleAnalytics?: {
 			active: boolean;

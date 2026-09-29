@@ -146,15 +146,29 @@ export class MetaService {
       fbc = `fb.1.${Date.now()}.${req.query['fbclid']}`;
     }
 
-    // 4. Auth User External ID & email if logged in or passed via custom headers
+    // 4. Auth User External ID, Email, Name, Phone
     const user = req.user;
-    const externalId = (req.headers && req.headers['x-external-id'] && typeof req.headers['x-external-id'] === 'string')
-      ? req.headers['x-external-id']
+    const headers = req.headers || {};
+
+    const externalId = (headers['x-external-id'] && typeof headers['x-external-id'] === 'string')
+      ? headers['x-external-id']
       : (user ? (user._id ? user._id.toString() : user.toString()) : undefined);
 
-    const email = (req.headers && req.headers['x-user-email'] && typeof req.headers['x-user-email'] === 'string')
-      ? req.headers['x-user-email']
+    const email = (headers['x-user-email'] && typeof headers['x-user-email'] === 'string')
+      ? headers['x-user-email']
       : user?.email;
+
+    const firstName = (headers['x-user-fn'] && typeof headers['x-user-fn'] === 'string')
+      ? headers['x-user-fn']
+      : (user?.firstName || (user?.name ? user.name.split(' ')[0] : undefined));
+
+    const lastName = (headers['x-user-ln'] && typeof headers['x-user-ln'] === 'string')
+      ? headers['x-user-ln']
+      : (user?.lastName || (user?.name ? user.name.split(' ').slice(1).join(' ') : undefined));
+
+    const phone = (headers['x-user-phone'] && typeof headers['x-user-phone'] === 'string')
+      ? headers['x-user-phone']
+      : user?.phone;
 
     return {
       clientIp,
@@ -163,6 +177,9 @@ export class MetaService {
       fbp,
       externalId,
       email,
+      firstName,
+      lastName,
+      phone,
     };
   }
 
@@ -219,10 +236,12 @@ export class MetaService {
   public static async sendEvents(
     events: IMetaEvent[],
     customAccessToken?: string,
-    customPixelId?: string
+    customPixelId?: string,
+    customTestEventCode?: string
   ): Promise<{ success: boolean; data?: any; error?: string }> {
     const token = customAccessToken || this.accessToken;
     const pixel = customPixelId || this.pixelId;
+    const testCode = customTestEventCode || this.testEventCode;
 
     if (!token) {
       console.warn('[MetaService] Warning: META_ACCESS_TOKEN is missing. Meta event not sent.');
@@ -234,17 +253,17 @@ export class MetaService {
       return { success: false, error: 'META_PIXEL_ID missing' };
     }
 
-    if (process.env.NODE_ENV !== 'production' && !this.testEventCode) {
+    if (process.env.NODE_ENV !== 'production' && !testCode) {
       console.log('[MetaService] Skipping CAPI event in development mode (NODE_ENV !== production).');
       return { success: true, data: 'Skipped in development' };
     }
 
-    // 🛡️ Skip sending events if event_source_url contains localhost or 127.0.0.1 (unless META_TEST_EVENT_CODE is set)
+    // 🛡️ Skip sending events if event_source_url contains localhost or 127.0.0.1 (unless testCode is set)
     const isLocalhostEvent = events.some(e =>
       e.event_source_url && (e.event_source_url.includes('localhost') || e.event_source_url.includes('127.0.0.1'))
     );
 
-    if (isLocalhostEvent && !this.testEventCode) {
+    if (isLocalhostEvent && !testCode) {
       console.log('[MetaService] Skipping CAPI event because event_source_url points to localhost / 127.0.0.1.');
       return { success: true, data: 'Skipped localhost event' };
     }
@@ -253,10 +272,33 @@ export class MetaService {
       data: events,
     };
 
-    const testCode = this.testEventCode;
     if (testCode) {
       payload.test_event_code = testCode;
     }
+
+    const eventSummary = events.map((e) => ({
+      evento: e.event_name,
+      eventId: e.event_id || 'sin_id',
+      modo: testCode ? `🧪 Test (${testCode})` : '🚀 Producción',
+      url: e.event_source_url,
+      datos: e.custom_data,
+      usuario: {
+        tieneEmail: !!e.user_data?.em,
+        tieneTelefono: !!e.user_data?.ph,
+        tieneNombre: !!e.user_data?.fn,
+        ip: e.user_data?.client_ip_address,
+        agente: e.user_data?.client_user_agent
+          ? e.user_data.client_user_agent.substring(0, 35) + '...'
+          : undefined,
+      },
+    }));
+
+    console.log(
+      `[Meta CAPI] 📡 Enviando ${events.length} evento(s) a Meta (${
+        testCode ? `MODO PRUEBA: ${testCode}` : 'PRODUCCIÓN'
+      }):`,
+      JSON.stringify(eventSummary, null, 2)
+    );
 
     const endpoint = `https://graph.facebook.com/${this.apiVersion}/${pixel}/events?access_token=${token}`;
 
@@ -272,14 +314,20 @@ export class MetaService {
       const responseData = await response.json();
 
       if (!response.ok) {
-        console.error('[MetaService] Error response from Meta CAPI:', responseData);
+        console.error('[Meta CAPI] ❌ Error response from Meta CAPI:', responseData);
         return { success: false, error: JSON.stringify(responseData) };
       }
 
-      console.log(`[MetaService] Successfully sent ${events.length} event(s) to Meta CAPI:`, responseData);
+      console.log(
+        `[Meta CAPI] ✅ Éxito: Meta procesó ${
+          responseData.events_received || events.length
+        } evento(s) [${events.map((e) => e.event_name).join(', ')}] | Trace ID: ${
+          responseData.fbtrace_id
+        }`
+      );
       return { success: true, data: responseData };
     } catch (error: any) {
-      console.error('[MetaService] Network or unexpected error sending events to Meta CAPI:', error?.message || error);
+      console.error('[Meta CAPI] ❌ Error de red al enviar a Meta CAPI:', error?.message || error);
       return { success: false, error: error?.message || 'Unknown error' };
     }
   }
@@ -290,7 +338,8 @@ export class MetaService {
   public static async trackEvent(
     input: ITrackEventInput,
     customAccessToken?: string,
-    customPixelId?: string
+    customPixelId?: string,
+    customTestEventCode?: string
   ) {
     const event: IMetaEvent = {
       event_name: input.eventName,
@@ -302,7 +351,7 @@ export class MetaService {
       custom_data: input.customData,
     };
 
-    return this.sendEvents([event], customAccessToken, customPixelId);
+    return this.sendEvents([event], customAccessToken, customPixelId, customTestEventCode);
   }
 
   /**
@@ -319,7 +368,8 @@ export class MetaService {
       eventId?: string;
     },
     customAccessToken?: string,
-    customPixelId?: string
+    customPixelId?: string,
+    customTestEventCode?: string
   ) {
     return this.trackEvent(
       {
@@ -338,7 +388,8 @@ export class MetaService {
         },
       },
       customAccessToken,
-      customPixelId
+      customPixelId,
+      customTestEventCode
     );
   }
 
@@ -395,7 +446,8 @@ export class MetaService {
       eventId?: string;
     },
     customAccessToken?: string,
-    customPixelId?: string
+    customPixelId?: string,
+    customTestEventCode?: string
   ) {
     return this.trackEvent(
       {
@@ -413,7 +465,8 @@ export class MetaService {
         },
       },
       customAccessToken,
-      customPixelId
+      customPixelId,
+      customTestEventCode
     );
   }
 
@@ -431,7 +484,8 @@ export class MetaService {
       eventId?: string;
     },
     customAccessToken?: string,
-    customPixelId?: string
+    customPixelId?: string,
+    customTestEventCode?: string
   ) {
     return this.trackEvent(
       {
@@ -449,7 +503,8 @@ export class MetaService {
         },
       },
       customAccessToken,
-      customPixelId
+      customPixelId,
+      customTestEventCode
     );
   }
 
@@ -460,22 +515,53 @@ export class MetaService {
     order: any,
     reqIp?: string,
     reqUserAgent?: string,
-    eventSourceUrl?: string
+    eventSourceUrl?: string,
+    models?: any
   ) {
     try {
+      let customAccessToken: string | undefined;
+      let customPixelId: string | undefined;
+      let customTestEventCode: string | undefined;
+
+      if (models) {
+        try {
+          const { EcommerceService } = await import('./ecommerce.service');
+          const config = await EcommerceService.getConfig(models);
+          if (config.integrations?.metaPixel?.active && config.integrations.metaPixel.pixelId && config.integrations.metaPixel.accessToken) {
+            customPixelId = config.integrations.metaPixel.pixelId;
+            customAccessToken = config.integrations.metaPixel.accessToken;
+            customTestEventCode = config.integrations.metaPixel.testEventCode;
+          } else {
+            // Si la tienda no tiene Meta Pixel activo o configurado, omitir silenciosamente (no usar .env global)
+            return { success: true, skipped: true };
+          }
+        } catch (e) {
+          console.error('[MetaService] Could not load tenant config for Meta Pixel InitiateCheckout:', e);
+          return { success: false, error: 'Tenant config error' };
+        }
+      } else {
+        // Sin contexto de tenant, omitir por seguridad
+        return { success: true, skipped: true };
+      }
+
       const orderId = order._id ? order._id.toString() : order.id;
       const contents = this.extractContentsFromOrder(order);
       const userData = this.extractUserDataFromOrder(order, reqIp, reqUserAgent);
       const total = order.finance?.total || order.paymentInfo?.amount || 0;
 
-      return await this.trackInitiateCheckout({
-        eventId: `initiate_checkout_${orderId}`,
-        eventSourceUrl,
-        value: total,
-        currency: 'ARS',
-        contents,
-        userData,
-      });
+      return await this.trackInitiateCheckout(
+        {
+          eventId: `initiate_checkout_${orderId}`,
+          eventSourceUrl,
+          value: total,
+          currency: 'ARS',
+          contents,
+          userData,
+        },
+        customAccessToken,
+        customPixelId,
+        customTestEventCode
+      );
     } catch (err: any) {
       console.error('[MetaService] Error tracking InitiateCheckout from order:', err);
       return { success: false, error: err?.message || 'Unknown error' };
@@ -495,6 +581,7 @@ export class MetaService {
     try {
       let customAccessToken: string | undefined;
       let customPixelId: string | undefined;
+      let customTestEventCode: string | undefined;
 
       if (models) {
         try {
@@ -503,6 +590,7 @@ export class MetaService {
           if (config.integrations?.metaPixel?.active && config.integrations.metaPixel.pixelId && config.integrations.metaPixel.accessToken) {
             customPixelId = config.integrations.metaPixel.pixelId;
             customAccessToken = config.integrations.metaPixel.accessToken;
+            customTestEventCode = config.integrations.metaPixel.testEventCode;
           } else {
             // Si la tienda no tiene Meta Pixel activo o configurado, omitir silenciosamente (no usar .env global)
             return { success: true, skipped: true };
@@ -532,7 +620,8 @@ export class MetaService {
           userData,
         },
         customAccessToken,
-        customPixelId
+        customPixelId,
+        customTestEventCode
       );
     } catch (err: any) {
       console.error('[MetaService] Error tracking Purchase from order:', err);

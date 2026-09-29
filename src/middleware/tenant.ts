@@ -80,10 +80,14 @@ export const resolveTenant = async (
 			}
 		}
 
-		// Prioridad 3: Intentar extraer de los params o webhook
+		// Prioridad 3: Intentar extraer de los params, query o webhook
 		if (!tenant && !tenantSlug) {
 			if (req.params.tenantSlug) {
 				tenantSlug = req.params.tenantSlug.trim().toLowerCase();
+			} else if (typeof req.query.tenant === 'string' && req.query.tenant.trim()) {
+				tenantSlug = req.query.tenant.trim().toLowerCase();
+			} else if (typeof req.query.tenantSlug === 'string' && req.query.tenantSlug.trim()) {
+				tenantSlug = req.query.tenantSlug.trim().toLowerCase();
 			} else if (req.originalUrl.includes('/mercadopago-notification/') || req.originalUrl.includes('/webhooks/')) {
 				const parts = req.originalUrl.split('/');
 				const index = parts.findIndex(p => p === 'mercadopago-notification' || p === 'webhooks');

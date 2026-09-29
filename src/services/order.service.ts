@@ -332,6 +332,7 @@ export class OrderService {
 					items: orderItems,
 					shippingInfo: {
 						type: shippingMethod.type,
+						carrier: (shippingMethod as any).carrier || (shippingMethod as any).name || undefined,
 						pickupPoint: data.shippingMethod.pickupPoint,
 						shippingAddress: data.shippingMethod.address,
 						cost: appliedShippingCost,
@@ -412,7 +413,7 @@ export class OrderService {
 			}
 
 			// Disparar evento InitiateCheckout a Meta Conversions API para cualquier orden creada
-			MetaService.trackInitiateCheckoutFromOrder(newOrder.toObject())
+			MetaService.trackInitiateCheckoutFromOrder(newOrder.toObject(), undefined, undefined, undefined, models)
 				.catch(err => console.error('[Meta CAPI] Error enviando InitiateCheckout:', err));
 
 			const safeOrder = this.buildSafeOrder(newOrder);
@@ -973,6 +974,13 @@ export class OrderService {
 			const oldStatus = order.status;
 			order.status = data.status;
 
+			if (data.trackingNumber !== undefined) {
+				order.shippingInfo.trackingNumber = data.trackingNumber.trim();
+			}
+			if (data.carrier !== undefined && data.carrier.trim()) {
+				order.shippingInfo.carrier = data.carrier.trim();
+			}
+
 			if (oldStatus !== order.status) {
 				order.history.push({
 					status: order.status,
@@ -1001,6 +1009,7 @@ export class OrderService {
 				}
 			}
 
+			order.markModified('shippingInfo');
 			const orderUpdated = await order.save();
 
 			if (oldStatus !== order.status) {

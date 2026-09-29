@@ -594,7 +594,7 @@ export class ResendService {
 			const itemsHtml = this.buildItemsHtml(order);
 			const { clientEmail, clientFullName } = await ResendService.resolveClient(order, models);
 
-			const trackingCode = (order.shippingInfo as any).trackingCode || '';
+			const trackingCode = (order.shippingInfo as any).trackingNumber || (order.shippingInfo as any).trackingCode || '';
 			const carrier = (order.shippingInfo as any).carrier || '';
 
 			const vars: Record<string, string> = {

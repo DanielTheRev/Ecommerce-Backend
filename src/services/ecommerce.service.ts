@@ -115,7 +115,8 @@ export class EcommerceService {
 				integrations: {
 					metaPixel: {
 						active: publicConfig.integrations?.metaPixel?.active || false,
-						pixelId: publicConfig.integrations?.metaPixel?.pixelId || ''
+						pixelId: publicConfig.integrations?.metaPixel?.pixelId || '',
+						testEventCode: publicConfig.integrations?.metaPixel?.testEventCode || ''
 					},
 					googleAnalytics: {
 						active: publicConfig.integrations?.googleAnalytics?.active || false,

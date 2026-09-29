@@ -137,6 +137,24 @@ export class ProductController {
 				const sourceUrl = referer || `${req.protocol}://${req.get('host')}/products/${slug}`;
 				const userData = MetaService.extractUserDataFromReq(req);
 
+				let customAccessToken: string | undefined;
+				let customPixelId: string | undefined;
+				let customTestEventCode: string | undefined;
+
+				if (req.models) {
+					try {
+						const { EcommerceService } = await import('../services/ecommerce.service');
+						const config = await EcommerceService.getConfig(req.models);
+						if (config.integrations?.metaPixel?.active && config.integrations.metaPixel.pixelId && config.integrations.metaPixel.accessToken) {
+							customPixelId = config.integrations.metaPixel.pixelId;
+							customAccessToken = config.integrations.metaPixel.accessToken;
+							customTestEventCode = config.integrations.metaPixel.testEventCode;
+						}
+					} catch (e) {
+						console.error('[Meta CAPI] Error loading store config in getProductBySlug:', e);
+					}
+				}
+
 				MetaService.trackViewContent({
 					productId: prod._id ? prod._id.toString() : slug,
 					productName: prod.model || prod.brand || slug,
@@ -146,13 +164,13 @@ export class ProductController {
 					userData,
 					eventSourceUrl: sourceUrl,
 					eventId: `vc_${prod._id ? prod._id.toString() : slug}`,
-				}).catch(err => console.error('[Meta CAPI] Error tracking ViewContent:', err));
+				}, customAccessToken, customPixelId, customTestEventCode).catch(err => console.error('[Meta CAPI] Error tracking ViewContent:', err));
 
 				MetaService.trackEvent({
 					eventName: 'PageView',
 					userData,
 					eventSourceUrl: sourceUrl,
-				}).catch(err => console.error('[Meta CAPI] Error tracking PageView:', err));
+				}, customAccessToken, customPixelId, customTestEventCode).catch(err => console.error('[Meta CAPI] Error tracking PageView:', err));
 			}
 		} catch (error) {
 			next(error);
@@ -517,6 +535,24 @@ export class ProductController {
 			});
 
 			if (q && typeof q === 'string') {
+				let customAccessToken: string | undefined;
+				let customPixelId: string | undefined;
+				let customTestEventCode: string | undefined;
+
+				if (req.models) {
+					try {
+						const { EcommerceService } = await import('../services/ecommerce.service');
+						const config = await EcommerceService.getConfig(req.models);
+						if (config.integrations?.metaPixel?.active && config.integrations.metaPixel.pixelId && config.integrations.metaPixel.accessToken) {
+							customPixelId = config.integrations.metaPixel.pixelId;
+							customAccessToken = config.integrations.metaPixel.accessToken;
+							customTestEventCode = config.integrations.metaPixel.testEventCode;
+						}
+					} catch (e) {
+						console.error('[Meta CAPI] Error loading store config in searchProducts:', e);
+					}
+				}
+
 				MetaService.trackEvent({
 					eventName: 'Search',
 					customData: {
@@ -527,7 +563,7 @@ export class ProductController {
 						clientUserAgent: req.get('user-agent'),
 					},
 					eventSourceUrl: `${req.protocol}://${req.get('host')}${req.originalUrl}`,
-				}).catch(err => console.error('[Meta CAPI] Error tracking Search:', err));
+				}, customAccessToken, customPixelId, customTestEventCode).catch(err => console.error('[Meta CAPI] Error tracking Search:', err));
 			}
 
 			res.status(200).json({

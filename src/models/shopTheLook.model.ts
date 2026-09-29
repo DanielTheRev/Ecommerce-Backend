@@ -16,6 +16,15 @@ const ShopTheLookHotspotSchema = new Schema(
 			x: { type: Number, required: true, min: 0, max: 100 },
 			y: { type: Number, required: true, min: 0, max: 100 }
 		},
+		selectedColor: {
+			name: { type: String, trim: true },
+			hex: { type: String, trim: true }
+		},
+		selectedSku: { type: String, trim: true },
+		variantImage: {
+			url: { type: String, trim: true },
+			public_id: { type: String, trim: true }
+		},
 		isActive: { type: Boolean, default: true }
 	},
 	{ _id: true }

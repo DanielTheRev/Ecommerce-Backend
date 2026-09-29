@@ -6,12 +6,20 @@ export interface IShopTheLookImage {
 	public_id: string;
 }
 
+export interface IShopTheLookHotspotColor {
+	name: string;
+	hex?: string;
+}
+
 export interface IShopTheLookHotspot {
 	product: Types.ObjectId | IProductDocument;
 	position: {
 		x: number;
 		y: number;
 	};
+	selectedColor?: IShopTheLookHotspotColor;
+	selectedSku?: string;
+	variantImage?: IShopTheLookImage;
 	isActive: boolean;
 }
 

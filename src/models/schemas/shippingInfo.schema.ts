@@ -9,6 +9,14 @@ export const shippingInfoSchema = new Schema<IShippingInfo>({
     enum: Object.values(ShippingType),
     required: true
   },
+  carrier: {
+    type: String,
+    trim: true
+  },
+  trackingNumber: {
+    type: String,
+    trim: true
+  },
   pickupPoint: {
     name: {
       type: String,

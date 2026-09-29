@@ -62,7 +62,9 @@ export interface updatePaymentStatusDTO {
 
 export interface updateShippingStatusDTO {
 	orderID: string;
-	status: OrderStatus
+	status: OrderStatus;
+	trackingNumber?: string;
+	carrier?: string;
 }
 
 // Enum for sale type
@@ -171,6 +173,8 @@ export interface IShippingAddress {
 export interface IShippingInfo {
 	_id?: string; // Auto-generado por Mongoose
 	type: ShippingType;
+	carrier?: string;
+	trackingNumber?: string;
 	pickupPoint?: {
 		name: string;
 		address: string;
@@ -178,8 +182,8 @@ export interface IShippingInfo {
 	shippingAddress?: IShippingAddress;
 	cost: number;
 	freeShippingApplied?: boolean;
-	shippedAt: Date;
-	deliveredAt: Date;
+	shippedAt?: Date;
+	deliveredAt?: Date;
 }
 
 // Interface para información de pago
