@@ -106,7 +106,9 @@ function isOriginAllowed(origin: string | undefined): boolean {
 		origin === 'https://www.vura.com.ar' ||
 		origin.endsWith('.vura.com.ar') ||
 		origin === 'https://vexx.com.ar' ||
+		origin === 'https://panel.vexx.com.ar' ||
 		origin === 'https://www.vexx.com.ar' ||
+		origin === 'https://www.panel.vexx.com.ar' ||
 		origin.endsWith('.vexx.com.ar') ||
 		origin.endsWith('.vercel.app') ||
 		origin.endsWith('.pages.dev')
