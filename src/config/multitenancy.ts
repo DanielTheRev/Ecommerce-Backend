@@ -12,44 +12,61 @@ import { ITenant } from '@/interfaces/tenant.interface';
 class ConnectionManager {
 	private baseConnection: Connection | null = null;
 	private masterDb: Connection | null = null;
+	private connectPromise: Promise<void> | null = null;
 
 	/**
 	 * Inicializa la conexión base a MongoDB.
-	 * Se llama una sola vez al arrancar el servidor.
+	 * En entorno serverless (Vercel) o monolítico, reutiliza la conexión si ya está activa.
 	 */
 	async connect(): Promise<void> {
-		const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
-
-		this.baseConnection = await mongoose.createConnection(mongoURI).asPromise();
-		this.masterDb = this.baseConnection.useDb('master_db', { useCache: true });
-
-		// Registrar modelo Tenant y MasterProduct en master_db
-		this.masterDb.model<ITenant>('Tenant', TenantSchema);
-		if (!this.masterDb.models.MasterProduct) {
-			const { MasterProductSchema } = await import('@/models/MasterProduct.model');
-			this.masterDb.model('MasterProduct', MasterProductSchema);
+		if (this.baseConnection && this.baseConnection.readyState === 1 && this.masterDb) {
+			return;
 		}
 
-		console.log('✅ MongoDB conectado exitosamente (Multi-Tenant)');
-		console.log('📊 Master DB: master_db');
+		if (this.connectPromise) {
+			return this.connectPromise;
+		}
 
-		// Event listeners
-		this.baseConnection.on('error', (error) => {
-			console.error('❌ Error de conexión a MongoDB:', error);
-		});
+		this.connectPromise = (async () => {
+			const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
 
-		this.baseConnection.on('disconnected', () => {
-			console.log('⚠️ MongoDB desconectado');
-		});
+			this.baseConnection = await mongoose.createConnection(mongoURI).asPromise();
+			this.masterDb = this.baseConnection.useDb('master_db', { useCache: true });
 
-		// Graceful shutdown
-		process.on('SIGINT', async () => {
-			if (this.baseConnection) {
-				await this.baseConnection.close();
-				console.log('🔒 Conexión a MongoDB cerrada');
+			// Registrar modelo Tenant y MasterProduct en master_db
+			this.masterDb.model<ITenant>('Tenant', TenantSchema);
+			if (!this.masterDb.models.MasterProduct) {
+				const { MasterProductSchema } = await import('@/models/MasterProduct.model');
+				this.masterDb.model('MasterProduct', MasterProductSchema);
 			}
-			process.exit(0);
-		});
+
+			console.log('✅ MongoDB conectado exitosamente (Multi-Tenant)');
+			console.log('📊 Master DB: master_db');
+
+			// Event listeners
+			this.baseConnection.on('error', (error) => {
+				console.error('❌ Error de conexión a MongoDB:', error);
+			});
+
+			this.baseConnection.on('disconnected', () => {
+				console.log('⚠️ MongoDB desconectado');
+			});
+
+			// Graceful shutdown
+			process.on('SIGINT', async () => {
+				if (this.baseConnection) {
+					await this.baseConnection.close();
+					console.log('🔒 Conexión a MongoDB cerrada');
+				}
+				process.exit(0);
+			});
+		})();
+
+		try {
+			await this.connectPromise;
+		} finally {
+			this.connectPromise = null;
+		}
 	}
 
 	/**

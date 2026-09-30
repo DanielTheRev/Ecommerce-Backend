@@ -100,11 +100,15 @@ function isOriginAllowed(origin: string | undefined): boolean {
 	const allowed = getAllAllowedOrigins();
 	if (allowed.includes(origin)) return true;
 
-	// Permitir automáticamente cualquier variante o subdominio de vura.com.ar o Cloudflare Pages
+	// Permitir automáticamente cualquier variante o subdominio de vura.com.ar, vexx.com.ar o Cloudflare Pages / Vercel
 	if (
 		origin === 'https://vura.com.ar' ||
 		origin === 'https://www.vura.com.ar' ||
 		origin.endsWith('.vura.com.ar') ||
+		origin === 'https://vexx.com.ar' ||
+		origin === 'https://www.vexx.com.ar' ||
+		origin.endsWith('.vexx.com.ar') ||
+		origin.endsWith('.vercel.app') ||
 		origin.endsWith('.pages.dev')
 	) {
 		return true;
@@ -133,6 +137,17 @@ app.use(cookie_parser());
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Middleware para asegurar conexión a DB en entornos Serverless (Vercel)
+app.use(async (req: Request, res: Response, next) => {
+	try {
+		await connectionManager.connect();
+		next();
+	} catch (error) {
+		console.error('❌ Error asegurando conexión a MongoDB:', error);
+		res.status(500).json({ success: false, message: 'Error de conexión a la base de datos' });
+	}
+});
 
 // Ruta de salud (no necesita tenant)
 app.get('/health', (req: Request, res: Response) => {
@@ -249,7 +264,15 @@ const startServer = async (): Promise<void> => {
 };
 
 // Iniciar el servidor
-
-startServer();
+if (!process.env.VERCEL) {
+	startServer();
+} else {
+	// En Vercel Serverless inicializamos la conexión al arrancar el contenedor
+	connectionManager.connect().then(() => {
+		loadAllTenantOrigins().catch(console.error);
+	}).catch((err) => {
+		console.error('❌ Error conectando a MongoDB en Vercel:', err);
+	});
+}
 
 export default app;

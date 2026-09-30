@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthRequest } from '@/middleware/auth';
 import { AppError } from '@/errors/app.error';
 import { ProductService } from '@/services/product.service';
-import { socketManager } from '@/sockets/socketManager';
+import { realtimeService } from '@/sockets/realtime.service';
 
 export class PosController {
 	/**
@@ -30,8 +30,8 @@ export class PosController {
 				foundResult = null;
 			}
 
-			// Broadcast en tiempo real a los terminales POS mediante Socket.IO
-			socketManager.broadcastScannedBarcode(tenantSlug, {
+			// Broadcast en tiempo real a los terminales POS mediante RealtimeService (Socket o Supabase)
+			realtimeService.broadcastScannedBarcode(tenantSlug, {
 				barcode: cleanBarcode,
 				product: foundResult?.product || null,
 				matchedVariant: foundResult?.matchedVariant || null,
@@ -110,7 +110,7 @@ export class PosController {
 			const tenantSlug = req.tenant?.slug || (req as any).tenantSlug || 'vura';
 			const terminalId = req.query.terminalId as string | undefined;
 
-			const scanners = socketManager.getActiveScanners(tenantSlug, terminalId);
+			const scanners = realtimeService.getActiveScanners(tenantSlug, terminalId);
 
 			res.status(200).json({
 				success: true,

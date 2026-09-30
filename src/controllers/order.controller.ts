@@ -13,7 +13,7 @@ import { MercadoPagoService } from '@/services/mercadopago.service';
 import { MetaService } from '@/services/meta.service';
 import { OrderService } from '@/services/order.service';
 import { ReceiptService } from '@/services/receipt.service';
-import { socketManager } from '@/sockets/socketManager';
+import { realtimeService } from '@/sockets/realtime.service';
 import { NextFunction, Response } from 'express';
 import UalaApiCheckout from 'ualabis-nodejs';
 
@@ -34,7 +34,7 @@ export const ualaWebhook = async (req: AuthRequest, res: Response) => {
 	try {
 		const order = await OrderService.confirmCardPayment(req.models!, id, data.status);
 		if (req.tenant) {
-			socketManager.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'payment');
+			realtimeService.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'payment');
 		}
 	} catch (error) {
 		console.error('Error processing Uala webhook:', error);
@@ -89,7 +89,7 @@ export const mercadopagoWebhook = async (req: AuthRequest, res: Response) => {
 						console.log(`✅ Pago de MercadoPago procesado por webhook: ${mpOrder.id} (Estado: ${latestPayment.status}) para la orden: ${internalOrderId}`);
 
 						if (req.tenant) {
-							socketManager.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'payment');
+							realtimeService.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'payment');
 							
 							// Notificar al cliente si está autenticado
 							if (order.user) {
@@ -112,7 +112,7 @@ export const mercadopagoWebhook = async (req: AuthRequest, res: Response) => {
 									severity = NotificationSeverity.ERROR;
 								}
 
-								socketManager.notifyClient(userId, {
+								realtimeService.notifyClient(userId, {
 									type: clientNotificationType,
 									title: clientNotificationTitle,
 									message: clientNotificationMessage,
@@ -138,7 +138,7 @@ export const mercadopagoWebhook = async (req: AuthRequest, res: Response) => {
 				console.log(`✅ Pago de MercadoPago (legacy/direct) procesado: ${paymentId} para la orden: ${internalOrderId}`);
 
 				if (req.tenant) {
-					socketManager.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'payment');
+					realtimeService.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'payment');
 					
 					// Notificar al cliente si está autenticado
 					if (order.user) {
@@ -161,7 +161,7 @@ export const mercadopagoWebhook = async (req: AuthRequest, res: Response) => {
 							severity = NotificationSeverity.ERROR;
 						}
 
-						socketManager.notifyClient(userId, {
+						realtimeService.notifyClient(userId, {
 							type: clientNotificationType,
 							title: clientNotificationTitle,
 							message: clientNotificationMessage,
@@ -209,7 +209,7 @@ export const createOrder = async (req: AuthRequest, res: Response, next: NextFun
 		);
 
 		if (req.tenant) {
-			socketManager.notifyNewOrderToAdmins(req.tenant.slug, order);
+			realtimeService.notifyNewOrderToAdmins(req.tenant.slug, order);
 		}
 		return res.status(201).json({
 			message: 'Orden creada exitosamente',
@@ -240,7 +240,7 @@ export const payOrder = async (req: AuthRequest, res: Response, next: NextFuncti
 		);
 
 		if (req.tenant) {
-			socketManager.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'payment');
+			realtimeService.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'payment');
 		}
 
 		return res.status(200).json({
@@ -271,7 +271,7 @@ export const createLocalOrder = async (req: AuthRequest, res: Response, next: Ne
 		});
 
 		if (req.tenant) {
-			socketManager.notifyNewOrderToAdmins(req.tenant.slug, newOrder);
+			realtimeService.notifyNewOrderToAdmins(req.tenant.slug, newOrder);
 		}
 
 		return res.status(201).json({
@@ -294,7 +294,7 @@ export const approveTransferPayment = async (req: AuthRequest, res: Response, ne
 		const updatedOrder = await OrderService.approveTransferPayment(req.models!, id, adminUserId);
 
 		if (req.tenant) {
-			socketManager.notifyOrderUpdatedToAdmins(req.tenant.slug, updatedOrder);
+			realtimeService.notifyOrderUpdatedToAdmins(req.tenant.slug, updatedOrder);
 		}
 
 		return res.status(200).json({
@@ -384,7 +384,7 @@ export const updatePaymentStatus = async (req: AuthRequest, res: Response, next:
 
 		// Notificar al cliente
 		if (order.user) {
-			socketManager.notifyClient(order.user._id.toString(), {
+			realtimeService.notifyClient(order.user._id.toString(), {
 				type: NotificationType.PAYMENT_SUCCESS,
 				title: 'Pago Aprobado',
 				message: `Tu pago de $${order.finance.total} fue procesado correctamente.`,
@@ -395,7 +395,7 @@ export const updatePaymentStatus = async (req: AuthRequest, res: Response, next:
 		}
 
 		if (req.tenant) {
-			socketManager.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'payment');
+			realtimeService.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'payment');
 		}
 
 		return res.status(200).json({ message: 'Pago actualizado con éxito', orderUpdated: order });
@@ -410,7 +410,7 @@ export const updateShippingStatus = async (req: AuthRequest, res: Response, next
 	try {
 		const order = await OrderService.updateOrderShippingStatus(req.models!, { orderID, status, trackingNumber, carrier });
 		if (order.user) {
-			socketManager.notifyClient(order.user._id.toString(), {
+			realtimeService.notifyClient(order.user._id.toString(), {
 				type: NotificationType.ORDER_STATUS_CHANGED,
 				title: 'Estado de Envío Actualizado',
 				message: `Tu pedido ahora está: ${status}`,
@@ -421,7 +421,7 @@ export const updateShippingStatus = async (req: AuthRequest, res: Response, next
 		}
 
 		if (req.tenant) {
-			socketManager.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'shipping');
+			realtimeService.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'shipping');
 		}
 
 		return res.json({
@@ -583,7 +583,7 @@ export const uploadPaymentReceipt = async (req: AuthRequest, res: Response, next
 		const order = await OrderService.attachPaymentReceipt(req.models!, id, file);
 
 		if (req.tenant) {
-			socketManager.notifyReceiptUploadedToAdmins(req.tenant.slug, order);
+			realtimeService.notifyReceiptUploadedToAdmins(req.tenant.slug, order);
 		}
 
 		return res.status(200).json({

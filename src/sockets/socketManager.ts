@@ -432,7 +432,7 @@ class SocketManager {
 
 	// === NOTIFICACIÓN DE ESTADO DE ESCÁNERES ===
 
-	private notifyScannerStatus(tenantSlug: string, terminalId?: string) {
+	public notifyScannerStatus(tenantSlug: string, terminalId?: string) {
 		if (!this.io || !tenantSlug) return;
 
 		const terminalScanners = this.getActiveScanners(tenantSlug, terminalId);
