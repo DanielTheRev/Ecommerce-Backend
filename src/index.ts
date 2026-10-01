@@ -63,6 +63,8 @@ const defaultOrigins = [
 	'https://www.vura.com.ar',
 	'https://dashboard.vura.com.ar',
 	'https://admin.vura.com.ar',
+	'https://panel.vexx.com.ar',
+	'https://www.panel.vexx.com.ar',
 	"https://control-panel-50s.pages.dev/"
 ];
 
