@@ -34,6 +34,7 @@ export const ShopTheLookSchema = new Schema<IShopTheLookDocument>(
 	{
 		title: { type: String, required: true, trim: true },
 		subtitle: { type: String, trim: true },
+		slug: { type: String, trim: true, lowercase: true, index: true },
 		looks: [
 			{
 				name: { type: String, trim: true, default: '' },

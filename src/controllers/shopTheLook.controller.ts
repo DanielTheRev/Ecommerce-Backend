@@ -27,7 +27,7 @@ export class ShopTheLookController {
 
 	static async createLook(req: AuthRequest, res: Response, next: NextFunction) {
 		try {
-			const { title, subtitle, isActive, looks } = req.body;
+			const { title, subtitle, isActive, looks, slug } = req.body;
 			const tenantSlug = req.tenant?.slug as string;
 
 			if (!title) throw new AppError('Title is required', 'El título es requerido', 400);
@@ -61,6 +61,7 @@ export class ShopTheLookController {
 			const data: IShopTheLook = {
 				title,
 				subtitle: subtitle || '',
+				slug: slug ? String(slug).trim().toLowerCase() : undefined,
 				isActive: isActive === 'true' || isActive === true,
 				looks: parsedLooks
 			};
@@ -75,7 +76,7 @@ export class ShopTheLookController {
 	static async updateLook(req: AuthRequest, res: Response, next: NextFunction) {
 		try {
 			const { id } = req.params;
-			const { title, subtitle, isActive, looks } = req.body;
+			const { title, subtitle, isActive, looks, slug } = req.body;
 			const tenantSlug = req.tenant?.slug as string;
 
 			let parsedLooks: any[] = [];
@@ -90,6 +91,7 @@ export class ShopTheLookController {
 			const updateData: Partial<IShopTheLook> = {};
 			if (title !== undefined) updateData.title = title;
 			if (subtitle !== undefined) updateData.subtitle = subtitle;
+			if (slug !== undefined) updateData.slug = String(slug).trim().toLowerCase();
 			if (isActive !== undefined) updateData.isActive = isActive === 'true' || isActive === true;
 
 			if (looks) {

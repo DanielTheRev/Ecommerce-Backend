@@ -1,9 +1,30 @@
+import mongoose from 'mongoose';
+import slugify from 'slugify';
 import { AppError } from '@/errors/app.error';
 import { TenantModels } from '@/config/modelRegistry';
 import { IShopTheLookDocument, IShopTheLook } from '@/interfaces/shopTheLook.interface';
 import { ImageService } from '@/services/images.service';
 
 export class ShopTheLookService {
+	static async generateUniqueSlug(models: TenantModels, text: string, excludeId?: string): Promise<string> {
+		const baseSlug = slugify(text || 'look', { lower: true, strict: true, trim: true }) || 'look';
+		let slug = baseSlug;
+		let counter = 1;
+
+		while (true) {
+			const query: any = { slug };
+			if (excludeId && mongoose.Types.ObjectId.isValid(excludeId)) {
+				query._id = { $ne: new mongoose.Types.ObjectId(excludeId) };
+			}
+			const exists = await models.ShopTheLook.findOne(query).select('_id').lean();
+			if (!exists) break;
+			counter++;
+			slug = `${baseSlug}-${counter}`;
+		}
+
+		return slug;
+	}
+
 	static async getActiveLooks(models: TenantModels, tenantSlug?: string): Promise<IShopTheLookDocument[]> {
 		try {
 			const cacheKey = 'shopthelook:active';
@@ -21,7 +42,12 @@ export class ShopTheLookService {
 				})
 				.lean() as any[];
 
-			looks.forEach((look: any) => {
+			for (const look of looks) {
+				if (!look.slug && look.title) {
+					const generatedSlug = await this.generateUniqueSlug(models, look.title, String(look._id));
+					look.slug = generatedSlug;
+					models.ShopTheLook.findByIdAndUpdate(look._id, { $set: { slug: generatedSlug } }).catch(() => {});
+				}
 				if (look.looks) {
 					look.looks.forEach((l: any) => {
 						if (l.hotspots) {
@@ -29,7 +55,7 @@ export class ShopTheLookService {
 						}
 					});
 				}
-			});
+			}
 
 			const result = looks as unknown as IShopTheLookDocument[];
 
@@ -44,16 +70,37 @@ export class ShopTheLookService {
 		}
 	}
 
-	static async getLookById(models: TenantModels, lookId: string): Promise<IShopTheLookDocument> {
+	static async getLookById(models: TenantModels, identifier: string): Promise<IShopTheLookDocument> {
 		try {
-			const look = await models.ShopTheLook.findById(lookId)
-				.populate({
-					path: 'looks.hotspots.product',
-					match: { status: 'published' }
-				})
-				.lean() as any;
+			const isObjectId = mongoose.Types.ObjectId.isValid(identifier);
+			let look: any = null;
+
+			if (isObjectId) {
+				look = await models.ShopTheLook.findById(identifier)
+					.populate({
+						path: 'looks.hotspots.product',
+						match: { status: 'published' }
+					})
+					.lean();
+			}
+
+			if (!look) {
+				look = await models.ShopTheLook.findOne({ slug: identifier.toLowerCase().trim() })
+					.populate({
+						path: 'looks.hotspots.product',
+						match: { status: 'published' }
+					})
+					.lean();
+			}
+
 			if (!look) {
 				throw new AppError('Look not found', 'Campaña no encontrada', 404);
+			}
+
+			if (!look.slug && look.title) {
+				const generatedSlug = await this.generateUniqueSlug(models, look.title, String(look._id));
+				look.slug = generatedSlug;
+				models.ShopTheLook.findByIdAndUpdate(look._id, { $set: { slug: generatedSlug } }).catch(() => {});
 			}
 
 			if (look.looks) {
@@ -73,6 +120,12 @@ export class ShopTheLookService {
 
 	static async createLook(models: TenantModels, data: IShopTheLook, tenantSlug?: string): Promise<IShopTheLookDocument> {
 		try {
+			if (data.slug) {
+				data.slug = await this.generateUniqueSlug(models, data.slug);
+			} else if (data.title) {
+				data.slug = await this.generateUniqueSlug(models, data.title);
+			}
+
 			const newLook = await models.ShopTheLook.create(data);
 
 			if (tenantSlug) {
@@ -89,9 +142,21 @@ export class ShopTheLookService {
 
 	static async updateLook(models: TenantModels, lookId: string, data: Partial<IShopTheLook>, tenantSlug?: string): Promise<IShopTheLookDocument> {
 		try {
-			const currentLook = await models.ShopTheLook.findById(lookId).lean() as unknown as IShopTheLookDocument;
+			const isObjectId = mongoose.Types.ObjectId.isValid(lookId);
+			const currentLook = (isObjectId
+				? await models.ShopTheLook.findById(lookId).lean()
+				: await models.ShopTheLook.findOne({ slug: lookId }).lean()) as unknown as IShopTheLookDocument;
+
 			if (!currentLook) {
 				throw new AppError('Look not found', 'Campaña no encontrada', 404);
+			}
+
+			const realId = currentLook._id ? String(currentLook._id) : lookId;
+
+			if (data.slug) {
+				data.slug = await this.generateUniqueSlug(models, data.slug, realId);
+			} else if (data.title && (!currentLook.slug || data.title !== currentLook.title)) {
+				data.slug = await this.generateUniqueSlug(models, data.title, realId);
 			}
 
 			if (data.looks) {
@@ -104,11 +169,9 @@ export class ShopTheLookService {
 					await ImageService.DeleteImage(publicId).catch(e => console.error('Failed to delete old image', e));
 				}
 			}
-			console.log('UpdateLook data');
-			console.log(data);
 
 			const updatedLook = await models.ShopTheLook.findByIdAndUpdate(
-				lookId,
+				realId,
 				{ $set: data },
 				{ new: true, runValidators: true }
 			).populate('looks.hotspots.product');
@@ -129,17 +192,23 @@ export class ShopTheLookService {
 
 	static async deleteLook(models: TenantModels, lookId: string, tenantSlug?: string): Promise<void> {
 		try {
-			const currentLook = await models.ShopTheLook.findById(lookId).lean() as unknown as IShopTheLookDocument;
+			const isObjectId = mongoose.Types.ObjectId.isValid(lookId);
+			const currentLook = (isObjectId
+				? await models.ShopTheLook.findById(lookId).lean()
+				: await models.ShopTheLook.findOne({ slug: lookId }).lean()) as unknown as IShopTheLookDocument;
+
 			if (!currentLook) {
 				throw new AppError('Look not found', 'Campaña no encontrada', 404);
 			}
+
+			const realId = currentLook._id ? String(currentLook._id) : lookId;
 
 			const imagesToDelete = currentLook.looks.map((l: any) => l.mainImage?.public_id).filter(Boolean);
 			for (const publicId of imagesToDelete) {
 				await ImageService.DeleteImage(publicId).catch(e => console.error('Failed to delete image', e));
 			}
 
-			await models.ShopTheLook.findByIdAndDelete(lookId);
+			await models.ShopTheLook.findByIdAndDelete(realId);
 
 			if (tenantSlug) {
 				const { CacheService } = await import('@/services/cache.service');

@@ -34,6 +34,7 @@ export interface ILookItem {
 export interface IShopTheLook {
 	title: string;
 	subtitle: string;
+	slug?: string;
 	looks: ILookItem[];
 	isActive: boolean;
 }
