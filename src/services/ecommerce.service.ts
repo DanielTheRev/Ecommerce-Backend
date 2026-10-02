@@ -147,7 +147,8 @@ export class EcommerceService {
 						bankName: publicConfig.paymentGateways?.transfer?.bankName || '',
 						titular: publicConfig.paymentGateways?.transfer?.titular || ''
 					}
-				}
+				},
+				homeLayout: publicConfig.homeLayout
 			};
 
 			if (tenantSlug) {

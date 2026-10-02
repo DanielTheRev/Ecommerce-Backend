@@ -40,7 +40,6 @@ export class HomeService {
 		}
 	];
 
-
 	private static async getProductsGroupByBrand(models: TenantModels): Promise<IBrandSection[]> {
 		try {
 			// 1. Get all active banners configured in CMS
@@ -63,7 +62,7 @@ export class HomeService {
 
 			const brandSections: IBrandSection[] = [];
 			const productsMap = new Map<string, IProduct>();
-			products.forEach(p => productsMap.set(p._id.toString(), p));
+			products.forEach((p) => productsMap.set(p._id.toString(), p));
 
 			// 4. Iterate over active banners and build sections
 			for (const banner of activeBanners) {
@@ -72,18 +71,31 @@ export class HomeService {
 				if (banner.showProducts) {
 					const count = banner.productsCount || 4;
 					const source = banner.productSource || (banner.brandName ? 'brand' : 'recent');
-					const sourceVal = (banner.productSourceValue || banner.brandName || '').trim().toLowerCase();
+					const sourceVal = (banner.productSourceValue || banner.brandName || '')
+						.trim()
+						.toLowerCase();
 
 					if (source === 'category' && sourceVal) {
-						matchingProducts = products.filter(p => (p.category || '').toLowerCase().includes(sourceVal));
+						matchingProducts = products.filter((p) =>
+							(p.category || '').toLowerCase().includes(sourceVal)
+						);
 					} else if (source === 'collection' && sourceVal) {
-						matchingProducts = products.filter(p => {
+						matchingProducts = products.filter((p) => {
 							const tags = (p as any).tags || (p as any).collections || [];
-							return tags.some((t: string) => t.toLowerCase().includes(sourceVal)) || (p.category || '').toLowerCase().includes(sourceVal);
+							return (
+								tags.some((t: string) => t.toLowerCase().includes(sourceVal)) ||
+								(p.category || '').toLowerCase().includes(sourceVal)
+							);
 						});
 					} else if (source === 'brand' && sourceVal) {
-						matchingProducts = brandProductsMap.get(sourceVal) || products.filter(p => (p.brand || '').toLowerCase().includes(sourceVal));
-					} else if (source === 'manual' && banner.manualProductIds && banner.manualProductIds.length > 0) {
+						matchingProducts =
+							brandProductsMap.get(sourceVal) ||
+							products.filter((p) => (p.brand || '').toLowerCase().includes(sourceVal));
+					} else if (
+						source === 'manual' &&
+						banner.manualProductIds &&
+						banner.manualProductIds.length > 0
+					) {
 						matchingProducts = banner.manualProductIds
 							.map((id: any) => productsMap.get(id.toString()))
 							.filter((p): p is IProduct => !!p);
@@ -105,7 +117,7 @@ export class HomeService {
 					imageMobile: banner.imageMobile || '',
 					linkType: banner.linkType || (banner.brandName ? 'brand' : 'none'),
 					linkValue: banner.linkValue || banner.brandName || '',
-					showProducts: banner.showProducts ?? (matchingProducts.length > 0),
+					showProducts: banner.showProducts ?? matchingProducts.length > 0,
 					textClass: banner.textClass || 'text-white',
 					buttonClass: banner.buttonClass || 'bg-white text-black',
 					icon: banner.icon || 'Smartphone',
@@ -132,58 +144,107 @@ export class HomeService {
 		const splitColors = options?.splitColors === true;
 		const cacheKey = `home:full:${newsLimit}:${splitColors}`;
 		if (tenantSlug) {
-			const cached = (await import('./cache.service')).CacheService.get<IHomeConfig>(tenantSlug, cacheKey);
+			const cached = (await import('./cache.service')).CacheService.get<IHomeConfig>(
+				tenantSlug,
+				cacheKey
+			);
 			if (cached) return cached;
 		}
 
-		const productByBrand = await this.getProductsGroupByBrand(models);
-		// Fetch Hero Slides
-		const heroSlides = await HeroService.getActiveSlides(models, tenantSlug);
-		const categoriesMenu = await MenuService.getMenuBySlugOrId(models, 'categories', tenantSlug);
-		const ShopTheLooks = await ShopTheLookService.getActiveLooks(models, tenantSlug);
+		// Obtener configuración global del tenant (con caché interna o lean)
+		const config = await EcommerceService.getConfig(models).catch(() => null);
+		const sections = config?.homeLayout?.sections;
 
-		const config = await EcommerceService.getConfig(models);
-		const maxInstallments = config?.paymentGateways?.mercadopago?.maxInstallments ?? 1;
-		const absorbInstallments = config?.pricingStrategy?.absorbInstallments ?? true;
-		
-		let installmentsText = 'Sin cuotas sin interés';
-		if (absorbInstallments) {
-			installmentsText = maxInstallments >= 6 ? '6 cuotas sin interés' : (maxInstallments >= 3 ? '3 cuotas sin interés' : 'Cuotas sin interés');
+		// Construir tareas paralelas dinámicas según secciones activas en el CMS del tenant
+		const tasks: Record<string, Promise<any>> = {};
+
+		if (sections?.hero?.active === true) {
+			tasks['heroSlides'] = HeroService.getActiveSlides(models, tenantSlug);
 		}
 
-		const dynamicOffers = [
-			{
-				...this.offers[0],
-				description: installmentsText
-			},
-			this.offers[1],
-			this.offers[2]
-		];
+		if (sections?.categories?.active === true) {
+			const menuSlug = sections.categories.menuSlug || 'categories';
+			tasks['categoriesMenu'] = MenuService.getMenuBySlugOrId(models, menuSlug, tenantSlug);
+		}
 
-		// Novedades Inteligentes: Destacados primero (isFeatured: true) + Relleno de últimos ingresos (sin repetir colores)
-		const news = await ProductService.getSmartNews(models, newsLimit, splitColors);
+		if (sections?.shopTheLook?.active === true) {
+			tasks['shopTheLook'] = ShopTheLookService.getActiveLooks(models, tenantSlug);
+		}
 
-		// Más vendidos / Catálogo dinámico
-		const mostSales = (await ProductService.searchProducts({
-			models,
-			filters: {
-				sortBy: 'createdAt',
-				sortOrder: 'desc',
-				splitColors: true
-			},
-			limit: 8
-		})).data as unknown as IProduct[];
+		if (sections?.news?.active === true) {
+			const limit = sections.news.limit ? Math.max(1, Number(sections.news.limit)) : newsLimit;
+			tasks['news'] = ProductService.getSmartNews(models, limit, splitColors);
+		}
+
+		if (sections?.brandSections?.active === true) {
+			tasks['productByBrand'] = this.getProductsGroupByBrand(models);
+		}
+
+		if (sections?.mostSales?.active === true) {
+			const limit = sections.mostSales.limit ? Math.max(1, Number(sections.mostSales.limit)) : 8;
+			tasks['mostSales'] = ProductService.searchProducts({
+				models,
+				filters: {
+					sortBy: 'createdAt',
+					sortOrder: 'desc',
+					splitColors: true
+				},
+				limit
+			}).then((res) => (res.data || []) as unknown as IProduct[]);
+		}
+
+		// Ejecución simultánea de todas las consultas activas (Fail-safe)
+		const taskKeys = Object.keys(tasks);
+		const settledResults = await Promise.allSettled(Object.values(tasks));
+
+		const resolved: Record<string, any> = {};
+		taskKeys.forEach((key, index) => {
+			const res = settledResults[index];
+			if (res.status === 'fulfilled') {
+				resolved[key] = res.value;
+			} else {
+				console.error(`[HomeService] Error resolviendo sección "${key}":`, res.reason);
+				resolved[key] = key === 'categoriesMenu' ? null : [];
+			}
+		});
+
+		// Barra de beneficios / Cuotas dinámicas
+		let dynamicOffers: IHomeOffer[] = [];
+		if (sections?.trustBar?.active === true) {
+			const maxInstallments = config?.paymentGateways?.mercadopago?.maxInstallments ?? 1;
+			const absorbInstallments = config?.pricingStrategy?.absorbInstallments ?? true;
+
+			let installmentsText = 'Sin cuotas sin interés';
+			if (absorbInstallments) {
+				installmentsText =
+					maxInstallments >= 6
+						? '6 cuotas sin interés'
+						: maxInstallments >= 3
+							? '3 cuotas sin interés'
+							: 'Cuotas sin interés';
+			}
+
+			dynamicOffers = [
+				{
+					...this.offers[0],
+					description: installmentsText
+				},
+				this.offers[1],
+				this.offers[2]
+			];
+		}
+
+		const categoriesMenu = resolved['categoriesMenu'] || null;
 
 		const result: IHomeConfig = {
-			heroSlides,
+			// homeLayout: config?.homeLayout,
+			heroSlides: resolved['heroSlides'] || [],
 			offers: dynamicOffers,
-			productByBrand,
+			productByBrand: resolved['productByBrand'] || [],
 			categoriesMenu,
-			visualMenuConfig: categoriesMenu,
-			bentoConfig: categoriesMenu,
-			shopTheLook: ShopTheLooks,
-			news,
-			mostSales
+			shopTheLook: resolved['shopTheLook'] || [],
+			news: resolved['news'] || [],
+			mostSales: resolved['mostSales'] || []
 		};
 
 		if (tenantSlug) {

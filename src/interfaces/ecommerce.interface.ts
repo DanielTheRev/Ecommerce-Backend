@@ -11,6 +11,32 @@ export type BusinessType =
 
 export type PricingMethod = 'markup' | 'margin';
 
+export interface IHomeSectionConfig {
+	active: boolean;
+	order?: number;
+	title?: string;
+	subtitle?: string;
+	limit?: number;
+	menuSlug?: string;
+	[key: string]: any;
+}
+
+export interface IHomeSectionsConfig {
+	hero?: IHomeSectionConfig;
+	trustBar?: IHomeSectionConfig;
+	news?: IHomeSectionConfig;
+	categories?: IHomeSectionConfig;
+	shopTheLook?: IHomeSectionConfig;
+	brandSections?: IHomeSectionConfig;
+	mostSales?: IHomeSectionConfig;
+	testimonials?: IHomeSectionConfig;
+	[key: string]: IHomeSectionConfig | undefined;
+}
+
+export interface IHomeLayoutConfig {
+	sections: IHomeSectionsConfig;
+}
+
 export interface IFiscalProfile {
 	taxRegime: 'monotributo' | 'responsable_inscripto' | 'exento';
 	monotributoCategory?: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K';
@@ -187,6 +213,7 @@ export interface IEcommerceConfig {
 	workingHours?: IWorkingHoursConfig;
 	recommendationConfig?: IRecommendationConfig;
 	emailTemplates?: IEmailTemplatesConfig;
+	homeLayout?: IHomeLayoutConfig;
 }
 
 export interface IShippingConfig {
@@ -344,4 +371,5 @@ export interface IEcommerceConfigPublic {
 			titular?: string;
 		};
 	};
+	homeLayout?: IHomeLayoutConfig;
 }

@@ -376,6 +376,12 @@ const EcommerceSchema = new Schema(
 				replyTo: { type: String, default: '' }
 			}
 		},
+		homeLayout: {
+			sections: {
+				type: Schema.Types.Mixed,
+				default: {}
+			}
+		},
 		// Metadata para el CMS
 		lastModifiedBy: { type: Schema.Types.ObjectId, ref: 'User', required: false }
 	},

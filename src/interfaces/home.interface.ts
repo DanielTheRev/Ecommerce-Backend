@@ -5,8 +5,10 @@ import { IVisualMenuConfig } from './visualMenu.interface';
 import { IBentoConfig } from './bento.interface';
 import { IMenu } from './menu.interface';
 import { IShopTheLook } from './shopTheLook.interface';
+import { IHomeLayoutConfig } from './ecommerce.interface';
 
 export interface IHomeConfig {
+	homeLayout?: IHomeLayoutConfig;
 	offers: IHomeOffer[];
 	productByBrand: IBrandSection[];
 	heroSlides: IHeroSlide[];
