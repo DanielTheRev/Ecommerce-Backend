@@ -130,19 +130,25 @@ export class SocketRealtimeService implements IRealtimeService {
  */
 export class SupabaseRealtimeService implements IRealtimeService {
 	private get supabaseUrl(): string {
-		return (process.env.SUPABASE_URL || 'https://savyruhfhrkjqhtaozae.supabase.co').replace(/\/$/, '');
+		return (process.env.SUPABASE_URL || '').replace(/\/$/, '');
 	}
 
 	private get serviceRoleKey(): string {
-		return process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_KEY || '';
+		return (
+			process.env.SUPABASE_SERVICE_ROLE_KEY ||
+			process.env.SUPABASE_SECRET_KEY ||
+			process.env.SUPABASE_SERVICE_KEY ||
+			process.env.SUPABASE_KEY ||
+			''
+		);
 	}
 
 	/**
 	 * Emite un mensaje de Broadcast a Supabase Realtime vía HTTP REST API
 	 */
 	private async broadcast(topic: string, event: string, payload: any): Promise<boolean> {
-		if (!this.serviceRoleKey) {
-			console.warn('[SupabaseRealtime] ⚠️ Falta SUPABASE_SERVICE_ROLE_KEY en variables de entorno');
+		if (!this.supabaseUrl || !this.serviceRoleKey) {
+			console.warn('[SupabaseRealtime] ⚠️ Falta SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY en variables de entorno');
 			return false;
 		}
 
@@ -260,8 +266,9 @@ export class SupabaseRealtimeService implements IRealtimeService {
 		// 2. Disparo Push a Móvil
 		if (updateType === 'payment') {
 			const paymentStatus = order.paymentInfo?.status || order.paymentStatus;
-			const isApproved = paymentStatus === 'approved' || paymentStatus === 'PAID';
-			const isRejected = paymentStatus === 'rejected' || paymentStatus === 'REJECTED';
+			const normalizedStatus = String(paymentStatus || '').toLowerCase();
+			const isApproved = normalizedStatus === 'approved' || normalizedStatus === 'paid';
+			const isRejected = normalizedStatus === 'rejected' || normalizedStatus === 'failed';
 
 			if (isApproved) {
 				PushNotificationService.sendAdminPushNotification({

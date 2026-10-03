@@ -599,8 +599,9 @@ class SocketManager {
 		// Disparo Push a Dispositivos Móviles (Expo)
 		if (updateType === 'payment') {
 			const paymentStatus = order.paymentInfo?.status || order.paymentStatus;
-			const isApproved = paymentStatus === 'approved' || paymentStatus === 'PAID';
-			const isRejected = paymentStatus === 'rejected' || paymentStatus === 'REJECTED';
+			const normalizedStatus = String(paymentStatus || '').toLowerCase();
+			const isApproved = normalizedStatus === 'approved' || normalizedStatus === 'paid';
+			const isRejected = normalizedStatus === 'rejected' || normalizedStatus === 'failed';
 
 			if (isApproved) {
 				PushNotificationService.sendAdminPushNotification({

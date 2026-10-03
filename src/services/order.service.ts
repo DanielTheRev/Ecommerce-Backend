@@ -1789,6 +1789,12 @@ export class OrderService {
 
 			await order.save();
 
+			// Enviar correo de pago acreditado al comprador y registrar compra en Meta CAPI
+			ResendService.sendPaymentReceivedEmail(order.toObject() as unknown as IOrder, models)
+				.catch(err => console.error('[Resend] Error enviando email de pago recibido por transferencia:', err));
+			MetaService.trackPurchaseFromOrder(order.toObject(), undefined, undefined, undefined, models)
+				.catch(err => console.error('[Meta CAPI] Error enviando Purchase event:', err));
+
 			const safeOrder = await models.Order.findById(order._id).populate([
 				{ path: 'user', select: 'name email' },
 				{ path: 'seller', select: 'name' }
