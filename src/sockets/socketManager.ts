@@ -59,6 +59,10 @@ class SocketManager {
 	private connectedClients: Map<string, AuthSocket> = new Map();
 	private activeScanners: Map<string, ActiveScannerInfo> = new Map();
 
+	public get isInitialized(): boolean {
+		return !!this.io;
+	}
+
 	initialize(server: HTTPServer) {
 		this.io = new SocketIOServer(server, {
 			cors: {

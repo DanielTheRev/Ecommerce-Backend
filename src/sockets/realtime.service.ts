@@ -456,15 +456,26 @@ class RealtimeServiceDispatcher implements IRealtimeService {
 	private supabaseService = new SupabaseRealtimeService();
 
 	private get activeService(): IRealtimeService {
-		const provider = (process.env.REALTIME_PROVIDER || 'socketio').trim().toLowerCase();
+		const provider = (process.env.REALTIME_PROVIDER || '').trim().toLowerCase();
 		if (provider === 'supabase') {
+			return this.supabaseService;
+		}
+		if (provider === 'socketio' && !process.env.VERCEL && socketManager.isInitialized) {
+			return this.socketService;
+		}
+		// En Vercel Serverless o sin servidor Socket.io activo, usar Supabase Realtime
+		if (process.env.VERCEL || !socketManager.isInitialized) {
 			return this.supabaseService;
 		}
 		return this.socketService;
 	}
 
 	public get providerName(): string {
-		return (process.env.REALTIME_PROVIDER || 'socketio').trim().toLowerCase();
+		const provider = (process.env.REALTIME_PROVIDER || '').trim().toLowerCase();
+		if (provider === 'supabase' || process.env.VERCEL || !socketManager.isInitialized) {
+			return 'supabase';
+		}
+		return 'socketio';
 	}
 
 	async notifyNewOrderToAdmins(tenantSlug: string, order: any): Promise<void> {
