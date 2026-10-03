@@ -133,6 +133,10 @@ export class MetaService {
       clientIp = clientIp.replace('::ffff:', '');
     }
 
+    if (clientIp && (clientIp === '127.0.0.1' || clientIp === '::1' || clientIp === 'localhost')) {
+      clientIp = undefined;
+    }
+
     // 2. User Agent
     const clientUserAgent = req.get ? req.get('user-agent') : req.headers?.['user-agent'];
 
@@ -365,6 +369,7 @@ export class MetaService {
       orderId: string;
       value: number;
       currency?: string;
+      contentType?: 'product' | 'product_group';
       contents?: Array<{ id: string; quantity: number; item_price?: number; title?: string }>;
       userData?: ITrackEventInput['userData'];
       eventSourceUrl?: string;
@@ -384,7 +389,7 @@ export class MetaService {
           currency: params.currency || 'ARS',
           value: params.value,
           order_id: params.orderId,
-          content_type: 'product',
+          content_type: params.contentType || 'product_group',
           content_ids: params.contents?.map((c) => c.id) || [],
           contents: params.contents,
           num_items: params.contents?.reduce((sum, item) => sum + item.quantity, 0),
@@ -405,6 +410,7 @@ export class MetaService {
       productName?: string;
       value?: number;
       currency?: string;
+      contentType?: 'product' | 'product_group';
       quantity?: number;
       userData?: ITrackEventInput['userData'];
       eventSourceUrl?: string;
@@ -424,7 +430,7 @@ export class MetaService {
           currency: params.currency || 'ARS',
           value: params.value,
           content_name: params.productName,
-          content_type: 'product',
+          content_type: params.contentType || 'product_group',
           content_ids: [params.productId],
           contents: [{ id: params.productId, quantity: qty, item_price: params.value }],
         },
@@ -444,6 +450,7 @@ export class MetaService {
       category?: string;
       value?: number;
       currency?: string;
+      contentType?: 'product' | 'product_group';
       userData?: ITrackEventInput['userData'];
       eventSourceUrl?: string;
       eventId?: string;
@@ -463,7 +470,7 @@ export class MetaService {
           value: params.value,
           content_name: params.productName,
           content_category: params.category,
-          content_type: 'product',
+          content_type: params.contentType || 'product_group',
           content_ids: [params.productId],
         },
       },
@@ -480,6 +487,7 @@ export class MetaService {
     params: {
       value?: number;
       currency?: string;
+      contentType?: 'product' | 'product_group';
       contents?: Array<{ id: string; quantity: number; item_price?: number }>;
       numItems?: number;
       userData?: ITrackEventInput['userData'];
@@ -499,7 +507,7 @@ export class MetaService {
         customData: {
           currency: params.currency || 'ARS',
           value: params.value,
-          content_type: 'product',
+          content_type: params.contentType || 'product_group',
           content_ids: params.contents?.map((c) => c.id) || [],
           contents: params.contents,
           num_items: params.numItems || params.contents?.reduce((sum, item) => sum + item.quantity, 0),

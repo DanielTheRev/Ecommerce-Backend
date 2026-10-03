@@ -165,12 +165,6 @@ export class ProductController {
 					eventSourceUrl: sourceUrl,
 					eventId: `vc_${prod._id ? prod._id.toString() : slug}`,
 				}, customAccessToken, customPixelId, customTestEventCode).catch(err => console.error('[Meta CAPI] Error tracking ViewContent:', err));
-
-				MetaService.trackEvent({
-					eventName: 'PageView',
-					userData,
-					eventSourceUrl: sourceUrl,
-				}, customAccessToken, customPixelId, customTestEventCode).catch(err => console.error('[Meta CAPI] Error tracking PageView:', err));
 			}
 		} catch (error) {
 			next(error);
