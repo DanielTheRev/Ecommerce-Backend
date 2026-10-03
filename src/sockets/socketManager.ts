@@ -63,6 +63,30 @@ class SocketManager {
 		return !!this.io;
 	}
 
+	public get ioServer(): SocketIOServer | null {
+		return this.io;
+	}
+
+	public emitToAdmins(tenantSlug: string, event: string, payload: any): void {
+		if (!this.io) return;
+		const room = tenantSlug ? `admins_${tenantSlug}` : 'admins';
+		this.io.to(room).emit(event, payload);
+	}
+
+	public emitToClient(tenantSlug: string, userId: string, event: string, payload: any): void {
+		if (!this.io) return;
+		this.io.to(`client_${tenantSlug}_${userId}`).emit(event, payload);
+		this.io.to(`client_${userId}`).emit(event, payload);
+	}
+
+	public emitToAllClients(tenantSlug: string, event: string, payload: any): void {
+		if (!this.io) return;
+		this.io.to(`clients_${tenantSlug}`).emit(event, payload);
+		for (const socket of this.connectedClients.values()) {
+			socket.emit(event, payload);
+		}
+	}
+
 	initialize(server: HTTPServer) {
 		this.io = new SocketIOServer(server, {
 			cors: {

@@ -155,7 +155,8 @@ export class SupabaseRealtimeService implements IRealtimeService {
 				headers: {
 					'Content-Type': 'application/json',
 					'apikey': this.serviceRoleKey,
-					'Authorization': `Bearer ${this.serviceRoleKey}`
+					'Authorization': `Bearer ${this.serviceRoleKey}`,
+					'User-Agent': 'Vexx-Backend-Realtime/1.0'
 				},
 				body: JSON.stringify({
 					messages: [
@@ -224,6 +225,12 @@ export class SupabaseRealtimeService implements IRealtimeService {
 			channelId: 'store_orders',
 			data: { orderId: String(order._id), orderNumber: orderNum, type: 'new_order' }
 		});
+
+		// 3. Emisión simultánea a Socket.io si hay conexiones de socket activas
+		if (socketManager.isInitialized) {
+			socketManager.emitToAdmins(tenantSlug, 'admin-notification', fullNotification);
+			console.log(`🌐 [Socket.io] 🛒 Notificación de Nueva Venta emitida a admins_${tenantSlug}`);
+		}
 	}
 
 	async notifyOrderUpdatedToAdmins(
@@ -291,6 +298,12 @@ export class SupabaseRealtimeService implements IRealtimeService {
 				data: { orderId: String(order._id), orderNumber: orderNum, type: 'order_status_changed' }
 			});
 		}
+
+		// 3. Emisión simultánea a Socket.io si hay conexiones de socket activas
+		if (socketManager.isInitialized) {
+			socketManager.emitToAdmins(tenantSlug, 'admin-notification', fullNotification);
+			console.log(`🌐 [Socket.io] 🔄 Notificación de Orden #${orderNum} (${updateType}) emitida a admins_${tenantSlug}`);
+		}
 	}
 
 	async notifyReceiptUploadedToAdmins(tenantSlug: string, order: any): Promise<void> {
@@ -319,6 +332,12 @@ export class SupabaseRealtimeService implements IRealtimeService {
 			channelId: 'store_orders',
 			data: { orderId: String(order._id), orderNumber: orderNum, type: 'receipt_uploaded' }
 		});
+
+		// 3. Emisión simultánea a Socket.io si hay conexiones de socket activas
+		if (socketManager.isInitialized) {
+			socketManager.emitToAdmins(tenantSlug, 'admin-notification', fullNotification);
+			console.log(`🌐 [Socket.io] 📄 Comprobante subido emitido a admins_${tenantSlug} | Orden #${orderNum}`);
+		}
 	}
 
 	async notifyAdminAlert(
@@ -349,6 +368,12 @@ export class SupabaseRealtimeService implements IRealtimeService {
 				data: { type: 'system_alert', severity }
 			});
 		}
+
+		// 3. Emisión simultánea a Socket.io si hay conexiones de socket activas
+		if (socketManager.isInitialized) {
+			socketManager.emitToAdmins(tenantSlug || '', 'admin-notification', fullNotification);
+			console.log(`🌐 [Socket.io] 🚨 Alerta de Sistema emitida a admins_${tenantSlug || 'global'}`);
+		}
 	}
 
 	async notifyClient(
@@ -377,6 +402,10 @@ export class SupabaseRealtimeService implements IRealtimeService {
 		const slug = tenantSlug || 'vura';
 		await this.broadcast(`tenant:${slug}:client:${userId}`, 'client-notification', finalNotification);
 		console.log(`⚡ [Supabase Realtime] 👤 Notificación emitida a cliente [tenant:${slug}:client:${userId}]: "${notificationPayload.title}"`);
+
+		if (socketManager.isInitialized) {
+			socketManager.emitToClient(slug, userId, 'client-notification', finalNotification);
+		}
 	}
 
 	async notifyAllClients(
@@ -387,6 +416,10 @@ export class SupabaseRealtimeService implements IRealtimeService {
 		const slug = tenantSlug || 'vura';
 		await this.broadcast(`tenant:${slug}:clients:all`, 'client-notification', finalNotification);
 		console.log(`⚡ [Supabase Realtime] 👥 Notificación masiva emitida a [tenant:${slug}:clients:all]`);
+
+		if (socketManager.isInitialized) {
+			socketManager.emitToAllClients(slug, 'client-notification', finalNotification);
+		}
 	}
 
 	async broadcastScannedBarcode(
@@ -422,6 +455,10 @@ export class SupabaseRealtimeService implements IRealtimeService {
 		await this.broadcast(`tenant:${tenantSlug}:pos`, 'pos:barcode_scanned', eventPayload);
 		await this.broadcast(`tenant:${tenantSlug}:admins`, 'pos:barcode_scanned', eventPayload);
 		console.log(`⚡ [Supabase Realtime] 📷 Barcode [${scanData.barcode}] transmitido a terminal [${scanData.terminalId || 'GLOBAL'}]`);
+
+		if (socketManager.isInitialized) {
+			socketManager.broadcastScannedBarcode(tenantSlug, scanData);
+		}
 	}
 
 	async notifyScannerStatus(tenantSlug: string, terminalId?: string): Promise<void> {
@@ -437,11 +474,16 @@ export class SupabaseRealtimeService implements IRealtimeService {
 		}
 		await this.broadcast(`tenant:${tenantSlug}:pos`, 'pos:scanner_status', payload);
 		await this.broadcast(`tenant:${tenantSlug}:admins`, 'pos:scanner_status', payload);
+
+		if (socketManager.isInitialized) {
+			socketManager.notifyScannerStatus(tenantSlug, terminalId);
+		}
 	}
 
 	getActiveScanners(tenantSlug: string, terminalId?: string): ActiveScannerInfo[] {
-		// En arquitectura serverless sin estado de memoria persistente,
-		// los escáneres se reportan por heartbeat o por REST
+		if (socketManager.isInitialized) {
+			return socketManager.getActiveScanners(tenantSlug, terminalId);
+		}
 		return [];
 	}
 }
@@ -449,7 +491,8 @@ export class SupabaseRealtimeService implements IRealtimeService {
 /**
  * Factory / Dispatcher inteligente:
  * Selecciona la implementación según REALTIME_PROVIDER ('supabase' | 'socketio').
- * Por defecto mantiene 'socketio' para máxima retrocompatibilidad y desarrollo local.
+ * SupabaseRealtimeService realiza DUAL DISPATCH por diseño:
+ * Emite a Supabase Realtime Broadcast (REST) + Push Notification Expo (Móvil) + Socket.io (si está activo).
  */
 class RealtimeServiceDispatcher implements IRealtimeService {
 	private socketService = new SocketRealtimeService();
@@ -457,25 +500,18 @@ class RealtimeServiceDispatcher implements IRealtimeService {
 
 	private get activeService(): IRealtimeService {
 		const provider = (process.env.REALTIME_PROVIDER || '').trim().toLowerCase();
-		if (provider === 'supabase') {
-			return this.supabaseService;
-		}
-		if (provider === 'socketio' && !process.env.VERCEL && socketManager.isInitialized) {
+		if (provider === 'socketio_only') {
 			return this.socketService;
 		}
-		// En Vercel Serverless o sin servidor Socket.io activo, usar Supabase Realtime
-		if (process.env.VERCEL || !socketManager.isInitialized) {
-			return this.supabaseService;
-		}
-		return this.socketService;
+		return this.supabaseService;
 	}
 
 	public get providerName(): string {
 		const provider = (process.env.REALTIME_PROVIDER || '').trim().toLowerCase();
-		if (provider === 'supabase' || process.env.VERCEL || !socketManager.isInitialized) {
-			return 'supabase';
+		if (provider === 'socketio_only') {
+			return 'socketio';
 		}
-		return 'socketio';
+		return 'supabase_dual';
 	}
 
 	async notifyNewOrderToAdmins(tenantSlug: string, order: any): Promise<void> {
