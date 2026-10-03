@@ -148,6 +148,14 @@ export const GeneralProductCreateSchema = z.object({
 	variants: optionalJsonString.pipe(z.array(GeneralVariantZodSchema).optional()).default([]),
 });
 
+export const CombineWithItemZodSchema = z.union([
+	z.string(),
+	z.object({
+		product: z.string(),
+		color: z.string().nullable().optional()
+	})
+]);
+
 // 2. Clothing Product Schema (Indumentaria / Moda - Vura - Estricto)
 export const ClothingProductCreateSchema = z.object({
 	...BaseProductFields,
@@ -168,7 +176,7 @@ export const ClothingProductCreateSchema = z.object({
 	sizeGuide: optionalJsonString.pipe(SizeGuideZodSchema.optional()),
 	careInstructions: optionalJsonString.pipe(z.array(z.string())).optional(),
 	season: z.string().optional(),
-	combineWith: optionalJsonString.pipe(z.array(z.string()).optional()).default([]),
+	combineWith: optionalJsonString.pipe(z.array(CombineWithItemZodSchema).optional()).default([]),
 });
 
 // 3. Tech Product Schema (Electrónica / Tecnología)
@@ -286,7 +294,7 @@ export const UpdateProductSchema = z.object({
 		sizeGuide: jsonString.pipe(SizeGuideZodSchema.nullable()).optional(),
 		careInstructions: jsonString.pipe(z.array(z.string())).optional(),
 		season: z.string().optional(),
-		combineWith: optionalJsonString.pipe(z.array(z.string())).optional(),
+		combineWith: optionalJsonString.pipe(z.array(CombineWithItemZodSchema).optional()).optional(),
 
 		// Beauty-specific
 		volume: z.string().optional(),

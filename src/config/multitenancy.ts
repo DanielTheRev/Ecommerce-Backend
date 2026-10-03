@@ -30,7 +30,13 @@ class ConnectionManager {
 		this.connectPromise = (async () => {
 			const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
 
-			this.baseConnection = await mongoose.createConnection(mongoURI).asPromise();
+			this.baseConnection = await mongoose.createConnection(mongoURI, {
+				maxPoolSize: process.env.MONGODB_MAX_POOL_SIZE ? parseInt(process.env.MONGODB_MAX_POOL_SIZE, 10) : 10,
+				minPoolSize: 0,
+				maxIdleTimeMS: 30000,
+				serverSelectionTimeoutMS: 5000,
+				socketTimeoutMS: 45000,
+			}).asPromise();
 			this.masterDb = this.baseConnection.useDb('master_db', { useCache: true });
 
 			// Registrar modelo Tenant y MasterProduct en master_db

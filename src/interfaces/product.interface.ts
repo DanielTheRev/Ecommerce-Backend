@@ -94,6 +94,11 @@ export interface ITechProduct extends IProduct {
 	variants: ITechVariant[];
 }
 
+export interface ICombineWithItem {
+	product: string | IProduct;
+	color?: string | null;
+}
+
 export interface IClothingProduct extends IProduct {
 	productType: ProductType.CLOTHING;
 	gender: ClothingGender;
@@ -105,7 +110,7 @@ export interface IClothingProduct extends IProduct {
 	careInstructions?: string[];
 	season?: string;
 	variants: IClothingVariant[];
-	combineWith?: (string | IProduct)[];
+	combineWith?: (string | IProduct | ICombineWithItem)[];
 }
 
 export interface IBeautyProduct extends IProduct {
@@ -298,7 +303,7 @@ export interface IProductCreateDTO {
 	sizeGuide?: string | ISizeGuide;
 	careInstructions?: string | string[];
 	season?: string;
-	combineWith?: string[] | string;
+	combineWith?: (string | ICombineWithItem)[] | string;
 
 	// Beauty-specific (opcionales a nivel DTO)
 	volume?: string;

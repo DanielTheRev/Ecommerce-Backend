@@ -44,8 +44,16 @@ const ClothingProductSchema = new Schema({
 		default: []
 	},
 	combineWith: [{
-		type: Schema.Types.ObjectId,
-		ref: 'Product'
+		product: {
+			type: Schema.Types.ObjectId,
+			ref: 'Product',
+			required: true
+		},
+		color: {
+			type: String,
+			default: null,
+			trim: true
+		}
 	}]
 });
 

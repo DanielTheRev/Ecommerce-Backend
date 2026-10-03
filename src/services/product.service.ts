@@ -1039,8 +1039,8 @@ export class ProductService {
 		try {
 			const product = (await models.Product.findOne({ slug, status: 'published' })
 				.populate({
-					path: 'combineWith',
-					select: 'model brand price salePrice images category status slug fit',
+					path: 'combineWith.product',
+					select: 'model brand price salePrice images category status slug fit variants',
 					match: { status: 'published' }
 				})
 				.lean()) as unknown as IProduct;
@@ -1058,9 +1058,14 @@ export class ProductService {
 		limitOverride?: number
 	): Promise<IProduct[]> {
 		try {
-			// 1. Obtener producto origen con provider y manualRecommendations
+			// 1. Obtener producto origen con provider, manualRecommendations y combineWith
 			const sourceProduct = (await models.Product.findOne({ slug, status: 'published' })
-				.select('+provider +manualRecommendations +recommendationsMode')
+				.select('+provider +manualRecommendations +recommendationsMode +combineWith')
+				.populate({
+					path: 'combineWith.product',
+					select: 'model brand price salePrice images category status slug fit variants isFeatured productType gender',
+					match: { status: 'published' }
+				})
 				.lean()) as unknown as IProduct;
 
 			if (!sourceProduct) {
@@ -1089,6 +1094,32 @@ export class ProductService {
 				if (manualProducts.length > 0) {
 					return manualProducts;
 				}
+			}
+
+			const excludeIds = [sourceProduct._id.toString()];
+			const recommendations: IProduct[] = [];
+			const selectedIdsSet = new Set<string>(excludeIds);
+
+			// 3.5. Caso COMBINE WITH (Outfit de la foto / Shop the Look de la prenda)
+			if (Array.isArray(rawSource.combineWith) && rawSource.combineWith.length > 0) {
+				for (const item of rawSource.combineWith) {
+					if (recommendations.length >= limit) break;
+					const p = item.product || item;
+					if (p && typeof p === 'object' && p._id && p.status === 'published') {
+						const pId = p._id.toString();
+						if (!selectedIdsSet.has(pId)) {
+							selectedIdsSet.add(pId);
+							recommendations.push({
+								...p,
+								targetColor: item.color || null
+							});
+						}
+					}
+				}
+			}
+
+			if (recommendations.length >= limit) {
+				return recommendations;
 			}
 
 			// 4. Caso AUTOMÁTICO INTELIGENTE (Outfit & Combo Builder con Afinidad de Proveedor)
@@ -1126,9 +1157,6 @@ export class ProductService {
 				}
 			}
 
-			const excludeIds = [sourceProduct._id.toString()];
-			const recommendations: IProduct[] = [];
-			const selectedIdsSet = new Set<string>(excludeIds);
 			const providerId = rawSource.provider ? (rawSource.provider._id ? rawSource.provider._id.toString() : rawSource.provider.toString()) : null;
 
 			// 6. Slots de Categorías con prioridad de MISMO PROVEEDOR
@@ -1612,9 +1640,17 @@ export class ProductService {
 				if (data.careInstructions) baseData.careInstructions = data.careInstructions;
 				if (data.season) baseData.season = data.season;
 				if (data.combineWith) {
-					baseData.combineWith = Array.isArray(data.combineWith)
+					const raw = Array.isArray(data.combineWith)
 						? data.combineWith
 						: (typeof data.combineWith === 'string' ? JSON.parse(data.combineWith) : []);
+					baseData.combineWith = (Array.isArray(raw) ? raw : []).map((item: any) => {
+						if (typeof item === 'string') return { product: item, color: null };
+						if (item && typeof item === 'object') {
+							const prodId = item.product || item._id;
+							return prodId ? { product: typeof prodId === 'object' ? prodId._id : prodId, color: item.color || null } : null;
+						}
+						return null;
+					}).filter(Boolean);
 				}
 			}
 
@@ -2188,7 +2224,14 @@ export class ProductService {
 						? JSON.parse((updateData as any).combineWith)
 						: (updateData as any).combineWith;
 					(updateData as any).combineWith = Array.isArray(raw)
-						? raw.map((item: any) => typeof item === 'string' ? item : item?._id).filter(Boolean)
+						? raw.map((item: any) => {
+							if (typeof item === 'string') return { product: item, color: null };
+							if (item && typeof item === 'object') {
+								const prodId = item.product || item._id;
+								return prodId ? { product: typeof prodId === 'object' ? prodId._id : prodId, color: item.color || null } : null;
+							}
+							return null;
+						}).filter(Boolean)
 						: [];
 				} catch (err) {
 					console.error('Error parsing combineWith in updateProductById:', err);

@@ -507,8 +507,29 @@ export class ProductController {
 
 			const page = parseInt(req.query.page as string) || 1;
 			const limit = parseInt(req.query.limit as string) || 10;
-			const sortBy = (req.query.sortBy as string | undefined) || 'createdAt';
-			const sortOrder = (req.query.sortOrder as string | undefined) || 'asc';
+
+			const rawSort = (req.query.sort as string) || '';
+			let sortBy = (req.query.sortBy as string | undefined);
+			let sortOrder = (req.query.sortOrder as string | undefined);
+
+			if (rawSort) {
+				if (rawSort === 'price_asc') {
+					sortBy = 'price';
+					sortOrder = 'asc';
+				} else if (rawSort === 'price_desc') {
+					sortBy = 'price';
+					sortOrder = 'desc';
+				} else if (rawSort === 'newest') {
+					sortBy = 'createdAt';
+					sortOrder = 'desc';
+				} else if (rawSort === 'oldest') {
+					sortBy = 'createdAt';
+					sortOrder = 'asc';
+				}
+			}
+
+			sortBy = sortBy || 'createdAt';
+			sortOrder = sortOrder || (sortBy === 'createdAt' ? 'desc' : 'asc');
 			const parsedInterleave = interleave !== undefined ? interleave === 'true' : undefined;
 			const parsedSplitColors = splitColors !== undefined ? splitColors === 'true' : undefined;
 
