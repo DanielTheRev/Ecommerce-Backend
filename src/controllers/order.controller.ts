@@ -191,9 +191,12 @@ export const createOrder = async (req: AuthRequest, res: Response, next: NextFun
 
 		// Extraer datos de Meta Tracking del request (IP real Cloudflare, cookies _fbc/_fbp, headers, User-Agent)
 		const reqUserData = MetaService.extractUserDataFromReq(req) || {};
+		const rawFbc = newOrderDTO.metaTracking?.fbc || reqUserData.fbc;
+		const rawFbp = newOrderDTO.metaTracking?.fbp || reqUserData.fbp;
+
 		const metaTracking = {
-			fbc: newOrderDTO.metaTracking?.fbc || reqUserData.fbc,
-			fbp: newOrderDTO.metaTracking?.fbp || reqUserData.fbp,
+			fbc: MetaService.isValidFbc(rawFbc) ? (rawFbc as string).trim() : undefined,
+			fbp: MetaService.isValidFbp(rawFbp) ? (rawFbp as string).trim() : undefined,
 			clientIp: reqUserData.clientIp,
 			clientUserAgent: reqUserData.clientUserAgent,
 			externalId: newOrderDTO.metaTracking?.externalId || (Array.isArray(reqUserData.externalId) ? reqUserData.externalId[0] : reqUserData.externalId),

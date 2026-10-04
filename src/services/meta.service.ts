@@ -57,6 +57,39 @@ export class MetaService {
   }
 
   /**
+   * Strictly validates fbc format according to Meta Conversions API specifications:
+   * Format: fb.<subdomainIndex>.<creationTimeInMs>.<fbclid>
+   */
+  public static isValidFbc(val?: string | null): boolean {
+    if (!val || typeof val !== 'string') return false;
+    const trimmed = val.trim();
+    if (trimmed === '' || trimmed === 'undefined' || trimmed === 'null') return false;
+    const parts = trimmed.split('.');
+    if (parts.length < 4 || parts[0] !== 'fb') return false;
+    if (!/^\d+$/.test(parts[1])) return false;
+    if (!/^\d{10,15}$/.test(parts[2])) return false;
+    const clickId = parts.slice(3).join('.');
+    if (!clickId || clickId === 'undefined' || clickId === 'null' || /\s/.test(clickId)) return false;
+    return true;
+  }
+
+  /**
+   * Strictly validates fbp format according to Meta Conversions API specifications:
+   * Format: fb.<subdomainIndex>.<creationTimeInMs>.<random>
+   */
+  public static isValidFbp(val?: string | null): boolean {
+    if (!val || typeof val !== 'string') return false;
+    const trimmed = val.trim();
+    if (trimmed === '' || trimmed === 'undefined' || trimmed === 'null') return false;
+    const parts = trimmed.split('.');
+    if (parts.length !== 4 || parts[0] !== 'fb') return false;
+    if (!/^\d+$/.test(parts[1])) return false;
+    if (!/^\d{10,15}$/.test(parts[2])) return false;
+    if (!/^\d+$/.test(parts[3])) return false;
+    return true;
+  }
+
+  /**
    * Formats raw user details into Meta's required IMetaUserData schema with proper SHA-256 hashing.
    */
   public static prepareUserData(rawUserData: ITrackEventInput['userData']): IMetaUserData {
@@ -94,11 +127,15 @@ export class MetaService {
         : this.hashData(rawUserData.externalId);
     }
 
-    // Unhashed fields (Meta requires these unhashed)
+    // Unhashed fields (Meta requires these unhashed, only when valid)
     if (rawUserData.clientIp) userData.client_ip_address = rawUserData.clientIp;
     if (rawUserData.clientUserAgent) userData.client_user_agent = rawUserData.clientUserAgent;
-    if (rawUserData.fbc) userData.fbc = rawUserData.fbc;
-    if (rawUserData.fbp) userData.fbp = rawUserData.fbp;
+    if (rawUserData.fbc && this.isValidFbc(rawUserData.fbc)) {
+      userData.fbc = rawUserData.fbc.trim();
+    }
+    if (rawUserData.fbp && this.isValidFbp(rawUserData.fbp)) {
+      userData.fbp = rawUserData.fbp.trim();
+    }
 
     return userData;
   }
@@ -142,12 +179,31 @@ export class MetaService {
 
     // 3. fbc & fbp cookies / headers / query params
     const cookies = req.cookies || {};
-    let fbc = cookies['_fbc'] || req.headers?.['x-fbc'] || (req.query ? req.query['fbc'] : undefined);
-    const fbp = cookies['_fbp'] || req.headers?.['x-fbp'] || (req.query ? req.query['fbp'] : undefined);
+    const rawFbcHeader = req.headers?.['x-fbc'];
+    const rawFbcQuery = req.query ? req.query['fbc'] : undefined;
+    let rawFbc = cookies['_fbc'] || (Array.isArray(rawFbcHeader) ? rawFbcHeader[0] : rawFbcHeader) || (Array.isArray(rawFbcQuery) ? rawFbcQuery[0] : rawFbcQuery);
 
-    // If fbc isn't set, check if fbclid was in query or referer
-    if (!fbc && req.query && req.query['fbclid']) {
-      fbc = `fb.1.${Date.now()}.${req.query['fbclid']}`;
+    let fbc: string | undefined = typeof rawFbc === 'string' && rawFbc.trim() ? rawFbc.trim() : undefined;
+
+    // If fbc isn't set, check if a valid fbclid was in query
+    if (!this.isValidFbc(fbc) && req.query && req.query['fbclid']) {
+      const rawFbclid = Array.isArray(req.query['fbclid']) ? req.query['fbclid'][0] : req.query['fbclid'];
+      if (typeof rawFbclid === 'string' && rawFbclid.trim() && !/\s/.test(rawFbclid.trim())) {
+        fbc = `fb.1.${Date.now()}.${rawFbclid.trim()}`;
+      }
+    }
+
+    if (!this.isValidFbc(fbc)) {
+      fbc = undefined;
+    }
+
+    const rawFbpHeader = req.headers?.['x-fbp'];
+    const rawFbpQuery = req.query ? req.query['fbp'] : undefined;
+    let rawFbp = cookies['_fbp'] || (Array.isArray(rawFbpHeader) ? rawFbpHeader[0] : rawFbpHeader) || (Array.isArray(rawFbpQuery) ? rawFbpQuery[0] : rawFbpQuery);
+
+    let fbp: string | undefined = typeof rawFbp === 'string' && rawFbp.trim() ? rawFbp.trim() : undefined;
+    if (!this.isValidFbp(fbp)) {
+      fbp = undefined;
     }
 
     // 4. Auth User External ID, Email, Name, Phone
