@@ -501,8 +501,8 @@ export class ProductService {
 				.select('+provider +finance +linkProductProvider')
 				.populate('provider')
 				.populate({
-					path: 'combineWith',
-					select: 'model brand price images category status slug'
+					path: 'combineWith.product',
+					select: 'model brand price images category status slug variants'
 				})
 				.lean() as unknown as IProduct;
 			return product;
@@ -517,8 +517,8 @@ export class ProductService {
 			const product = (await models.Product.findById(id)
 				.select('+provider +finance +linkProductProvider')
 				.populate({
-					path: 'combineWith',
-					select: 'model brand price images category status slug'
+					path: 'combineWith.product',
+					select: 'model brand price images category status slug variants'
 				})
 				.lean()) as unknown as IProduct;
 			if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
@@ -922,7 +922,7 @@ export class ProductService {
 					select: '+provider +finance +linkProductProvider',
 					populate: [
 						{ path: 'provider' },
-						{ path: 'combineWith', select: 'model brand category slug images' }
+						{ path: 'combineWith.product', select: 'model brand category slug images price variants' }
 					]
 				}),
 				Model.aggregate([
