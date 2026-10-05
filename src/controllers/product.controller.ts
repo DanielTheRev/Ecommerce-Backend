@@ -133,11 +133,9 @@ export class ProductController {
 			if (product) {
 				const prod = product as any;
 				const priceVal = prod.price?.cashTransferPrice || prod.price?.listPrice || 0;
-				const referer = req.get('referer') || req.get('origin');
-				let sourceUrl = referer || `${req.protocol}://${req.get('host')}/products/${slug}`;
+				let sourceUrl = `https://vura.com.ar/products/${slug}`;
 				if (req.query && req.query['fbclid']) {
-					const separator = sourceUrl.includes('?') ? '&' : '?';
-					sourceUrl += `${separator}fbclid=${encodeURIComponent(String(req.query['fbclid']))}`;
+					sourceUrl += `?fbclid=${encodeURIComponent(String(req.query['fbclid']))}`;
 				}
 				const userData = MetaService.extractUserDataFromReq(req);
 

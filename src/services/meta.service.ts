@@ -350,6 +350,8 @@ export class MetaService {
         tieneTelefono: !!e.user_data?.ph,
         tieneNombre: !!e.user_data?.fn,
         ip: e.user_data?.client_ip_address,
+        fbc: e.user_data?.fbc,
+        fbp: e.user_data?.fbp,
         agente: e.user_data?.client_user_agent
           ? e.user_data.client_user_agent.substring(0, 35) + '...'
           : undefined,
