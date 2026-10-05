@@ -8,7 +8,6 @@ export const MasterProductSchema = new Schema<IMasterProductDocument>(
 			required: [true, 'El código de barras es requerido'],
 			unique: true,
 			trim: true,
-			index: true
 		},
 		name: {
 			type: String,
@@ -67,7 +66,7 @@ export const MasterProductSchema = new Schema<IMasterProductDocument>(
 	},
 	{
 		timestamps: true,
-		versionKey: false
+		versionKey: false,
 	}
 );
 
