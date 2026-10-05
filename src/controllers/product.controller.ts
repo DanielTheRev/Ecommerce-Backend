@@ -134,7 +134,11 @@ export class ProductController {
 				const prod = product as any;
 				const priceVal = prod.price?.cashTransferPrice || prod.price?.listPrice || 0;
 				const referer = req.get('referer') || req.get('origin');
-				const sourceUrl = referer || `${req.protocol}://${req.get('host')}/products/${slug}`;
+				let sourceUrl = referer || `${req.protocol}://${req.get('host')}/products/${slug}`;
+				if (req.query && req.query['fbclid']) {
+					const separator = sourceUrl.includes('?') ? '&' : '?';
+					sourceUrl += `${separator}fbclid=${encodeURIComponent(String(req.query['fbclid']))}`;
+				}
 				const userData = MetaService.extractUserDataFromReq(req);
 
 				let customAccessToken: string | undefined;
