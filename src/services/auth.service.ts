@@ -262,8 +262,8 @@ export class AuthService {
 				rewards: {
 					firstPurchaseEligible: true,
 					firstPurchaseUsed: false,
-					newsletterSubscribed: !!isNewsletterSubscribed,
-					newsletterSubscribedAt: isNewsletterSubscribed ? new Date() : null,
+					newsletterSubscribed: true,
+					newsletterSubscribedAt: new Date(),
 					newsletterUsed: false,
 					instagramClaimed: false,
 					instagramUsed: false
@@ -272,6 +272,14 @@ export class AuthService {
 			};
 
 			user = await UserService.createUser(models, newUserData as any);
+
+			if (!isNewsletterSubscribed) {
+				try {
+					await models.Newsletter.create({ email });
+				} catch (nlErr) {
+					console.error('Error auto-creating newsletter subscriber for new user:', nlErr);
+				}
+			}
 
 			try {
 				await models.Order.updateMany(

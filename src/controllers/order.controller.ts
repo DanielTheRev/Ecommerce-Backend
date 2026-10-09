@@ -191,15 +191,21 @@ export const createOrder = async (req: AuthRequest, res: Response, next: NextFun
 
 		// Extraer datos de Meta Tracking del request (IP real Cloudflare, cookies _fbc/_fbp, headers, User-Agent)
 		const reqUserData = MetaService.extractUserDataFromReq(req) || {};
+		if (reqUserData.cookiesToSet) {
+			MetaService.applyCookiesToRes(res, reqUserData.cookiesToSet);
+		}
 		const rawFbc = newOrderDTO.metaTracking?.fbc || reqUserData.fbc;
 		const rawFbp = newOrderDTO.metaTracking?.fbp || reqUserData.fbp;
+
+		const rawSourceUrl = newOrderDTO.metaTracking?.eventSourceUrl || req.get('referer') || req.get('origin') || `${baseUrl}/bag/checkout`;
 
 		const metaTracking = {
 			fbc: MetaService.isValidFbc(rawFbc) ? (rawFbc as string).trim() : undefined,
 			fbp: MetaService.isValidFbp(rawFbp) ? (rawFbp as string).trim() : undefined,
-			clientIp: reqUserData.clientIp,
+			clientIp: reqUserData.clientIp || newOrderDTO.metaTracking?.clientIp,
 			clientUserAgent: reqUserData.clientUserAgent,
 			externalId: newOrderDTO.metaTracking?.externalId || (Array.isArray(reqUserData.externalId) ? reqUserData.externalId[0] : reqUserData.externalId),
+			eventSourceUrl: rawSourceUrl,
 		};
 
 		const { order, safeOrder, extras } = await OrderService.createOrder(

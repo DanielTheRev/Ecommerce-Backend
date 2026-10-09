@@ -134,6 +134,7 @@ export class OrderService {
 			clientIp?: string;
 			clientUserAgent?: string;
 			externalId?: string;
+			eventSourceUrl?: string;
 		}
 	): Promise<CreateOrderResponse> {
 		try {
@@ -251,7 +252,14 @@ export class OrderService {
 					shippingConfig: config.shippingConfig
 				});
 
-				appliedShippingCost = calc.finalShippingCost;
+				const isExpress = (data.shippingMethod as any)?.service === 'express' ||
+					(shippingMethod.name && shippingMethod.name.toLowerCase().includes('expres'));
+				if (isExpress) {
+					const expressOpt = calc.options.find(o => o.service === 'express');
+					appliedShippingCost = expressOpt ? expressOpt.cost : calc.finalShippingCost;
+				} else {
+					appliedShippingCost = calc.finalShippingCost;
+				}
 			} else if (shippingMethod.type === ShippingType.PICKUP || shippingMethod.type === ShippingType.STORE_PICKUP) {
 				appliedShippingCost = 0;
 			} else if (shippingMethod.type === ShippingType.BRANCH_PICKUP) {
@@ -427,8 +435,13 @@ export class OrderService {
 			}
 
 			// Disparar evento InitiateCheckout a Meta Conversions API para cualquier orden creada
-			MetaService.trackInitiateCheckoutFromOrder(newOrder.toObject(), undefined, undefined, undefined, models)
-				.catch(err => console.error('[Meta CAPI] Error enviando InitiateCheckout:', err));
+			MetaService.trackInitiateCheckoutFromOrder(
+				newOrder.toObject(),
+				metaTracking?.clientIp,
+				metaTracking?.clientUserAgent,
+				metaTracking?.eventSourceUrl,
+				models
+			).catch(err => console.error('[Meta CAPI] Error enviando InitiateCheckout:', err));
 
 			const safeOrder = this.buildSafeOrder(newOrder);
 

@@ -64,6 +64,7 @@ export interface IMetaEvent {
   event_time: number; // Unix timestamp in seconds
   event_id?: string;  // For deduplication with frontend Meta Pixel
   event_source_url?: string;
+  referrer_url?: string;
   action_source: 'website' | 'app' | 'physical_store' | 'system_generated' | 'other';
   user_data: IMetaUserData;
   custom_data?: IMetaCustomData;
@@ -78,6 +79,7 @@ export interface IMetaEventPayload {
 export interface ITrackEventInput {
   eventName: MetaStandardEventName | string;
   eventSourceUrl?: string;
+  referrerUrl?: string;
   eventId?: string;
   userData?: {
     email?: string;
@@ -93,6 +95,9 @@ export interface ITrackEventInput {
     state?: string;
     zip?: string;
     country?: string;
+    referrerUrl?: string;
+    eventSourceUrl?: string;
+    cookiesToSet?: any[];
   };
   customData?: IMetaCustomData;
 }

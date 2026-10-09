@@ -263,6 +263,14 @@ const EcommerceSchema = new Schema(
 				caba: { type: Number, default: 8900 },
 				buenosAires: { type: Number, default: 9900 },
 				interior: { type: Number, default: 11900 }
+			},
+			classicEstimatedDelivery: { type: String, default: '2 a 5 días hábiles' },
+			enableExpressShipping: { type: Boolean, default: true },
+			expressEstimatedDelivery: { type: String, default: '1 a 3 días hábiles' },
+			expressZoneRates: {
+				caba: { type: Number, default: 12900 },
+				buenosAires: { type: Number, default: 14900 },
+				interior: { type: Number, default: 18900 }
 			}
 		},
 		recommendationConfig: {

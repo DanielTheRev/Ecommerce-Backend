@@ -172,21 +172,43 @@ export interface IDynamicShippingCalculationParams {
 			buenosAires?: number;
 			interior?: number;
 		};
+		classicEstimatedDelivery?: string;
+		enableExpressShipping?: boolean;
+		expressEstimatedDelivery?: string;
+		expressZoneRates?: {
+			caba?: number;
+			buenosAires?: number;
+			interior?: number;
+		};
 	};
+}
+
+export interface IShippingOptionItem {
+	id: string;
+	carrier: string;
+	service: 'classic' | 'express';
+	name: string;
+	cost: number;
+	estimatedDelivery: string;
+	isFree: boolean;
+	description?: string;
 }
 
 export interface IDynamicShippingCalculationResult {
 	zone: ShippingZone;
+	zoneName: string;
 	zoneBaseRate: number;
 	accumulatedSubsidy: number;
 	isFreeShipping: boolean;
 	minShippingFloor: number;
 	finalShippingCost: number;
+	options: IShippingOptionItem[];
 }
 
 /**
  * Calculates the dynamic shipping cost applying zone rates, item subsidies,
  * free shipping thresholds, and the credibility floor price.
+ * Returns both Correo Argentino Paq.ar Clásico and Paq.ar Expreso.
  */
 export function calculateDynamicShippingCost(
 	params: IDynamicShippingCalculationParams
@@ -208,32 +230,72 @@ export function calculateDynamicShippingCost(
 		interior: shippingConfig?.zoneRates?.interior ?? 11900
 	};
 
+	const zoneNames: Record<ShippingZone, string> = {
+		caba: 'CABA (Capital Federal)',
+		buenosAires: 'Provincia de Buenos Aires',
+		interior: 'Resto del País (Interior)'
+	};
+
 	const zone = detectShippingZone(stateOrProvince, zipCode);
 	const zoneBaseRate = zoneRates[zone];
+	const zoneName = zoneNames[zone];
 
-	// 1. Umbral de Envío Gratis
-	if (subtotal >= threshold) {
-		return {
-			zone,
-			zoneBaseRate,
-			accumulatedSubsidy,
-			isFreeShipping: true,
-			minShippingFloor,
-			finalShippingCost: 0
-		};
-	}
-
-	// 2. Cálculo con subsidio y piso de credibilidad
+	const isFreeShipping = subtotal >= threshold;
 	const effectiveSubsidy = accumulatedSubsidy > 0 ? accumulatedSubsidy : (itemCount * (shippingConfig?.defaultItemSubsidy ?? 4000));
-	const rawCost = zoneBaseRate - effectiveSubsidy;
-	const finalShippingCost = Math.max(rawCost, minShippingFloor);
+
+	// 1. Tarifa Clásica
+	const rawClassicCost = zoneBaseRate - effectiveSubsidy;
+	const classicCost = isFreeShipping ? 0 : Math.max(rawClassicCost, minShippingFloor);
+	const classicDelivery = shippingConfig?.classicEstimatedDelivery || '2 a 5 días hábiles';
+
+	const options: IShippingOptionItem[] = [
+		{
+			id: 'correo-argentino-clasico',
+			carrier: 'Correo Argentino',
+			service: 'classic',
+			name: 'Paq.ar Clásico a Domicilio',
+			cost: classicCost,
+			estimatedDelivery: classicDelivery,
+			isFree: isFreeShipping,
+			description: isFreeShipping ? '¡Envío bonificado 100% por superar el umbral de compra!' : 'Entrega estándar económica y confiable'
+		}
+	];
+
+	// 2. Tarifa Expresa (si está habilitada)
+	if (shippingConfig?.enableExpressShipping !== false) {
+		const expressRates = {
+			caba: shippingConfig?.expressZoneRates?.caba ?? 12900,
+			buenosAires: shippingConfig?.expressZoneRates?.buenosAires ?? 14900,
+			interior: shippingConfig?.expressZoneRates?.interior ?? 18900
+		};
+		const expressBaseRate = expressRates[zone];
+		const expressDelivery = shippingConfig?.expressEstimatedDelivery || '1 a 3 días hábiles';
+
+		// Si superó el umbral, el express paga sólo la diferencia respecto a la tarifa estándar
+		const expressCost = isFreeShipping
+			? Math.max(expressBaseRate - zoneBaseRate, 5500)
+			: Math.max(expressBaseRate - effectiveSubsidy, minShippingFloor + 3500);
+
+		options.push({
+			id: 'correo-argentino-expreso',
+			carrier: 'Correo Argentino',
+			service: 'express',
+			name: 'Paq.ar Expreso a Domicilio',
+			cost: expressCost,
+			estimatedDelivery: expressDelivery,
+			isFree: false,
+			description: 'Despacho prioritario y entrega rápida en puerta'
+		});
+	}
 
 	return {
 		zone,
+		zoneName,
 		zoneBaseRate,
 		accumulatedSubsidy: effectiveSubsidy,
-		isFreeShipping: false,
+		isFreeShipping,
 		minShippingFloor,
-		finalShippingCost
+		finalShippingCost: classicCost,
+		options
 	};
 }

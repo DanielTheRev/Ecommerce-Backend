@@ -225,6 +225,14 @@ export interface IShippingConfig {
 		buenosAires: number; // Tarifa base Bs As (ej: 9900)
 		interior: number; // Tarifa base Interior (ej: 11900)
 	};
+	classicEstimatedDelivery?: string; // Plazo estimado Clásico (ej: "2 a 5 días hábiles")
+	enableExpressShipping?: boolean; // Habilitar Paq.ar Expreso
+	expressEstimatedDelivery?: string; // Plazo estimado Expreso (ej: "1 a 3 días hábiles")
+	expressZoneRates?: {
+		caba: number; // Tarifa express CABA (ej: 12900)
+		buenosAires: number; // Tarifa express Bs As (ej: 14900)
+		interior: number; // Tarifa express Interior (ej: 18900)
+	};
 }
 
 export interface IEcommercePaymentGateway {

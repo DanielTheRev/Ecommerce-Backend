@@ -44,6 +44,7 @@ export interface CreateOrderDTO {
 		clientIp?: string;
 		clientUserAgent?: string;
 		externalId?: string;
+		eventSourceUrl?: string;
 	};
 }
 
@@ -264,6 +265,7 @@ export interface IOrder {
 		clientIp?: string;
 		clientUserAgent?: string;
 		externalId?: string;
+		eventSourceUrl?: string;
 	};
 	createdAt: Date;
 	updatedAt: Date;

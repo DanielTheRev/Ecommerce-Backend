@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import dotenv from 'dotenv';
+import { ParamBuilder, PII_DATA_TYPE, CookieSettings } from 'capi-param-builder-nodejs';
 import {
   IMetaEvent,
   IMetaEventPayload,
@@ -11,6 +12,11 @@ import {
 dotenv.config();
 
 export class MetaService {
+  /**
+   * Meta official ParamBuilder instance for PII normalization and hashing
+   */
+  private static paramBuilder = new ParamBuilder();
+
   /**
    * Environment variable names used:
    * - META_ACCESS_TOKEN: Access token for Graph API (Conversions API)
@@ -39,50 +45,64 @@ export class MetaService {
   }
 
   /**
-   * Hashes data with SHA-256 according to Meta Conversions API specifications.
+   * Hashes data with Meta's official normalizer and SHA-256 according to Meta Conversions API specifications.
    */
-  public static hashData(value: string): string {
+  public static hashData(value: string, dataType?: string): string {
     if (!value) return '';
+    if (dataType) {
+      try {
+        const hashed = this.paramBuilder.getNormalizedAndHashedPII(value, dataType);
+        if (hashed) return hashed;
+      } catch (e) {
+        // Fallback to manual sha256 below
+      }
+    }
     const cleanValue = value.trim().toLowerCase();
     return crypto.createHash('sha256').update(cleanValue).digest('hex');
   }
 
   /**
-   * Normalizes and hashes phone numbers according to Meta specs (digits only).
+   * Normalizes and hashes phone numbers according to Meta specs (official ParamBuilder or digits only SHA-256).
    */
   public static hashPhone(phone: string): string {
     if (!phone) return '';
+    try {
+      const hashed = this.paramBuilder.getNormalizedAndHashedPII(phone, PII_DATA_TYPE.PHONE);
+      if (hashed) return hashed;
+    } catch (e) {
+      // Fallback
+    }
     const digitsOnly = phone.replace(/\D/g, '');
     return crypto.createHash('sha256').update(digitsOnly).digest('hex');
   }
 
   /**
    * Strictly validates fbc format according to Meta Conversions API specifications:
-   * Format: fb.<subdomainIndex>.<creationTimeInMs>.<fbclid>
+   * Format: fb.<subdomainIndex>.<creationTimeInMs>.<fbclid>[.<appendixToken>]
    */
   public static isValidFbc(val?: string | null): boolean {
     if (!val || typeof val !== 'string') return false;
     const trimmed = val.trim();
     if (trimmed === '' || trimmed === 'undefined' || trimmed === 'null') return false;
     const parts = trimmed.split('.');
-    if (parts.length < 4 || parts[0] !== 'fb') return false;
+    if ((parts.length !== 4 && parts.length !== 5) || parts[0] !== 'fb') return false;
     if (!/^\d+$/.test(parts[1])) return false;
     if (!/^\d{10,15}$/.test(parts[2])) return false;
-    const clickId = parts.slice(3).join('.');
+    const clickId = parts[3];
     if (!clickId || clickId === 'undefined' || clickId === 'null' || /\s/.test(clickId)) return false;
     return true;
   }
 
   /**
    * Strictly validates fbp format according to Meta Conversions API specifications:
-   * Format: fb.<subdomainIndex>.<creationTimeInMs>.<random>
+   * Format: fb.<subdomainIndex>.<creationTimeInMs>.<random>[.<appendixToken>]
    */
   public static isValidFbp(val?: string | null): boolean {
     if (!val || typeof val !== 'string') return false;
     const trimmed = val.trim();
     if (trimmed === '' || trimmed === 'undefined' || trimmed === 'null') return false;
     const parts = trimmed.split('.');
-    if (parts.length !== 4 || parts[0] !== 'fb') return false;
+    if ((parts.length !== 4 && parts.length !== 5) || parts[0] !== 'fb') return false;
     if (!/^\d+$/.test(parts[1])) return false;
     if (!/^\d{10,15}$/.test(parts[2])) return false;
     if (!/^\d+$/.test(parts[3])) return false;
@@ -90,7 +110,7 @@ export class MetaService {
   }
 
   /**
-   * Formats raw user details into Meta's required IMetaUserData schema with proper SHA-256 hashing.
+   * Formats raw user details into Meta's required IMetaUserData schema with official Meta SDK normalization & hashing.
    */
   public static prepareUserData(rawUserData: ITrackEventInput['userData']): IMetaUserData {
     if (!rawUserData) return {};
@@ -98,33 +118,33 @@ export class MetaService {
     const userData: IMetaUserData = {};
 
     if (rawUserData.email) {
-      userData.em = this.hashData(rawUserData.email);
+      userData.em = this.hashData(rawUserData.email, PII_DATA_TYPE.EMAIL);
     }
     if (rawUserData.phone) {
       userData.ph = this.hashPhone(rawUserData.phone);
     }
     if (rawUserData.firstName) {
-      userData.fn = this.hashData(rawUserData.firstName);
+      userData.fn = this.hashData(rawUserData.firstName, PII_DATA_TYPE.FIRST_NAME);
     }
     if (rawUserData.lastName) {
-      userData.ln = this.hashData(rawUserData.lastName);
+      userData.ln = this.hashData(rawUserData.lastName, PII_DATA_TYPE.LAST_NAME);
     }
     if (rawUserData.city) {
-      userData.ct = this.hashData(rawUserData.city);
+      userData.ct = this.hashData(rawUserData.city, PII_DATA_TYPE.CITY);
     }
     if (rawUserData.state) {
-      userData.st = this.hashData(rawUserData.state);
+      userData.st = this.hashData(rawUserData.state, PII_DATA_TYPE.STATE);
     }
     if (rawUserData.zip) {
-      userData.zp = this.hashData(rawUserData.zip);
+      userData.zp = this.hashData(rawUserData.zip, PII_DATA_TYPE.ZIP_CODE);
     }
     if (rawUserData.country) {
-      userData.country = this.hashData(rawUserData.country);
+      userData.country = this.hashData(rawUserData.country, PII_DATA_TYPE.COUNTRY);
     }
     if (rawUserData.externalId) {
       userData.external_id = Array.isArray(rawUserData.externalId)
-        ? rawUserData.externalId.map((id) => this.hashData(id))
-        : this.hashData(rawUserData.externalId);
+        ? rawUserData.externalId.map((id) => this.hashData(id, PII_DATA_TYPE.EXTERNAL_ID))
+        : this.hashData(rawUserData.externalId, PII_DATA_TYPE.EXTERNAL_ID);
     }
 
     // Unhashed fields (Meta requires these unhashed, only when valid)
@@ -142,74 +162,87 @@ export class MetaService {
 
   /**
    * Helper to extract Meta UserData (IP, UserAgent, fbc, fbp, externalId) directly from Express Request
+   * using Meta's official capi-param-builder-nodejs SDK.
    */
   public static extractUserDataFromReq(req: any): ITrackEventInput['userData'] {
     if (!req) return {};
 
     // 1. IP extraction (Cloudflare Tunnel / reverse proxy friendly)
-    const cfIp = req.headers ? req.headers['cf-connecting-ip'] : undefined;
-    const realIp = req.headers ? req.headers['x-real-ip'] : undefined;
-    const forwarded = req.headers ? req.headers['x-forwarded-for'] : undefined;
-    let clientIp = (cfIp && typeof cfIp === 'string') ? cfIp.trim() : undefined;
-
-    if (!clientIp && realIp && typeof realIp === 'string') {
-      clientIp = realIp.trim();
-    }
-
-    if (!clientIp && forwarded) {
-      const ips = typeof forwarded === 'string' ? forwarded.split(',') : forwarded;
-      if (ips.length > 0 && ips[0].trim()) {
-        clientIp = ips[0].trim();
-      }
-    }
-    if (!clientIp) {
-      clientIp = req.ip || req.socket?.remoteAddress;
-    }
-
-    if (clientIp && clientIp.startsWith('::ffff:')) {
-      clientIp = clientIp.replace('::ffff:', '');
-    }
-
-    if (clientIp && (clientIp === '127.0.0.1' || clientIp === '::1' || clientIp === 'localhost')) {
-      clientIp = undefined;
-    }
-
-    // 2. User Agent
-    const clientUserAgent = req.get ? req.get('user-agent') : req.headers?.['user-agent'];
-
-    // 3. fbc & fbp cookies / headers / query params
-    const cookies = req.cookies || {};
-    const rawFbcHeader = req.headers?.['x-fbc'];
-    const rawFbcQuery = req.query ? req.query['fbc'] : undefined;
-    let rawFbc = cookies['_fbc'] || (Array.isArray(rawFbcHeader) ? rawFbcHeader[0] : rawFbcHeader) || (Array.isArray(rawFbcQuery) ? rawFbcQuery[0] : rawFbcQuery);
-
-    let fbc: string | undefined = typeof rawFbc === 'string' && rawFbc.trim() ? rawFbc.trim() : undefined;
-
-    // If fbc isn't set, check if a valid fbclid was in query
-    if (!this.isValidFbc(fbc) && req.query && req.query['fbclid']) {
-      const rawFbclid = Array.isArray(req.query['fbclid']) ? req.query['fbclid'][0] : req.query['fbclid'];
-      if (typeof rawFbclid === 'string' && rawFbclid.trim() && !/\s/.test(rawFbclid.trim())) {
-        fbc = `fb.1.${Date.now()}.${rawFbclid.trim()}`;
-      }
-    }
-
-    if (!this.isValidFbc(fbc)) {
-      fbc = undefined;
-    }
-
-    const rawFbpHeader = req.headers?.['x-fbp'];
-    const rawFbpQuery = req.query ? req.query['fbp'] : undefined;
-    let rawFbp = cookies['_fbp'] || (Array.isArray(rawFbpHeader) ? rawFbpHeader[0] : rawFbpHeader) || (Array.isArray(rawFbpQuery) ? rawFbpQuery[0] : rawFbpQuery);
-
-    let fbp: string | undefined = typeof rawFbp === 'string' && rawFbp.trim() ? rawFbp.trim() : undefined;
-    if (!this.isValidFbp(fbp)) {
-      fbp = undefined;
-    }
-
-    // 4. Auth User External ID, Email, Name, Phone
-    const user = req.user;
     const headers = req.headers || {};
+    const cfIp = headers['cf-connecting-ip'];
+    const realIp = headers['x-real-ip'];
 
+    // If Cloudflare or reverse proxy provides real IP, ensure it's at the start of x-forwarded-for
+    // so ParamBuilder picks it up accurately
+    const priorityIp = (cfIp && typeof cfIp === 'string') ? cfIp.trim() : ((realIp && typeof realIp === 'string') ? realIp.trim() : undefined);
+    if (priorityIp) {
+      const existingXff = headers['x-forwarded-for'];
+      if (!existingXff || !existingXff.includes(priorityIp)) {
+        headers['x-forwarded-for'] = existingXff ? `${priorityIp}, ${existingXff}` : priorityIp;
+      }
+    }
+
+    // 2. Process with Meta's official ParamBuilder
+    const builder = new ParamBuilder();
+    let cookiesToSet: CookieSettings[] = [];
+    try {
+      cookiesToSet = builder.processRequestFromContext(req) || [];
+    } catch (err) {
+      console.warn('[MetaService] ParamBuilder.processRequestFromContext warning:', err);
+    }
+
+    let fbc = builder.getFbc() || undefined;
+    let fbp = builder.getFbp() || undefined;
+    let clientIp = builder.getClientIpAddress() || undefined;
+    const referrerUrl = builder.getReferrerUrl() || (typeof req.get === 'function' ? req.get('referer') : headers['referer']) || undefined;
+    const eventSourceUrl = builder.getEventSourceUrl() || undefined;
+
+    // 3. Fallbacks for fbc & fbp if not captured by ParamBuilder (headers/query/cookies)
+    const cookies = req.cookies || {};
+    if (!fbc) {
+      const rawFbcHeader = headers['x-fbc'];
+      const rawFbcQuery = req.query ? req.query['fbc'] : undefined;
+      const rawFbc = cookies['_fbc'] || (Array.isArray(rawFbcHeader) ? rawFbcHeader[0] : rawFbcHeader) || (Array.isArray(rawFbcQuery) ? rawFbcQuery[0] : rawFbcQuery);
+      if (typeof rawFbc === 'string' && rawFbc.trim() && this.isValidFbc(rawFbc)) {
+        fbc = rawFbc.trim();
+      }
+    }
+
+    if (!fbp) {
+      const rawFbpHeader = headers['x-fbp'];
+      const rawFbpQuery = req.query ? req.query['fbp'] : undefined;
+      const rawFbp = cookies['_fbp'] || (Array.isArray(rawFbpHeader) ? rawFbpHeader[0] : rawFbpHeader) || (Array.isArray(rawFbpQuery) ? rawFbpQuery[0] : rawFbpQuery);
+      if (typeof rawFbp === 'string' && rawFbp.trim() && this.isValidFbp(rawFbp)) {
+        fbp = rawFbp.trim();
+      }
+    }
+
+    // 4. Fallback for client IP if ParamBuilder did not resolve public IP
+    if (!clientIp) {
+      let rawIp = priorityIp;
+      if (!rawIp && headers['x-forwarded-for']) {
+        const forwarded = headers['x-forwarded-for'];
+        const ips = typeof forwarded === 'string' ? forwarded.split(',') : forwarded;
+        if (ips.length > 0 && ips[0].trim()) rawIp = ips[0].trim();
+      }
+      if (!rawIp) {
+        rawIp = req.ip || req.socket?.remoteAddress;
+      }
+      if (rawIp && rawIp.startsWith('::ffff:')) {
+        rawIp = rawIp.replace('::ffff:', '');
+      }
+      if (rawIp && (rawIp === '127.0.0.1' || rawIp === '::1' || rawIp === 'localhost' || rawIp.startsWith('192.168.') || rawIp.startsWith('10.'))) {
+        clientIp = undefined;
+      } else {
+        clientIp = rawIp;
+      }
+    }
+
+    // 5. User Agent
+    const clientUserAgent = req.get ? req.get('user-agent') : headers['user-agent'];
+
+    // 6. Auth User External ID, Email, Name, Phone
+    const user = req.user;
     const externalId = (headers['x-external-id'] && typeof headers['x-external-id'] === 'string')
       ? headers['x-external-id']
       : (user ? (user._id ? user._id.toString() : user.toString()) : undefined);
@@ -240,7 +273,31 @@ export class MetaService {
       firstName,
       lastName,
       phone,
+      referrerUrl,
+      eventSourceUrl,
+      cookiesToSet,
     };
+  }
+
+  /**
+   * Helper to set first-party cookies recommended by Meta ParamBuilder on Express response
+   */
+  public static applyCookiesToRes(res: any, cookies: CookieSettings[]): void {
+    if (!res || !res.cookie || !Array.isArray(cookies) || cookies.length === 0) return;
+    for (const c of cookies) {
+      try {
+        res.cookie(c.name, c.value, {
+          maxAge: c.maxAge * 1000,
+          domain: c.domain || undefined,
+          path: '/',
+          httpOnly: false,
+          sameSite: 'lax',
+          secure: process.env.NODE_ENV === 'production',
+        });
+      } catch (err) {
+        console.warn(`[MetaService] Could not set cookie ${c.name}:`, err);
+      }
+    }
   }
 
   /**
@@ -316,19 +373,21 @@ export class MetaService {
       return { success: false, error: 'META_PIXEL_ID missing' };
     }
 
-    if (process.env.NODE_ENV !== 'production' && !testCode) {
-      console.log('[MetaService] Skipping CAPI event in development mode (NODE_ENV !== production).');
-      return { success: true, data: 'Skipped in development' };
-    }
+    // 🛡️ REGLA ABSOLUTA: Bloquear CAPI si estamos en desarrollo o si el evento proviene de localhost
+    // El testCode de la DB NO debe puentear esta seguridad en local para no manchar el historial.
+    const isLocalhostEvent = events.some(e => {
+      const url = (e.event_source_url || '').toLowerCase();
+      const ip = (e.user_data?.client_ip_address || '').trim();
+      const isLocalUrl = !url || url.includes('localhost') || url.includes('127.0.0.1') || url.includes('0.0.0.0') || url.includes(':4200') || url.includes(':3000') || url.includes(':5173') || url.includes(':4000');
+      const isLocalIp = ip === '127.0.0.1' || ip === '::1' || ip.startsWith('192.168.') || ip.startsWith('10.');
+      return isLocalUrl || isLocalIp;
+    });
 
-    // 🛡️ Skip sending events if event_source_url contains localhost or 127.0.0.1 (unless testCode is set)
-    const isLocalhostEvent = events.some(e =>
-      e.event_source_url && (e.event_source_url.includes('localhost') || e.event_source_url.includes('127.0.0.1'))
-    );
+    const isForceDevEnabled = process.env.META_FORCE_LOCAL_TEST === 'true';
 
-    if (isLocalhostEvent && !testCode) {
-      console.log('[MetaService] Skipping CAPI event because event_source_url points to localhost / 127.0.0.1.');
-      return { success: true, data: 'Skipped localhost event' };
+    if ((process.env.NODE_ENV !== 'production' || isLocalhostEvent) && !isForceDevEnabled) {
+      console.log(`[MetaService] 🛡️ Evento bloqueado (origen local o entorno dev: ${isLocalhostEvent ? 'URL local detectada' : 'NODE_ENV dev'}). NO se envía a Meta.`);
+      return { success: true, data: 'Skipped local/dev event' };
     }
 
     const payload: IMetaEventPayload = {
@@ -410,7 +469,8 @@ export class MetaService {
       event_name: input.eventName,
       event_time: Math.floor(Date.now() / 1000),
       event_id: input.eventId,
-      event_source_url: input.eventSourceUrl,
+      event_source_url: input.eventSourceUrl || input.userData?.eventSourceUrl,
+      referrer_url: input.referrerUrl || input.userData?.referrerUrl,
       action_source: 'website',
       user_data: this.prepareUserData(input.userData),
       custom_data: input.customData,
@@ -618,10 +678,12 @@ export class MetaService {
       const userData = this.extractUserDataFromOrder(order, reqIp, reqUserAgent);
       const total = order.finance?.total || order.paymentInfo?.amount || 0;
 
+      const effectiveSourceUrl = eventSourceUrl || order.metaTracking?.eventSourceUrl;
+
       return await this.trackInitiateCheckout(
         {
           eventId: `initiate_checkout_${orderId}`,
-          eventSourceUrl,
+          eventSourceUrl: effectiveSourceUrl,
           value: total,
           currency: 'ARS',
           contents,
@@ -678,11 +740,13 @@ export class MetaService {
       const userData = this.extractUserDataFromOrder(order, reqIp, reqUserAgent);
       const total = order.finance?.total || order.paymentInfo?.amount || 0;
 
+      const effectiveSourceUrl = eventSourceUrl || order.metaTracking?.eventSourceUrl;
+
       return await this.trackPurchase(
         {
           orderId,
           eventId: `purchase_${orderId}`,
-          eventSourceUrl,
+          eventSourceUrl: effectiveSourceUrl,
           value: total,
           currency: 'ARS',
           contents,
