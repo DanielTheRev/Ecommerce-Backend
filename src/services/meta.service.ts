@@ -182,19 +182,28 @@ export class MetaService {
       }
     }
 
-    // Ensure req.cookies and req.query inherit from Object.prototype so Meta's ParamBuilder doesn't throw on cookies.hasOwnProperty()
-    if (req.cookies && typeof req.cookies === 'object') {
-      req.cookies = Object.assign({}, req.cookies);
-    }
-    if (req.query && typeof req.query === 'object') {
-      req.query = Object.assign({}, req.query);
-    }
+    // In Express 5, req.query is a read-only getter on IncomingMessage, so mutating req.query directly throws:
+    // "TypeError: Cannot set property query of #<IncomingMessage> which has only a getter"
+    // We create safe shallow copies of cookies and query inheriting from Object.prototype and wrap the context safely for ParamBuilder.
+    const safeCookies = (req.cookies && typeof req.cookies === 'object') ? Object.assign({}, req.cookies) : {};
+    const safeQuery = (req.query && typeof req.query === 'object') ? Object.assign({}, req.query) : {};
+
+    const reqContext = {
+      ...req,
+      headers,
+      cookies: safeCookies,
+      query: safeQuery,
+      socket: req.socket,
+      protocol: req.protocol,
+      originalUrl: req.originalUrl || req.url,
+      get: typeof req.get === 'function' ? req.get.bind(req) : (headerName: string) => headers[headerName.toLowerCase()],
+    };
 
     // 2. Process with Meta's official ParamBuilder
     const builder = new ParamBuilder();
     let cookiesToSet: CookieSettings[] = [];
     try {
-      cookiesToSet = builder.processRequestFromContext(req) || [];
+      cookiesToSet = builder.processRequestFromContext(reqContext) || [];
     } catch (err) {
       console.warn('[MetaService] ParamBuilder.processRequestFromContext warning:', err);
     }
@@ -206,10 +215,10 @@ export class MetaService {
     const eventSourceUrl = builder.getEventSourceUrl() || undefined;
 
     // 3. Fallbacks for fbc & fbp if not captured by ParamBuilder (headers/query/cookies)
-    const cookies = req.cookies || {};
+    const cookies = safeCookies;
     if (!fbc) {
       const rawFbcHeader = headers['x-fbc'];
-      const rawFbcQuery = req.query ? req.query['fbc'] : undefined;
+      const rawFbcQuery = safeQuery['fbc'];
       const rawFbc = cookies['_fbc'] || (Array.isArray(rawFbcHeader) ? rawFbcHeader[0] : rawFbcHeader) || (Array.isArray(rawFbcQuery) ? rawFbcQuery[0] : rawFbcQuery);
       if (typeof rawFbc === 'string' && rawFbc.trim() && this.isValidFbc(rawFbc)) {
         fbc = rawFbc.trim();
@@ -218,7 +227,7 @@ export class MetaService {
 
     if (!fbp) {
       const rawFbpHeader = headers['x-fbp'];
-      const rawFbpQuery = req.query ? req.query['fbp'] : undefined;
+      const rawFbpQuery = safeQuery['fbp'];
       const rawFbp = cookies['_fbp'] || (Array.isArray(rawFbpHeader) ? rawFbpHeader[0] : rawFbpHeader) || (Array.isArray(rawFbpQuery) ? rawFbpQuery[0] : rawFbpQuery);
       if (typeof rawFbp === 'string' && rawFbp.trim() && this.isValidFbp(rawFbp)) {
         fbp = rawFbp.trim();

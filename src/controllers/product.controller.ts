@@ -131,42 +131,46 @@ export class ProductController {
 			res.status(200).json(product);
 
 			if (product) {
-				const prod = product as any;
-				const priceVal = prod.price?.cashTransferPrice || prod.price?.listPrice || 0;
-				let sourceUrl = `https://vura.com.ar/products/${slug}`;
-				if (req.query && req.query['fbclid']) {
-					sourceUrl += `?fbclid=${encodeURIComponent(String(req.query['fbclid']))}`;
-				}
-				const userData = MetaService.extractUserDataFromReq(req);
-
-				let customAccessToken: string | undefined;
-				let customPixelId: string | undefined;
-				let customTestEventCode: string | undefined;
-
-				if (req.models) {
-					try {
-						const { EcommerceService } = await import('../services/ecommerce.service');
-						const config = await EcommerceService.getConfig(req.models);
-						if (config.integrations?.metaPixel?.active && config.integrations.metaPixel.pixelId && config.integrations.metaPixel.accessToken) {
-							customPixelId = config.integrations.metaPixel.pixelId;
-							customAccessToken = config.integrations.metaPixel.accessToken;
-							customTestEventCode = config.integrations.metaPixel.testEventCode;
-						}
-					} catch (e) {
-						console.error('[Meta CAPI] Error loading store config in getProductBySlug:', e);
+				try {
+					const prod = product as any;
+					const priceVal = prod.price?.cashTransferPrice || prod.price?.listPrice || 0;
+					let sourceUrl = `https://vura.com.ar/products/${slug}`;
+					if (req.query && req.query['fbclid']) {
+						sourceUrl += `?fbclid=${encodeURIComponent(String(req.query['fbclid']))}`;
 					}
-				}
+					const userData = MetaService.extractUserDataFromReq(req);
 
-				MetaService.trackViewContent({
-					productId: prod._id ? prod._id.toString() : slug,
-					productName: prod.model || prod.brand || slug,
-					category: typeof prod.category === 'object' ? prod.category?.name : prod.category,
-					value: priceVal,
-					currency: 'ARS',
-					userData,
-					eventSourceUrl: sourceUrl,
-					eventId: `vc_${prod._id ? prod._id.toString() : slug}`,
-				}, customAccessToken, customPixelId, customTestEventCode).catch(err => console.error('[Meta CAPI] Error tracking ViewContent:', err));
+					let customAccessToken: string | undefined;
+					let customPixelId: string | undefined;
+					let customTestEventCode: string | undefined;
+
+					if (req.models) {
+						try {
+							const { EcommerceService } = await import('../services/ecommerce.service');
+							const config = await EcommerceService.getConfig(req.models);
+							if (config.integrations?.metaPixel?.active && config.integrations.metaPixel.pixelId && config.integrations.metaPixel.accessToken) {
+								customPixelId = config.integrations.metaPixel.pixelId;
+								customAccessToken = config.integrations.metaPixel.accessToken;
+								customTestEventCode = config.integrations.metaPixel.testEventCode;
+							}
+						} catch (e) {
+							console.error('[Meta CAPI] Error loading store config in getProductBySlug:', e);
+						}
+					}
+
+					MetaService.trackViewContent({
+						productId: prod._id ? prod._id.toString() : slug,
+						productName: prod.model || prod.brand || slug,
+						category: typeof prod.category === 'object' ? prod.category?.name : prod.category,
+						value: priceVal,
+						currency: 'ARS',
+						userData,
+						eventSourceUrl: sourceUrl,
+						eventId: `vc_${prod._id ? prod._id.toString() : slug}`,
+					}, customAccessToken, customPixelId, customTestEventCode).catch(err => console.error('[Meta CAPI] Error tracking ViewContent:', err));
+				} catch (trackingErr) {
+					console.error('[Meta CAPI] Background tracking error in getProductBySlug:', trackingErr);
+				}
 			}
 		} catch (error) {
 			next(error);
