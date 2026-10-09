@@ -182,6 +182,14 @@ export class MetaService {
       }
     }
 
+    // Ensure req.cookies and req.query inherit from Object.prototype so Meta's ParamBuilder doesn't throw on cookies.hasOwnProperty()
+    if (req.cookies && typeof req.cookies === 'object') {
+      req.cookies = Object.assign({}, req.cookies);
+    }
+    if (req.query && typeof req.query === 'object') {
+      req.query = Object.assign({}, req.query);
+    }
+
     // 2. Process with Meta's official ParamBuilder
     const builder = new ParamBuilder();
     let cookiesToSet: CookieSettings[] = [];
