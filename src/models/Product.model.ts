@@ -117,7 +117,9 @@ const BaseProductSchema = new Schema(
 		images: [
 			{
 				url: { type: String, required: true },
-				public_id: { type: String, required: false, default: '' }
+				public_id: { type: String, required: false, default: '' },
+				bytes: { type: Number, required: false },
+				format: { type: String, required: false }
 			}
 		],
 		features: [{ type: String }],

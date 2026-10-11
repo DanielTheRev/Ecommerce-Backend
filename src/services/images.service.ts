@@ -85,7 +85,9 @@ export class ImageService {
 				public_id: image.public_id,
 				url: image.secure_url,
 				width: image.width,
-				height: image.height
+				height: image.height,
+				bytes: image.bytes,
+				format: image.format
 			}));
 		} catch (error) {
 			console.log(error);

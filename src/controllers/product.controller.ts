@@ -487,6 +487,8 @@ export class ProductController {
 				brand,
 				gender,
 				tags,
+				fit,
+				size,
 				featured,
 				interleave,
 				splitColors
@@ -544,6 +546,8 @@ export class ProductController {
 					brand: brand as string,
 					gender: gender as string,
 					tags: tags as string,
+					fit: fit as string,
+					size: size as string,
 					featured: featured as unknown as boolean,
 					sortBy: sortBy,
 					sortOrder: sortOrder,

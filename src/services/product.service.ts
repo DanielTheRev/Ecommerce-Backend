@@ -283,10 +283,11 @@ export class ProductService {
 	 * Desdobla virtualmente los productos que tienen múltiples variantes de color
 	 * para que cada color se exponga como una tarjeta independiente en el catálogo.
 	 */
-	public static splitProductsByColor<T extends IProduct>(products: T[]): T[] {
+	public static splitProductsByColor<T extends IProduct>(products: T[], filterSize?: string): T[] {
 		if (!products || products.length === 0) return products;
 
 		const result: T[] = [];
+		const targetSizes = filterSize ? filterSize.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) : [];
 
 		for (const product of products) {
 			if (!product.variants || product.variants.length <= 1) {
@@ -333,6 +334,14 @@ export class ProductService {
 
 			// Desdoblar en tarjetas virtuales por color
 			for (const group of colorGroups.values()) {
+				if (targetSizes.length > 0) {
+					const hasMatchingSize = group.variants.some(v => {
+						const sz = String(v.size || '').trim().toLowerCase();
+						return targetSizes.includes(sz) && Number(v.stock || 0) > 0 && v.isActive !== false;
+					});
+					if (!hasMatchingSize) continue;
+				}
+
 				let productImages = product.images ? [...product.images] : [];
 				if (group.imageRef && group.imageRef.url) {
 					const matchingIdx = productImages.findIndex(
@@ -1279,11 +1288,17 @@ export class ProductService {
 		}
 
 		try {
-			const [brands, categories, tags, rawFits] = await Promise.all([
+			const [brands, categories, tags, rawFits, rawSizesAggregation] = await Promise.all([
 				Model.distinct('brand', matchQuery),
 				Model.distinct('category', matchQuery),
 				Model.distinct('tags', matchQuery),
 				Model.distinct('fit', matchQuery),
+				Model.aggregate([
+					{ $match: matchQuery },
+					{ $unwind: '$variants' },
+					{ $match: { 'variants.stock': { $gt: 0 }, 'variants.isActive': { $ne: false } } },
+					{ $group: { _id: '$variants.size' } }
+				]),
 			]);
 			const cleanBrands = (brands || []).filter(Boolean);
 			const cleanCategories = (categories || []).filter(Boolean);
@@ -1292,11 +1307,50 @@ export class ProductService {
 				.map((f: any) => (typeof f === 'string' ? f.trim() : ''))
 				.filter((f: string) => Boolean(f));
 
+			const letterOrder = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL'];
+			const rawSizes = (rawSizesAggregation || []).map((s: any) => s._id);
+			const normalizedSizesSet = new Set<string>();
+
+			for (const sz of rawSizes) {
+				if (!sz || typeof sz !== 'string') continue;
+				const trimmed = sz.trim();
+				if (!trimmed) continue;
+				if (trimmed.toLowerCase() === 'único' || trimmed.toLowerCase() === 'unico') {
+					normalizedSizesSet.add('Único');
+				} else {
+					normalizedSizesSet.add(trimmed.toUpperCase());
+				}
+			}
+
+			const sortedSizes = Array.from(normalizedSizesSet).sort((a, b) => {
+				const aLetterIdx = letterOrder.indexOf(a);
+				const bLetterIdx = letterOrder.indexOf(b);
+
+				if (aLetterIdx !== -1 && bLetterIdx !== -1) return aLetterIdx - bLetterIdx;
+				if (aLetterIdx !== -1) return -1;
+				if (bLetterIdx !== -1) return 1;
+
+				const aNum = Number(a);
+				const bNum = Number(b);
+				const aIsNum = !isNaN(aNum) && a !== '';
+				const bIsNum = !isNaN(bNum) && b !== '';
+
+				if (aIsNum && bIsNum) return aNum - bNum;
+				if (aIsNum) return -1;
+				if (bIsNum) return 1;
+
+				if (a === 'Único') return 1;
+				if (b === 'Único') return -1;
+
+				return a.localeCompare(b);
+			});
+
 			return {
 				brands: cleanBrands,
 				categories: cleanCategories,
 				tags: cleanTags,
 				fits: Array.from(new Set(cleanFits)),
+				sizes: sortedSizes,
 			};
 		} catch (error) {
 			throw new AppError('Failed to fetch metadata', 'Error al obtener metadata', 500);
@@ -1315,6 +1369,8 @@ export class ProductService {
 				brand?: string;
 				gender?: string;
 				tags?: string;
+				fit?: string;
+				size?: string;
 				featured?: boolean;
 				sortBy?: 'createdAt' | 'price' | string;
 				sortOrder?: 'asc' | 'desc' | string;
@@ -1365,6 +1421,31 @@ export class ProductService {
 				});
 			}
 
+			if (filters.fit) {
+				const fits = filters.fit.split(',').map(f => f.trim()).filter(Boolean);
+				if (fits.length === 1) {
+					andConditions.push({ fit: new RegExp(`^${fits[0]}$`, 'i') });
+				} else if (fits.length > 1) {
+					andConditions.push({ fit: { $in: fits.map(f => new RegExp(`^${f}$`, 'i')) } });
+				}
+			}
+
+			if (filters.size) {
+				const sizes = filters.size.split(',').map(s => s.trim()).filter(Boolean);
+				if (sizes.length > 0) {
+					const sizeRegexes = sizes.map(s => new RegExp(`^${s}$`, 'i'));
+					andConditions.push({
+						variants: {
+							$elemMatch: {
+								size: { $in: sizeRegexes },
+								stock: { $gt: 0 },
+								isActive: { $ne: false }
+							}
+						}
+					});
+				}
+			}
+
 			if (andConditions.length > 0) {
 				query.$and = andConditions;
 			}
@@ -1406,7 +1487,7 @@ export class ProductService {
 
 			// 1. Desdoblamiento virtual por color (si está habilitado)
 			if (filters.splitColors && Array.isArray(result.data) && result.data.length > 0) {
-				result.data = this.splitProductsByColor(result.data as unknown as IProduct[]) as any;
+				result.data = this.splitProductsByColor(result.data as unknown as IProduct[], filters.size) as any;
 			}
 
 			// 2. Cadencia visual / Interleaving con Anti-Clustering:
@@ -2959,7 +3040,10 @@ export class ProductService {
 						_id: v._id && Types.ObjectId.isValid(v._id) ? v._id : new Types.ObjectId(),
 						colorName: v.colorName || v.color || 'Único',
 						colorHex: v.colorHex || '#000000',
-						size: String(v.size || v.talle || 'Único').trim().toUpperCase(),
+						size: (() => {
+							const raw = String(v.size || v.talle || 'Único').trim();
+							return raw.toLowerCase() === 'único' || raw.toLowerCase() === 'unico' ? 'Único' : raw.toUpperCase();
+						})(),
 						stock: Number(v.stock ?? 0) >= 0 ? Number(v.stock ?? 0) : 0,
 						isActive: v.isActive !== false,
 						sku: v.sku ? String(v.sku).trim() : undefined,
