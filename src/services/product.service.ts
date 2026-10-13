@@ -921,6 +921,10 @@ export class ProductService {
 				sort = { model: -1, brand: -1 };
 			} else if (sortBy === 'featured') {
 				sort = { isFeatured: -1, createdAt: -1 };
+			} else if (sortBy === 'ranking' || sortBy === 'ranking_desc') {
+				sort = { effectiveScore: -1, isFeatured: -1, createdAt: -1 };
+			} else if (sortBy === 'ranking_asc') {
+				sort = { effectiveScore: 1, createdAt: -1 };
 			}
 
 			const [result, statusCountsRaw] = await Promise.all([
@@ -1475,14 +1479,28 @@ export class ProductService {
 				query.tags = { $in: tags };
 			}
 
-			const sortField = filters.sortBy === 'createdAt' ? 'createdAt' :
-				filters.sortBy === 'price' ? 'price.cashTransferPrice' :
-					'price.cashTransferPrice';
-			const sortDirection = filters.sortOrder === 'asc' ? 1 : -1;
+			// Determinar ordenamiento según configuración y filtros del usuario
+			const storeConfig = await EcommerceService.getConfig(models);
+			const isRankingActive = storeConfig.catalogRanking?.active === true;
+
+			let sortCriteria: Record<string, 1 | -1> = {};
+
+			if (filters.sortBy === 'price') {
+				sortCriteria = { 'price.cashTransferPrice': filters.sortOrder === 'asc' ? 1 : -1 };
+			} else if (filters.sortBy === 'createdAt') {
+				sortCriteria = { createdAt: filters.sortOrder === 'asc' ? 1 : -1 };
+			} else if (filters.sortBy === 'ranking' || (isRankingActive && !filters.sortBy)) {
+				// ALGORITMO ELO DINÁMICO (activo en tienda o forzado para preview)
+				sortCriteria = { effectiveScore: -1, isFeatured: -1, createdAt: -1 };
+			} else {
+				// Fallback tradicional por precio
+				sortCriteria = { 'price.cashTransferPrice': -1 };
+			}
+
 			const result = await paginate(Model, query, {
 				page,
 				limit,
-				sort: { [sortField]: sortDirection }
+				sort: sortCriteria
 			});
 
 			// 1. Desdoblamiento virtual por color (si está habilitado)
@@ -1506,6 +1524,134 @@ export class ProductService {
 			if (error instanceof AppError) throw error;
 			throw new AppError('Failed to search products', 'Error al buscar productos', 500);
 		}
+	}
+
+	/**
+	 * Registra una vista de producto (1st-Party Analytics) y actualiza el score dinámico
+	 */
+	static async recordProductView(models: TenantModels, productId: string): Promise<void> {
+		try {
+			const config = await EcommerceService.getConfig(models);
+			const viewWeight = config.catalogRanking?.viewWeight ?? 1;
+
+			await models.Product.findByIdAndUpdate(productId, {
+				$inc: {
+					'metrics.viewsCount': 1,
+					effectiveScore: viewWeight
+				},
+				$set: {
+					'metrics.lastViewedAt': new Date()
+				}
+			});
+		} catch (error) {
+			console.error('[ProductService] Error in recordProductView:', error);
+		}
+	}
+
+	/**
+	 * Registra una adición al carrito para sumar puntuación de alta intención
+	 */
+	static async recordCartAdd(models: TenantModels, productId: string): Promise<void> {
+		try {
+			const config = await EcommerceService.getConfig(models);
+			const cartWeight = config.catalogRanking?.cartWeight ?? 5;
+
+			await models.Product.findByIdAndUpdate(productId, {
+				$inc: {
+					'metrics.cartAddsCount': 1,
+					effectiveScore: cartWeight
+				}
+			});
+		} catch (error) {
+			console.error('[ProductService] Error in recordCartAdd:', error);
+		}
+	}
+
+	/**
+	 * Registra una venta concretada para sumar puntuación máxima de conversión
+	 */
+	static async recordProductSale(models: TenantModels, productId: string, quantity: number = 1): Promise<void> {
+		try {
+			const config = await EcommerceService.getConfig(models);
+			const saleWeight = config.catalogRanking?.saleWeight ?? 25;
+
+			await models.Product.findByIdAndUpdate(productId, {
+				$inc: {
+					'metrics.salesCount': quantity,
+					effectiveScore: saleWeight * quantity
+				}
+			});
+		} catch (error) {
+			console.error('[ProductService] Error in recordProductSale:', error);
+		}
+	}
+
+	/**
+	 * Actualiza el rankingScore base manual desde el Panel de Control y recalcula el effectiveScore total
+	 */
+	static async updateRankingScore(models: TenantModels, productId: string, newBaseScore: number): Promise<IProduct> {
+		const product = await models.Product.findById(productId);
+		if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
+
+		const config = await EcommerceService.getConfig(models);
+		const viewWeight = config.catalogRanking?.viewWeight ?? 1;
+		const cartWeight = config.catalogRanking?.cartWeight ?? 5;
+		const saleWeight = config.catalogRanking?.saleWeight ?? 25;
+
+		const views = product.metrics?.viewsCount || 0;
+		const carts = product.metrics?.cartAddsCount || 0;
+		const sales = product.metrics?.salesCount || 0;
+
+		const effectiveScore = Number(newBaseScore) + (views * viewWeight) + (carts * cartWeight) + (sales * saleWeight);
+
+		product.rankingScore = newBaseScore;
+		product.effectiveScore = effectiveScore;
+		await product.save();
+
+		return (product.toObject ? product.toObject() : product) as unknown as IProduct;
+	}
+
+	/**
+	 * Recalcula masivamente los effectiveScore de todos los productos del catálogo
+	 * aplicando la fórmula de ELO: BaseScore + (Vistas * wV) + (Carritos * wC) + (Ventas * wS)
+	 * También inicializa valores por defecto si no existen (migración transparente).
+	 */
+	static async recalculateAllEffectiveScores(models: TenantModels): Promise<{ updatedCount: number }> {
+		const config = await EcommerceService.getConfig(models);
+		const viewWeight = config.catalogRanking?.viewWeight ?? 1;
+		const cartWeight = config.catalogRanking?.cartWeight ?? 5;
+		const saleWeight = config.catalogRanking?.saleWeight ?? 25;
+
+		const products = await models.Product.find({}).select('_id rankingScore metrics effectiveScore');
+		if (!products || products.length === 0) {
+			return { updatedCount: 0 };
+		}
+
+		const bulkOps = products.map((p) => {
+			const baseScore = p.rankingScore !== undefined && p.rankingScore !== null ? Number(p.rankingScore) : 100;
+			const views = p.metrics?.viewsCount || 0;
+			const carts = p.metrics?.cartAddsCount || 0;
+			const sales = p.metrics?.salesCount || 0;
+			const calculatedEffective = baseScore + (views * viewWeight) + (carts * cartWeight) + (sales * saleWeight);
+
+			return {
+				updateOne: {
+					filter: { _id: p._id },
+					update: {
+						$set: {
+							rankingScore: baseScore,
+							'metrics.viewsCount': views,
+							'metrics.cartAddsCount': carts,
+							'metrics.salesCount': sales,
+							effectiveScore: calculatedEffective
+						}
+					}
+				}
+			};
+		});
+
+		const result = await models.Product.bulkWrite(bulkOps);
+		return { updatedCount: result.modifiedCount || bulkOps.length };
 	}
 
 	/**

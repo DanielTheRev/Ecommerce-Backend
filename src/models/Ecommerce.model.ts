@@ -390,6 +390,12 @@ const EcommerceSchema = new Schema(
 				default: {}
 			}
 		},
+		catalogRanking: {
+			active: { type: Boolean, default: false },
+			viewWeight: { type: Number, default: 1 },
+			cartWeight: { type: Number, default: 5 },
+			saleWeight: { type: Number, default: 25 }
+		},
 		// Metadata para el CMS
 		lastModifiedBy: { type: Schema.Types.ObjectId, ref: 'User', required: false }
 	},

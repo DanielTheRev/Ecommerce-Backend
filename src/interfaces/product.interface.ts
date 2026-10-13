@@ -46,7 +46,12 @@ export enum ProductStatusEnum {
 	ARCHIVED = 'archived'
 }
 
-// ============ BASE PRODUCT ============
+export interface IProductMetrics {
+	viewsCount: number;
+	cartAddsCount: number;
+	salesCount: number;
+	lastViewedAt?: Date;
+}
 
 export interface IProduct {
 	_id: string;
@@ -75,6 +80,9 @@ export interface IProduct {
 	lowStockThreshold?: number;
 	status: ProductStatus;
 	isFeatured: boolean;
+	rankingScore?: number;
+	metrics?: IProductMetrics;
+	effectiveScore?: number;
 	linkProductProvider?: string;
 	seo: IProductSeo;
 	recommendationsMode?: 'auto' | 'manual';
@@ -287,6 +295,7 @@ export interface IProductCreateDTO {
 	linkProductProvider?: string;
 	status?: ProductStatus | string;
 	isFeatured?: boolean | string;
+	rankingScore?: number;
 	tags?: string | string[];
 
 	// Tech-specific (opcionales a nivel DTO, Mongoose valida por discriminator)
@@ -330,6 +339,9 @@ export interface IProductUpdateDTO extends Partial<IProductCreateDTO> {
 	images?: IProductImage[];
 	slug?: string;
 	prices?: number | IProductPrices;
+	rankingScore?: number;
+	metrics?: IProductMetrics;
+	effectiveScore?: number;
 }
 
 // ============ DOCUMENT ============

@@ -199,6 +199,51 @@ export class EcommerceConfigController {
 		}
 	}
 
+	// GET /api/config/catalog-ranking - Obtener configuración de ranking del catálogo
+	static async getCatalogRankingConfig(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const data = await EcommerceService.getCatalogRankingConfig(req.models!);
+			res.status(200).json(data);
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// PUT /api/config/catalog-ranking - Actualizar configuración de ranking del catálogo
+	static async updateCatalogRankingConfig(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { active, viewWeight, cartWeight, saleWeight } = req.body;
+			const data = await EcommerceService.updateCatalogRankingConfig(req.models!, {
+				active,
+				viewWeight,
+				cartWeight,
+				saleWeight
+			});
+			res.status(200).json({
+				success: true,
+				message: 'Configuración de ranking de catálogo actualizada',
+				data
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// POST /api/config/catalog-ranking/recalculate - Recalcular scores de ranking masivamente
+	static async recalculateRankingScores(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { ProductService } = await import('@/services/product.service');
+			const result = await ProductService.recalculateAllEffectiveScores(req.models!);
+			res.status(200).json({
+				success: true,
+				message: `Recálculo de ranking completado. ${result.updatedCount} productos actualizados.`,
+				updatedCount: result.updatedCount
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
+
 	// POST /api/Ecommerce/config/test-email - Enviar email de prueba
 	static async sendTestEmail(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {

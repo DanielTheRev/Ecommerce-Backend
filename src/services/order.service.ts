@@ -805,6 +805,8 @@ export class OrderService {
 				await ResendService.sendOrderConfirmationEmail(order.toObject() as unknown as IOrder, models);
 				MetaService.trackPurchaseFromOrder(order.toObject(), undefined, undefined, undefined, models)
 					.catch(err => console.error('[Meta CAPI] Error enviando Purchase event:', err));
+				this.recordOrderRankingSales(models, order.toObject())
+					.catch(err => console.error('[Ranking] Error tracking sale:', err));
 			} else if (order.paymentInfo.status === PaymentStatus.PENDING && isFirstPaymentUpdate) {
 				await ResendService.sendPaymentInProcessEmail(order.toObject() as unknown as IOrder, models);
 			}
@@ -816,6 +818,23 @@ export class OrderService {
 			console.log(error);
 			if (error instanceof AppError) throw error;
 			throw new AppError('Failed to process payment', 'Error al intentar procesar el pago', 500);
+		}
+	}
+
+	/**
+	 * Helper: suma ventas a las métricas del producto para el cálculo del score ELO
+	 */
+	private static async recordOrderRankingSales(models: TenantModels, order: any): Promise<void> {
+		try {
+			if (!order?.items || !Array.isArray(order.items)) return;
+			for (const item of order.items) {
+				const prodId = (item.productId?._id || item.productId || item.productSnapshot?._id)?.toString();
+				if (prodId) {
+					await ProductService.recordProductSale(models, prodId, item.quantity || 1);
+				}
+			}
+		} catch (err) {
+			console.error('[Ranking] Error updating product sales score:', err);
 		}
 	}
 
@@ -969,6 +988,8 @@ export class OrderService {
 				await ResendService.sendPaymentReceivedEmail(orderUpdated.toObject() as unknown as IOrder, models);
 				MetaService.trackPurchaseFromOrder(orderUpdated.toObject(), undefined, undefined, undefined, models)
 					.catch(err => console.error('[Meta CAPI] Error enviando Purchase event:', err));
+				this.recordOrderRankingSales(models, orderUpdated.toObject())
+					.catch(err => console.error('[Ranking] Error tracking sale:', err));
 			}
 
 			return orderUpdated;
@@ -1265,6 +1286,8 @@ export class OrderService {
 				await ResendService.sendOrderConfirmationEmail(order.toObject() as unknown as IOrder, models);
 				MetaService.trackPurchaseFromOrder(order.toObject(), undefined, undefined, undefined, models)
 					.catch(err => console.error('[Meta CAPI] Error enviando Purchase event:', err));
+				this.recordOrderRankingSales(models, order.toObject())
+					.catch(err => console.error('[Ranking] Error tracking sale:', err));
 			} else if (order.paymentInfo.status === PaymentStatus.PENDING && isFirstPaymentUpdate) {
 				await ResendService.sendPaymentInProcessEmail(order.toObject() as unknown as IOrder, models);
 			}
@@ -1355,6 +1378,8 @@ export class OrderService {
 				await ResendService.sendOrderConfirmationEmail(order.toObject() as unknown as IOrder, models);
 				MetaService.trackPurchaseFromOrder(order.toObject(), undefined, undefined, undefined, models)
 					.catch(err => console.error('[Meta CAPI] Error enviando Purchase event:', err));
+				this.recordOrderRankingSales(models, order.toObject())
+					.catch(err => console.error('[Ranking] Error tracking sale:', err));
 			} else if (order.paymentInfo.status === PaymentStatus.PENDING && isFirstPaymentUpdate) {
 				await ResendService.sendPaymentInProcessEmail(order.toObject() as unknown as IOrder, models);
 			}
@@ -1807,6 +1832,8 @@ export class OrderService {
 				.catch(err => console.error('[Resend] Error enviando email de pago recibido por transferencia:', err));
 			MetaService.trackPurchaseFromOrder(order.toObject(), undefined, undefined, undefined, models)
 				.catch(err => console.error('[Meta CAPI] Error enviando Purchase event:', err));
+			this.recordOrderRankingSales(models, order.toObject())
+				.catch(err => console.error('[Ranking] Error tracking sale:', err));
 
 			const safeOrder = await models.Order.findById(order._id).populate([
 				{ path: 'user', select: 'name email' },

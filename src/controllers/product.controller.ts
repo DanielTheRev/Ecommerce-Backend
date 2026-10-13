@@ -6,7 +6,8 @@ import { getDolar } from '@/services/dolar.service';
 import { FinanceService } from '@/services/finance.service';
 import { EcommerceService } from '@/services/ecommerce.service';
 import { ProductService } from '@/services/product.service';
-import { NextFunction, Response } from 'express';
+import { NextFunction, Request, Response } from 'express';
+import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 import { MetaService } from '@/services/meta.service';
 import { AppError } from '@/errors/app.error';
@@ -168,6 +169,13 @@ export class ProductController {
 						eventSourceUrl: sourceUrl,
 						eventId: `vc_${prod._id ? prod._id.toString() : slug}`,
 					}, customAccessToken, customPixelId, customTestEventCode).catch(err => console.error('[Meta CAPI] Error tracking ViewContent:', err));
+
+					// Registro interno de vistas (1st-Party Analytics) y score ELO
+					if (prod._id && req.models?.Product) {
+						ProductService.recordProductView(req.models, String(prod._id)).catch(err => {
+							console.error('[Product Metrics] Error recording product view:', err);
+						});
+					}
 				} catch (trackingErr) {
 					console.error('[Meta CAPI] Background tracking error in getProductBySlug:', trackingErr);
 				}
@@ -527,11 +535,19 @@ export class ProductController {
 				} else if (rawSort === 'oldest') {
 					sortBy = 'createdAt';
 					sortOrder = 'asc';
+				} else if (rawSort === 'ranking') {
+					sortBy = 'ranking';
+					sortOrder = 'desc';
 				}
 			}
 
-			sortBy = sortBy || 'createdAt';
-			sortOrder = sortOrder || (sortBy === 'createdAt' ? 'desc' : 'asc');
+			if (!rawSort && !sortBy) {
+				sortBy = undefined;
+				sortOrder = undefined;
+			} else {
+				sortBy = sortBy || 'createdAt';
+				sortOrder = sortOrder || (sortBy === 'createdAt' ? 'desc' : 'asc');
+			}
 			const parsedInterleave = interleave !== undefined ? interleave === 'true' : undefined;
 			const parsedSplitColors = splitColors !== undefined ? splitColors === 'true' : undefined;
 
@@ -688,6 +704,46 @@ export class ProductController {
 
 			const result = await ProductService.checkDuplicateBySupplierUrl(req.models!, url, excludeId);
 			res.status(200).json(result);
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// PATCH /api/products/:id/ranking-score - Actualizar puntaje base manual de ranking ELO (admin)
+	static async updateRankingScore(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { id } = req.params;
+			const { rankingScore } = req.body;
+			if (rankingScore === undefined || typeof rankingScore !== 'number') {
+				throw new AppError('rankingScore must be a number', 'El puntaje debe ser un número', 400);
+			}
+			const updated = await ProductService.updateRankingScore(req.models!, id, rankingScore);
+			res.status(200).json({
+				success: true,
+				message: 'Puntaje de ranking actualizado exitosamente',
+				data: updated
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// POST /api/products/:id/track-cart - Registrar adición al carrito para score ELO (público)
+	static async trackCartAdd(req: Request, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { id } = req.params;
+			if (!id) throw new AppError('Product ID required', 'ID requerido', 400);
+
+			let targetId = id;
+			if (!mongoose.Types.ObjectId.isValid(id)) {
+				const prod = await (req as any).models?.Product.findOne({
+					$or: [{ slug: id }, { sku: id }, { 'variants.sku': id }]
+				}).select('_id');
+				if (prod) targetId = prod._id.toString();
+			}
+
+			await ProductService.recordCartAdd((req as any).models!, targetId);
+			res.status(200).json({ success: true });
 		} catch (error) {
 			next(error);
 		}

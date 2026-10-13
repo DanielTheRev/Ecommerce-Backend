@@ -150,6 +150,22 @@ const BaseProductSchema = new Schema(
 			default: false,
 			index: true // Súper importante el índice porque vamos a buscar mucho por este campo
 		},
+		rankingScore: {
+			type: Number,
+			default: 100,
+			index: true
+		},
+		metrics: {
+			viewsCount: { type: Number, default: 0 },
+			cartAddsCount: { type: Number, default: 0 },
+			salesCount: { type: Number, default: 0 },
+			lastViewedAt: { type: Date }
+		},
+		effectiveScore: {
+			type: Number,
+			default: 100,
+			index: true
+		},
 		seo: {
 			metaTitle: { type: String },
 			metaDescription: { type: String },

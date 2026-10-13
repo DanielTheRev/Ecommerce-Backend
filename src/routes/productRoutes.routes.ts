@@ -25,6 +25,7 @@ router.get('/by-barcode/:barcode', protect, adminOnly, ProductController.getProd
 router.post('/bulk-create', protect, adminOnly, ProductController.bulkCreateProducts); // Creación masiva (IA / Excel)
 router.patch('/bulk-update', protect, adminOnly, ProductController.bulkUpdateProducts); // Actualización masiva (IA)
 router.patch('/bulk-status', protect, adminOnly, ProductController.bulkUpdateStatus); // Actualización masiva de estado
+router.patch('/:id/ranking-score', protect, adminOnly, ProductController.updateRankingScore); // Actualizar score de ranking ELO
 router.patch('/:id', protect, adminOnly, multerConfig, validateSchema(UpdateProductSchema), ProductController.patchProduct); // Actualización parcial
 router.delete('/:id', protect, adminOnly, ProductController.deleteProduct); // Eliminar producto
 
@@ -36,6 +37,7 @@ router.get('/slugs', ProductController.getAllSlugs); // Obtener todos los slugs 
 router.get('/', ProductController.getAllProducts); // Ver todos los productos
 router.get('/all', ProductController.getAllProductWOPagination); // Ver todos los productos sin Paginación
 router.get('/:slug/recommendations', ProductController.getRecommendations); // Recomendaciones de producto
+router.post('/:id/track-cart', ProductController.trackCartAdd); // Registrar adición al carrito para score ELO
 router.get('/:slug', ProductController.getProductBySlug); // Ver producto específico por slug
 
 

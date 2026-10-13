@@ -1,5 +1,5 @@
 import { AppError } from '@/errors/app.error';
-import { EcommercePaymentProviders, IEcommerceConfig, IEcommerceConfigPublic } from '@/interfaces/ecommerce.interface';
+import { EcommercePaymentProviders, IEcommerceConfig, IEcommerceConfigPublic, ICatalogRankingConfig } from '@/interfaces/ecommerce.interface';
 import { TenantModels } from '@/config/modelRegistry';
 import { decrypt, encrypt, safeDecryptString, safeEncryptString } from '@/utils/encryption';
 import { flattenObject } from '@/utils/object.util';
@@ -532,6 +532,69 @@ export class EcommerceService {
 			throw new AppError(
 				'Failed to update recommendations config',
 				'Error al actualizar la configuración de recomendaciones',
+				500
+			);
+		}
+	};
+
+	static getCatalogRankingConfig = async (models: TenantModels): Promise<ICatalogRankingConfig> => {
+		try {
+			const config = await models.EcommerceConfig.findOne({ key: 'global_config' })
+				.select('catalogRanking')
+				.lean() as unknown as IEcommerceConfig;
+
+			return {
+				active: config?.catalogRanking?.active ?? false,
+				viewWeight: config?.catalogRanking?.viewWeight ?? 1,
+				cartWeight: config?.catalogRanking?.cartWeight ?? 5,
+				saleWeight: config?.catalogRanking?.saleWeight ?? 25
+			};
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError(
+				'Failed to fetch catalog ranking config',
+				'Error al obtener la configuración de ranking del catálogo',
+				500
+			);
+		}
+	};
+
+	static updateCatalogRankingConfig = async (
+		models: TenantModels,
+		data: Partial<ICatalogRankingConfig>
+	): Promise<ICatalogRankingConfig> => {
+		try {
+			const updatePayload: any = {};
+			if (data.active !== undefined) {
+				updatePayload['catalogRanking.active'] = Boolean(data.active);
+			}
+			if (data.viewWeight !== undefined) {
+				updatePayload['catalogRanking.viewWeight'] = Number(data.viewWeight);
+			}
+			if (data.cartWeight !== undefined) {
+				updatePayload['catalogRanking.cartWeight'] = Number(data.cartWeight);
+			}
+			if (data.saleWeight !== undefined) {
+				updatePayload['catalogRanking.saleWeight'] = Number(data.saleWeight);
+			}
+
+			const updatedConfig = await models.EcommerceConfig.findOneAndUpdate(
+				{ key: 'global_config' },
+				{ $set: updatePayload },
+				{ new: true, upsert: true }
+			).lean() as unknown as IEcommerceConfig;
+
+			return {
+				active: updatedConfig?.catalogRanking?.active ?? false,
+				viewWeight: updatedConfig?.catalogRanking?.viewWeight ?? 1,
+				cartWeight: updatedConfig?.catalogRanking?.cartWeight ?? 5,
+				saleWeight: updatedConfig?.catalogRanking?.saleWeight ?? 25
+			};
+		} catch (error) {
+			if (error instanceof AppError) throw error;
+			throw new AppError(
+				'Failed to update catalog ranking config',
+				'Error al actualizar la configuración de ranking del catálogo',
 				500
 			);
 		}

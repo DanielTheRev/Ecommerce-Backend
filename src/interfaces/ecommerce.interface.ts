@@ -212,8 +212,16 @@ export interface IEcommerceConfig {
 	shippingConfig?: IShippingConfig;
 	workingHours?: IWorkingHoursConfig;
 	recommendationConfig?: IRecommendationConfig;
+	catalogRanking?: ICatalogRankingConfig;
 	emailTemplates?: IEmailTemplatesConfig;
 	homeLayout?: IHomeLayoutConfig;
+}
+
+export interface ICatalogRankingConfig {
+	active: boolean;
+	viewWeight?: number;
+	cartWeight?: number;
+	saleWeight?: number;
 }
 
 export interface IShippingConfig {
