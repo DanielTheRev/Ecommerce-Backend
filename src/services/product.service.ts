@@ -1821,6 +1821,10 @@ export class ProductService {
 			// Elegir modelo según el tipo de producto
 			const Model = this.getModel(models, data.productType);
 
+			const baseScore = data.rankingScore !== undefined && data.rankingScore !== null && !isNaN(Number(data.rankingScore))
+				? Number(data.rankingScore)
+				: 100;
+
 			// Campos comunes
 			const baseData: any = {
 				slug,
@@ -1839,6 +1843,8 @@ export class ProductService {
 				variants: data.variants || [],
 				status: data.status || 'draft',
 				isFeatured: Boolean(data.isFeatured),
+				rankingScore: baseScore,
+				effectiveScore: baseScore,
 				tags: data.tags || [],
 				seo: seoData
 			};
@@ -2467,6 +2473,28 @@ export class ProductService {
 			}
 			// Parsear SEO si viene como JSON string
 			if (updateData.seo) updateData.seo = JSON.parse(updateData.seo as unknown as string);
+
+			// Actualizar rankingScore base y recalcular effectiveScore
+			if (updateData.rankingScore !== undefined && updateData.rankingScore !== null) {
+				const newBaseScore = Number(updateData.rankingScore);
+				if (!isNaN(newBaseScore)) {
+					updateData.rankingScore = newBaseScore;
+					const config = await EcommerceService.getConfig(models);
+					const viewWeight = config.catalogRanking?.viewWeight ?? 1;
+					const cartWeight = config.catalogRanking?.cartWeight ?? 5;
+					const saleWeight = config.catalogRanking?.saleWeight ?? 25;
+
+					const views = product.metrics?.viewsCount || 0;
+					const carts = product.metrics?.cartAddsCount || 0;
+					const sales = product.metrics?.salesCount || 0;
+
+					(updateData as any).effectiveScore = newBaseScore + (views * viewWeight) + (carts * cartWeight) + (sales * saleWeight);
+				}
+			}
+
+			if (updateData.isFeatured !== undefined) {
+				updateData.isFeatured = String(updateData.isFeatured) === 'true' || updateData.isFeatured === true;
+			}
 
 			// Manejar og_image del SEO
 			const deletedOgImageId = (updateData as any).deletedSeoOgImage as string | undefined;
