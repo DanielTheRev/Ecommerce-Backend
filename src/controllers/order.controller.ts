@@ -128,14 +128,18 @@ export const mercadopagoWebhook = async (req: AuthRequest, res: Response) => {
 				}
 			}
 		}
-		// Fallback para notificaciones de tipo 'payment' directas (legacy o configuraciones manuales)
-		else if (type === 'payment') {
+		// Fallback para notificaciones de tipo 'payment' directas (legacy, webhooks o eventos de pago)
+		else if (type === 'payment' || req.body.action?.startsWith('payment.')) {
 			const paymentId = dataId || req.body.data?.id;
-			const internalOrderId = req.query.id as string; // external_reference pasado via query param en notification_url
+			let internalOrderId = req.query.id as string;
 
-			if (paymentId && internalOrderId) {
-				const order = await OrderService.confirmMercadoPagoPayment(req.models!, internalOrderId, paymentId);
-				console.log(`✅ Pago de MercadoPago (legacy/direct) procesado: ${paymentId} para la orden: ${internalOrderId}`);
+			if (paymentId) {
+				const paymentDetails = await MercadoPagoService.getPaymentStatus(mpConfig.accessToken, paymentId);
+				internalOrderId = internalOrderId || (paymentDetails as any)?.external_reference;
+
+				if (internalOrderId) {
+					const order = await OrderService.confirmMercadoPagoPayment(req.models!, internalOrderId, paymentDetails as any);
+					console.log(`✅ Pago de MercadoPago procesado: ${paymentId} para la orden: ${internalOrderId}`);
 
 				if (req.tenant) {
 					realtimeService.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'payment');
@@ -173,7 +177,7 @@ export const mercadopagoWebhook = async (req: AuthRequest, res: Response) => {
 				}
 			}
 		}
-
+	}
 	} catch (error) {
 		console.error('Error processing MercadoPago webhook:', error);
 	}

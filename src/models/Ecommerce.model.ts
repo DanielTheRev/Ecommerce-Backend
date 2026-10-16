@@ -184,7 +184,7 @@ const EcommerceSchema = new Schema(
 				accessToken: { type: String, default: 'no asignado', select: false },
 				publicKey: { type: String, default: 'no asignado' },
 				environment: { type: String, enum: ['sandbox', 'production'], default: 'production' },
-				checkoutMode: { type: String, enum: ['transparent', 'redirect', 'modal', 'bricks', 'pro', 'api'], default: 'transparent' },
+				checkoutMode: { type: String, enum: ['transparent', 'redirect', 'modal', 'bricks', 'pro', 'api', 'hybrid'], default: 'hybrid' },
 				webhookSecret: { type: String, default: 'no asignado', select: false },
 				baseCommission: { type: Number, default: 0.06 },
 				cft3cuotas: { type: Number, default: 12 },

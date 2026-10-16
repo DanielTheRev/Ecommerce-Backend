@@ -285,7 +285,7 @@ export interface IEcommerceMercadoPagoPaymentGateway {
 	accessToken: string;
 	publicKey: string;
 	environment?: 'sandbox' | 'production';
-	checkoutMode?: 'transparent' | 'redirect' | 'modal' | 'bricks' | 'pro' | 'api';
+	checkoutMode?: 'transparent' | 'redirect' | 'modal' | 'bricks' | 'pro' | 'api' | 'hybrid';
 	baseCommission: number;
 	cft3cuotas: number;
 	cft6Cuotas: number;

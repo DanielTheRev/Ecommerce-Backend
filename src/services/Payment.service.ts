@@ -82,11 +82,19 @@ export class PaymentService {
 				throw new AppError('MercadoPago is not configured', 'MercadoPago no está configurado para esta tienda', 400);
 			}
 
+			const hasToken = Boolean(data.mercadoPagoData?.token);
+			const isTicket = data.mercadoPagoData?.type === 'ticket';
+
 			const isCheckoutPro =
-				mpConfig.checkoutMode === 'pro' ||
-				data.mercadoPagoData?.type === 'checkout_pro' ||
-				data.mercadoPagoData?.checkoutMode === 'pro' ||
-				(!data.mercadoPagoData?.token && data.mercadoPagoData?.type !== 'ticket');
+				!hasToken &&
+				!isTicket &&
+				(
+					mpConfig.checkoutMode === 'pro' ||
+					mpConfig.checkoutMode === 'hybrid' ||
+					data.mercadoPagoData?.type === 'checkout_pro' ||
+					data.mercadoPagoData?.checkoutMode === 'pro' ||
+					true
+				);
 
 			if (isCheckoutPro) {
 				const clientOrigin =
