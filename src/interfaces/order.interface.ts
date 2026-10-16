@@ -25,9 +25,9 @@ export interface CreateOrderDTO {
 	couponCode?: string; // Código de cupón promocional o PRIMERACOMPRA
 	mercadopagoData?: {
 		token?: string;
-		payment_method_id: string;
-		installments: number;
-		type: string;
+		payment_method_id?: string;
+		installments?: number;
+		type?: string;
 		payer?: {
 			email: string;
 			first_name: string;
@@ -95,9 +95,9 @@ export enum OrderStatus {
 export interface PayOrderDTO {
 	mercadopagoData?: {
 		token?: string;
-		payment_method_id: string;
-		installments: number;
-		type: string;
+		payment_method_id?: string;
+		installments?: number;
+		type?: string;
 		payer?: {
 			email: string;
 			first_name: string;
@@ -328,6 +328,7 @@ export interface MercadoPagoExtras {
 	provider: EcommercePaymentProviders.MERCADOPAGO;
 	ticket_url?: string;
 	qr?: string;
+	checkout_url?: string;
 }
 
 export interface UalaExtras extends Omit<Partial<OrderData>, 'amount'> {

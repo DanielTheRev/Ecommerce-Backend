@@ -662,10 +662,12 @@ export class OrderService {
 				orderStatus = OrderStatus.PROCESSING_SHIPPING;
 				note = 'Pago acreditado con éxito';
 			} else if (
+				status === 'created' ||
 				status === 'in_process' || 
 				status === 'processing' || 
 				status === 'in_review' || 
 				status === 'pending' ||
+				statusDetail === 'created' ||
 				statusDetail === 'in_process' ||
 				statusDetail === 'pending_review_manual' ||
 				statusDetail === 'in_review' ||
@@ -676,7 +678,7 @@ export class OrderService {
 			) {
 				paymentStatus = PaymentStatus.PENDING;
 				orderStatus = OrderStatus.PENDING_PAYMENT;
-				note = `Pago en proceso: ${result.status}`;
+				note = status === 'created' ? 'Orden Checkout Pro iniciada en Mercado Pago' : `Pago en proceso: ${result.status}`;
 			} else if (
 				status === 'rejected' ||
 				status === 'cancelled' ||
@@ -707,12 +709,12 @@ export class OrderService {
 			order.status = orderStatus;
 			order.paymentInfo.transactionId = String(result.id);
 			order.paymentInfo.mercadopagoData = {
-				items: result.items!,
-				status: result.status!,
-				status_detail: result.status_detail!,
-				total_amount: result.total_amount!,
-				total_paid_amount: result.total_paid_amount!,
-				transactions: result.transactions!
+				items: result.items || [],
+				status: result.status || 'created',
+				status_detail: result.status_detail || 'created',
+				total_amount: result.total_amount ? String(result.total_amount) : String(order.finance.total),
+				total_paid_amount: result.total_paid_amount ? String(result.total_paid_amount) : '0',
+				transactions: result.transactions || {}
 			};
 
 			order.history.push({
@@ -795,7 +797,8 @@ export class OrderService {
 				status_detail: result.status_detail,
 				provider: EcommercePaymentProviders.MERCADOPAGO,
 				ticket_url: result.status === 'action_required' ? result.transactions?.payments?.[0]?.payment_method?.ticket_url : undefined,
-				qr: result.status === 'action_required' ? result.transactions?.payments?.[0]?.payment_method?.qr_code : undefined
+				qr: result.status === 'action_required' ? result.transactions?.payments?.[0]?.payment_method?.qr_code : undefined,
+				checkout_url: (result as any).checkout_available_at || (result as any).checkout_url || (result as any).init_point || undefined
 			};
 
 			await order.save();

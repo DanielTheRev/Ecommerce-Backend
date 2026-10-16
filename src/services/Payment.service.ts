@@ -69,7 +69,7 @@ export class PaymentService {
 				identification?: { type: string; number: string }
 			},
 			items: Item[],
-			mercadoPagoData: { token?: string; payment_method_id: string; installments?: number; type: string; payer?: any },
+			mercadoPagoData: { token?: string; payment_method_id?: string; installments?: number; type?: string; payer?: any; checkoutMode?: string },
 			tenantSlug: string,
 			baseUrl: string
 		}
@@ -82,18 +82,108 @@ export class PaymentService {
 				throw new AppError('MercadoPago is not configured', 'MercadoPago no está configurado para esta tienda', 400);
 			}
 
-			// Calcular vencimiento (3 días por defecto para tickets)
-			const expirationDate = new Date();
-			expirationDate.setDate(expirationDate.getDate() + 3);
+			const isCheckoutPro =
+				mpConfig.checkoutMode === 'pro' ||
+				data.mercadoPagoData?.type === 'checkout_pro' ||
+				data.mercadoPagoData?.checkoutMode === 'pro' ||
+				(!data.mercadoPagoData?.token && data.mercadoPagoData?.type !== 'ticket');
 
-			console.log('mp Body');
+			if (isCheckoutPro) {
+				const clientOrigin =
+					(mpConfig as any).successUrl
+						? new URL((mpConfig as any).successUrl).origin
+						: config.callbackURLs?.success
+						? new URL(config.callbackURLs.success).origin
+						: (data.baseUrl?.includes('localhost') ? 'http://localhost:4200' : (data.baseUrl || 'https://vura.com.ar'));
+
+				const resolveBackUrl = (rawUrl?: string, defaultUrl?: string): string => {
+					let url = rawUrl?.trim();
+					if (!url) return defaultUrl || '';
+					if (url.startsWith('/')) {
+						url = `${clientOrigin}${url}`;
+					}
+					url = url.replace(/:id\b|:orderId\b|\{id\}|\{orderId\}/gi, data.orderID);
+					if (url.includes('order-confirmed') && !url.includes(data.orderID)) {
+						try {
+							const parsed = new URL(url);
+							parsed.pathname = parsed.pathname.endsWith('/')
+								? `${parsed.pathname}${data.orderID}`
+								: `${parsed.pathname}/${data.orderID}`;
+							url = parsed.toString();
+						} catch {
+							url = url.endsWith('/') ? `${url}${data.orderID}` : `${url}/${data.orderID}`;
+						}
+					}
+					return url;
+				};
+
+				const defaultSuccess = `${clientOrigin}/order-confirmed/${data.orderID}?payment=success`;
+				const defaultFailure = `${clientOrigin}/checkout?error=payment_failed&orderId=${data.orderID}`;
+				const defaultPending = `${clientOrigin}/order-confirmed/${data.orderID}?payment=pending`;
+
+				const successUrl = resolveBackUrl((mpConfig as any).successUrl || config.callbackURLs?.success, defaultSuccess);
+				const failureUrl = resolveBackUrl((mpConfig as any).failureUrl || config.callbackURLs?.fail, defaultFailure);
+				const pendingUrl = resolveBackUrl((mpConfig as any).pendingUrl, defaultPending);
+
+				// Formatear ítems asegurando consistencia con total_amount requerido por MP
+				const mpItemsFormatted = data.items.map(i => {
+					const unitPriceNum = Math.round(Number(i.unit_price) * 100) / 100;
+					const qty = Math.max(1, i.quantity || 1);
+					return {
+						title: i.title || 'Producto',
+						quantity: qty,
+						unit_price: unitPriceNum.toFixed(2),
+						...(i.picture_url && { picture_url: i.picture_url })
+					};
+				});
+
+				// Chequeo de cuadratura exacta entre sum(unit_price * quantity) y total_amount
+				const sumItems = mpItemsFormatted.reduce((acc, curr) => acc + (Number(curr.unit_price) * curr.quantity), 0);
+				const totalNum = Math.round(data.total * 100) / 100;
+				if (Math.abs(sumItems - totalNum) > 0.01 && mpItemsFormatted.length > 0) {
+					const diff = Math.round((totalNum - sumItems) * 100) / 100;
+					const lastItem = mpItemsFormatted[mpItemsFormatted.length - 1];
+					const newLastUnit = Number(lastItem.unit_price) + (diff / lastItem.quantity);
+					lastItem.unit_price = newLastUnit.toFixed(2);
+				}
+
+				const mpOrdersBody: any = {
+					type: 'online',
+					processing_mode: 'manual',
+					capture_mode: 'automatic_async',
+					total_amount: totalNum.toFixed(2),
+					external_reference: data.orderID,
+					payer: {
+						email: data.mercadoPagoData?.payer?.email || data.payerData.email,
+						first_name: data.payerData.first_name || data.mercadoPagoData?.payer?.first_name || 'Cliente',
+						last_name: data.payerData.last_name || data.mercadoPagoData?.payer?.last_name || 'Ecommerce',
+						...((data.mercadoPagoData?.payer?.identification || data.payerData.identification) && {
+							identification: data.mercadoPagoData?.payer?.identification || data.payerData.identification
+						})
+					},
+					items: mpItemsFormatted,
+					config: {
+						online: {
+							success_url: successUrl,
+							failure_url: failureUrl,
+							pending_url: pendingUrl
+						}
+					}
+				};
+
+				console.log('📦 Creando orden Checkout Pro en Mercado Pago:', JSON.stringify(mpOrdersBody));
+				const result = await MercadoPagoService.createOrder(mpConfig.accessToken, mpOrdersBody);
+				console.log('✅ Orden Checkout Pro creada con éxito en Mercado Pago:', JSON.stringify(result));
+				return { result, error: null };
+			}
+
+			// Flujo Checkout Bricks / Transparente (con tarjeta tokenizada)
 			const mpOrdersBody: CreateOrderRequest = {
 				type: 'online',
 				capture_mode: 'automatic_async',
 				external_reference: data.orderID,
 				processing_mode: 'automatic',
 				total_amount: data.total.toString(),
-				// date_of_expiration: expirationDate.toISOString(),
 				payer: {
 					email: data.mercadoPagoData.payer?.email || data.payerData.email,
 					first_name: data.payerData.first_name || data.mercadoPagoData.payer?.first_name || 'Cliente',
@@ -110,8 +200,8 @@ export class PaymentService {
 						{
 							amount: data.total.toString(),
 							payment_method: {
-								id: data.mercadoPagoData.payment_method_id,
-								type: data.mercadoPagoData.type,
+								id: data.mercadoPagoData.payment_method_id!,
+								type: data.mercadoPagoData.type!,
 								...(data.mercadoPagoData.token && { token: data.mercadoPagoData.token }),
 								...(data.mercadoPagoData.type !== 'ticket' && data.mercadoPagoData.installments && { installments: Number(data.mercadoPagoData.installments) }),
 							}
@@ -119,7 +209,6 @@ export class PaymentService {
 					]
 				}
 			};
-			console.log(JSON.stringify(mpOrdersBody));
 
 			const result = await MercadoPagoService.createOrder(mpConfig.accessToken, mpOrdersBody);
 			return { result, error: null };

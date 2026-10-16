@@ -294,6 +294,9 @@ export interface IEcommerceMercadoPagoPaymentGateway {
 	excludedPaymentMethods: string[];
 	excludedPaymentTypes: string[];
 	webhookSecret?: string;
+	successUrl?: string;
+	failureUrl?: string;
+	pendingUrl?: string;
 }
 
 export interface IEcommerceTransferPaymentGateway {

@@ -192,7 +192,10 @@ const EcommerceSchema = new Schema(
 				cft12cuotas: { type: Number, default: 0 },
 				maxInstallments: { type: Number, default: 6 },
 				excludedPaymentMethods: [{ type: String }],
-				excludedPaymentTypes: [{ type: String, default: '' }]
+				excludedPaymentTypes: [{ type: String, default: '' }],
+				successUrl: { type: String, default: '' },
+				failureUrl: { type: String, default: '' },
+				pendingUrl: { type: String, default: '' }
 			},
 			getnet: {
 				active: { type: Boolean, default: false },

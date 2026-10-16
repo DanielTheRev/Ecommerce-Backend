@@ -55,9 +55,9 @@ export const CreateOrderSchema = z.object({
 
 		mercadopagoData: z.object({
 			token: z.string().optional(),
-			payment_method_id: z.string(),
+			payment_method_id: z.string().optional(),
 			installments: z.number().int().positive().optional(),
-			type: z.string(),
+			type: z.string().optional(),
 			payer: z.object({
 				email: z.string().email(),
 				first_name: z.string().optional(),
@@ -110,9 +110,9 @@ export const PayOrderSchema = z.object({
 	body: z.object({
 		mercadopagoData: z.object({
 			token: z.string().optional(),
-			payment_method_id: z.string(),
+			payment_method_id: z.string().optional(),
 			installments: z.number().int().positive().optional(),
-			type: z.string(),
+			type: z.string().optional(),
 			payer: z.object({
 				email: z.email(),
 				first_name: z.string().optional(),

@@ -62,7 +62,10 @@ export class PaymentMethodController {
 					absorbInstallments: config.pricingStrategy?.absorbInstallments ?? true,
 					maxInstallmentsToAbsorb: config.pricingStrategy?.maxInstallmentsToAbsorb || 3,
 					excludedPaymentMethods: config.paymentGateways.mercadopago?.excludedPaymentMethods || [],
-					excludedPaymentTypes: config.paymentGateways.mercadopago?.excludedPaymentTypes || []
+					excludedPaymentTypes: config.paymentGateways.mercadopago?.excludedPaymentTypes || [],
+					successUrl: config.paymentGateways.mercadopago?.successUrl,
+					failureUrl: config.paymentGateways.mercadopago?.failureUrl,
+					pendingUrl: config.paymentGateways.mercadopago?.pendingUrl
 				},
 				getnet: {
 					active: config.paymentGateways.getnet?.active ?? false,
