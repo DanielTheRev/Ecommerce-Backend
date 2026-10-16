@@ -12,19 +12,27 @@ const HeroSlideSchema = new Schema<IHeroSlide>(
     ctaLink: { type: String, required: false, default: '' },
     imageDesktop1: {
       url: { type: String, required: true },
-      public_id: { type: String, required: true }
+      public_id: { type: String, required: true },
+      width: { type: Number, required: false },
+      height: { type: Number, required: false }
     },
     imageDesktop2: {
       url: { type: String, required: false },
-      public_id: { type: String, required: false }
+      public_id: { type: String, required: false },
+      width: { type: Number, required: false },
+      height: { type: Number, required: false }
     },
     imageMobile1: {
       url: { type: String, required: true },
-      public_id: { type: String, required: true }
+      public_id: { type: String, required: true },
+      width: { type: Number, required: false },
+      height: { type: Number, required: false }
     },
     imageMobile2: {
       url: { type: String, required: false },
-      public_id: { type: String, required: false }
+      public_id: { type: String, required: false },
+      width: { type: Number, required: false },
+      height: { type: Number, required: false }
     },
     featuredProducts: [
       {

@@ -39,6 +39,7 @@ export class HeroService {
       description: data.description || '',
       ctaText: data.ctaText || '',
       ctaLink: data.ctaLink || '',
+      isActive: data.isActive !== undefined ? (typeof data.isActive === 'string' ? data.isActive === 'true' : Boolean(data.isActive)) : true,
       featuredProducts: data.featuredProducts ? (typeof data.featuredProducts === 'string' ? JSON.parse(data.featuredProducts) : data.featuredProducts) : [],
     };
 
@@ -83,7 +84,7 @@ export class HeroService {
         if (cached) return cached;
       }
 
-      const slides = await models.HeroSlide.find({ isActive: true }) as unknown as IHeroSlide[];
+      const slides = await models.HeroSlide.find({ isActive: true }).sort({ order: 1 }) as unknown as IHeroSlide[];
 
       if (tenantSlug) {
         const { CacheService } = await import('./cache.service');
@@ -105,6 +106,9 @@ export class HeroService {
       if (!slideToUpdate) throw new AppError('slide not found', 'slide no encontrado', 404);
 
       const slidePayload: any = { ...data };
+      if (data.isActive !== undefined) {
+        slidePayload.isActive = typeof data.isActive === 'string' ? data.isActive === 'true' : Boolean(data.isActive);
+      }
       if (data.featuredProducts && typeof data.featuredProducts === 'string') {
         slidePayload.featuredProducts = JSON.parse(data.featuredProducts);
       }
