@@ -1,6 +1,6 @@
 {
 	"name": "nexocommerce-backend",
-	"version": "2.6.3",
+	"version": "2.7.0",
 	"packageManager": "pnpm@9.15.4",
 	"description": "NexoCommerce — Plataforma multi-tenant SaaS para ecommerce",
 	"main": "dist/index.js",

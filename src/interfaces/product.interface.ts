@@ -46,10 +46,33 @@ export enum ProductStatusEnum {
 	ARCHIVED = 'archived'
 }
 
+export interface IProductViewEvent {
+	viewedAt: Date;
+	device: 'mobile' | 'desktop' | 'tablet' | 'bot';
+	browser?: string;
+	os?: string;
+	url?: string;
+	referrer?: string;
+	ip?: string;
+	isBot: boolean;
+	botName?: string;
+	userAgent?: string;
+	rejectionReason?: string;
+	manuallyApproved?: boolean;
+}
+
 export interface IProductMetrics {
 	viewsCount: number;
+	botViewsCount?: number;
 	cartAddsCount: number;
 	salesCount: number;
+	viewsByDevice?: {
+		mobile: number;
+		desktop: number;
+		tablet: number;
+		bot: number;
+	};
+	recentViews?: IProductViewEvent[];
 	lastViewedAt?: Date;
 }
 

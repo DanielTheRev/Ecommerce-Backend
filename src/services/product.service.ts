@@ -16,6 +16,7 @@ import { EcommerceService, DEFAULT_RECOMMENDATION_RULES } from './ecommerce.serv
 import { CategoryGroupService } from './categoryGroup.service';
 import { ICategoryGroup } from '@/interfaces/categoryGroup.interface';
 import { PushNotificationService } from './pushNotification.service';
+import { IVisitorInfo } from '@/utils/deviceDetector';
 
 
 export class ProductService {
@@ -1527,25 +1528,137 @@ export class ProductService {
 	}
 
 	/**
-	 * Registra una vista de producto (1st-Party Analytics) y actualiza el score dinámico
+	 * Registra una vista de producto (1st-Party Analytics) con auditoría de dispositivo, URL y protección anti-bots para ELO
 	 */
-	static async recordProductView(models: TenantModels, productId: string): Promise<void> {
+	static async recordProductView(models: TenantModels, productId: string, visitorInfo?: IVisitorInfo): Promise<void> {
 		try {
-			const config = await EcommerceService.getConfig(models);
-			const viewWeight = config.catalogRanking?.viewWeight ?? 1;
+			const isBot = visitorInfo?.isBot ?? false;
+			const device = visitorInfo?.device ?? (isBot ? 'bot' : 'desktop');
 
-			await models.Product.findByIdAndUpdate(productId, {
-				$inc: {
-					'metrics.viewsCount': 1,
-					effectiveScore: viewWeight
-				},
+			const updateOps: any = {
 				$set: {
 					'metrics.lastViewedAt': new Date()
 				}
-			});
+			};
+
+			// Si es un bot o crawler (Googlebot, Bingbot, Scraper, etc.):
+			// 🛑 NO SUMA AL ELO NI A VIEWS HUMANAS PARA PROTEGER EL ALGORITMO
+			if (isBot) {
+				updateOps.$inc = {
+					'metrics.botViewsCount': 1,
+					'metrics.viewsByDevice.bot': 1
+				};
+			} else {
+				// ✅ Visitante humano real (Celular, Desktop, Tablet)
+				const config = await EcommerceService.getConfig(models);
+				const viewWeight = config.catalogRanking?.viewWeight ?? 1;
+
+				const incFields: Record<string, number> = {
+					'metrics.viewsCount': 1,
+					effectiveScore: viewWeight
+				};
+				if (device === 'mobile' || device === 'desktop' || device === 'tablet') {
+					incFields[`metrics.viewsByDevice.${device}`] = 1;
+				}
+				updateOps.$inc = incFields;
+			}
+
+			// Si tenemos los detalles del visitante, agregamos el evento a recentViews (últimas 50 visitas)
+			if (visitorInfo) {
+				updateOps.$push = {
+					'metrics.recentViews': {
+						$each: [{
+							viewedAt: new Date(),
+							device: visitorInfo.device,
+							browser: visitorInfo.browser,
+							os: visitorInfo.os,
+							url: visitorInfo.fullUrl,
+							referrer: visitorInfo.referrer,
+							ip: visitorInfo.ip,
+							isBot: visitorInfo.isBot,
+							botName: visitorInfo.botName,
+							userAgent: visitorInfo.userAgent,
+							rejectionReason: visitorInfo.rejectionReason,
+							manuallyApproved: false
+						}],
+						$slice: -50 // Mantiene solo las últimas 50 visitas (ring buffer)
+					}
+				};
+			}
+
+			await models.Product.findByIdAndUpdate(productId, updateOps);
 		} catch (error) {
 			console.error('[ProductService] Error in recordProductView:', error);
 		}
+	}
+
+	/**
+	 * Obtiene el historial de auditoría de vistas de un producto (dispositivos, URLs, bots)
+	 */
+	static async getProductViewsAudit(models: TenantModels, productId: string): Promise<any> {
+		const product = await models.Product.findById(productId).select('model brand slug metrics effectiveScore rankingScore');
+		if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
+
+		const metrics = product.metrics || ({} as any);
+		return {
+			productId: product._id,
+			model: product.model,
+			brand: product.brand,
+			slug: product.slug,
+			effectiveScore: product.effectiveScore,
+			rankingScore: product.rankingScore,
+			humanViews: metrics.viewsCount || 0,
+			botViews: metrics.botViewsCount || 0,
+			totalHits: (metrics.viewsCount || 0) + (metrics.botViewsCount || 0),
+			viewsByDevice: metrics.viewsByDevice || { mobile: 0, desktop: 0, tablet: 0, bot: 0 },
+			recentViews: Array.isArray(metrics.recentViews) ? [...metrics.recentViews].reverse() : []
+		};
+	}
+
+	/**
+	 * Aprueba manualmente una vista que había sido clasificada como bot (para corregir si fue un falso positivo)
+	 */
+	static async approveManualViewPoint(models: TenantModels, productId: string, viewTimestamp: string | number): Promise<any> {
+		const product = await models.Product.findById(productId);
+		if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
+
+		const config = await EcommerceService.getConfig(models);
+		const viewWeight = config.catalogRanking?.viewWeight ?? 1;
+
+		const targetTime = new Date(viewTimestamp).getTime();
+		let approved = false;
+
+		if (product.metrics && Array.isArray((product.metrics as any).recentViews)) {
+			for (const v of (product.metrics as any).recentViews) {
+				const vTime = new Date(v.viewedAt).getTime();
+				if (Math.abs(vTime - targetTime) < 2000 && (v.isBot || !v.manuallyApproved)) {
+					v.isBot = false;
+					v.manuallyApproved = true;
+					v.rejectionReason = 'Aprobado manualmente por el administrador (+1 punto ELO sumado)';
+					approved = true;
+					break;
+				}
+			}
+		}
+
+		if (approved) {
+			if (!product.metrics) {
+				product.metrics = { viewsCount: 0, cartAddsCount: 0, salesCount: 0 } as any;
+			}
+			const metrics = product.metrics as any;
+			metrics.viewsCount = (metrics.viewsCount || 0) + 1;
+			if (metrics.botViewsCount && metrics.botViewsCount > 0) {
+				metrics.botViewsCount -= 1;
+			}
+			product.effectiveScore = (product.effectiveScore || product.rankingScore || 100) + viewWeight;
+			await product.save();
+		}
+
+		return {
+			success: true,
+			message: approved ? 'Punto de vista sumado manualmente con éxito' : 'Visita ya aprobada o no encontrada',
+			data: await this.getProductViewsAudit(models, productId)
+		};
 	}
 
 	/**

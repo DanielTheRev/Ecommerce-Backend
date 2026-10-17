@@ -11,6 +11,7 @@ import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 import { MetaService } from '@/services/meta.service';
 import { AppError } from '@/errors/app.error';
+import { extractVisitorInfo } from '@/utils/deviceDetector';
 
 export class ProductController {
 	// GET /api/products/list - Productos con precios completos (admin) - paginado
@@ -134,50 +135,54 @@ export class ProductController {
 			if (product) {
 				try {
 					const prod = product as any;
-					const priceVal = prod.price?.cashTransferPrice || prod.price?.listPrice || 0;
-					let sourceUrl = `https://vura.com.ar/products/${slug}`;
-					if (req.query && req.query['fbclid']) {
-						sourceUrl += `?fbclid=${encodeURIComponent(String(req.query['fbclid']))}`;
-					}
-					const userData = MetaService.extractUserDataFromReq(req);
+					const visitorInfo = extractVisitorInfo(req, slug);
 
-					let customAccessToken: string | undefined;
-					let customPixelId: string | undefined;
-					let customTestEventCode: string | undefined;
+					// Solo disparamos Meta CAPI si NO es un bot (Googlebot, Bingbot, crawlers, etc.)
+					if (!visitorInfo.isBot) {
+						const priceVal = prod.price?.cashTransferPrice || prod.price?.listPrice || 0;
+						const sourceUrl = visitorInfo.fullUrl;
+						const userData = MetaService.extractUserDataFromReq(req);
 
-					if (req.models) {
-						try {
-							const { EcommerceService } = await import('../services/ecommerce.service');
-							const config = await EcommerceService.getConfig(req.models);
-							if (config.integrations?.metaPixel?.active && config.integrations.metaPixel.pixelId && config.integrations.metaPixel.accessToken) {
-								customPixelId = config.integrations.metaPixel.pixelId;
-								customAccessToken = config.integrations.metaPixel.accessToken;
-								customTestEventCode = config.integrations.metaPixel.testEventCode;
+						let customAccessToken: string | undefined;
+						let customPixelId: string | undefined;
+						let customTestEventCode: string | undefined;
+
+						if (req.models) {
+							try {
+								const { EcommerceService } = await import('../services/ecommerce.service');
+								const config = await EcommerceService.getConfig(req.models);
+								if (config.integrations?.metaPixel?.active && config.integrations.metaPixel.pixelId && config.integrations.metaPixel.accessToken) {
+									customPixelId = config.integrations.metaPixel.pixelId;
+									customAccessToken = config.integrations.metaPixel.accessToken;
+									customTestEventCode = config.integrations.metaPixel.testEventCode;
+								}
+							} catch (e) {
+								console.error('[Meta CAPI] Error loading store config in getProductBySlug:', e);
 							}
-						} catch (e) {
-							console.error('[Meta CAPI] Error loading store config in getProductBySlug:', e);
 						}
+
+						MetaService.trackViewContent({
+							productId: prod._id ? prod._id.toString() : slug,
+							productName: prod.model || prod.brand || slug,
+							category: typeof prod.category === 'object' ? prod.category?.name : prod.category,
+							value: priceVal,
+							currency: 'ARS',
+							userData,
+							eventSourceUrl: sourceUrl,
+							eventId: `vc_${prod._id ? prod._id.toString() : slug}`,
+						}, customAccessToken, customPixelId, customTestEventCode).catch(err => console.error('[Meta CAPI] Error tracking ViewContent:', err));
+					} else {
+						console.log(`🤖 Bot detectado en [${slug}]: ${visitorInfo.botName || 'Bot'} (${visitorInfo.ip}) — Filtrado de ELO y Meta CAPI`);
 					}
 
-					MetaService.trackViewContent({
-						productId: prod._id ? prod._id.toString() : slug,
-						productName: prod.model || prod.brand || slug,
-						category: typeof prod.category === 'object' ? prod.category?.name : prod.category,
-						value: priceVal,
-						currency: 'ARS',
-						userData,
-						eventSourceUrl: sourceUrl,
-						eventId: `vc_${prod._id ? prod._id.toString() : slug}`,
-					}, customAccessToken, customPixelId, customTestEventCode).catch(err => console.error('[Meta CAPI] Error tracking ViewContent:', err));
-
-					// Registro interno de vistas (1st-Party Analytics) y score ELO
+					// Registro interno de vistas (1st-Party Analytics) con auditoría de dispositivo, URL y anti-bot
 					if (prod._id && req.models?.Product) {
-						ProductService.recordProductView(req.models, String(prod._id)).catch(err => {
+						ProductService.recordProductView(req.models, String(prod._id), visitorInfo).catch(err => {
 							console.error('[Product Metrics] Error recording product view:', err);
 						});
 					}
 				} catch (trackingErr) {
-					console.error('[Meta CAPI] Background tracking error in getProductBySlug:', trackingErr);
+					console.error('[Product Tracking] Background tracking error in getProductBySlug:', trackingErr);
 				}
 			}
 		} catch (error) {
@@ -744,6 +749,50 @@ export class ProductController {
 
 			await ProductService.recordCartAdd((req as any).models!, targetId);
 			res.status(200).json({ success: true });
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// GET /api/products/:id/views - Auditoría de vistas, dispositivos y bots (admin)
+	static async getProductViews(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { id } = req.params;
+			if (!id) throw new AppError('Product ID required', 'ID requerido', 400);
+
+			let targetId = id;
+			if (!mongoose.Types.ObjectId.isValid(id)) {
+				const prod = await req.models?.Product.findOne({
+					$or: [{ slug: id }, { sku: id }]
+				}).select('_id');
+				if (prod) targetId = prod._id.toString();
+			}
+
+			const audit = await ProductService.getProductViewsAudit(req.models!, targetId);
+			res.status(200).json({ success: true, data: audit });
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// POST /api/products/:id/views/approve - Aprobar manualmente un punto de vista rechazado por bot
+	static async approveViewPoint(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { id } = req.params;
+			const { viewedAt } = req.body;
+			if (!id) throw new AppError('Product ID required', 'ID requerido', 400);
+			if (!viewedAt) throw new AppError('viewedAt is required', 'Fecha de visita requerida', 400);
+
+			let targetId = id;
+			if (!mongoose.Types.ObjectId.isValid(id)) {
+				const prod = await req.models?.Product.findOne({
+					$or: [{ slug: id }, { sku: id }]
+				}).select('_id');
+				if (prod) targetId = prod._id.toString();
+			}
+
+			const result = await ProductService.approveManualViewPoint(req.models!, targetId, viewedAt);
+			res.status(200).json(result);
 		} catch (error) {
 			next(error);
 		}

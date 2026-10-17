@@ -157,8 +157,31 @@ const BaseProductSchema = new Schema(
 		},
 		metrics: {
 			viewsCount: { type: Number, default: 0 },
+			botViewsCount: { type: Number, default: 0 },
 			cartAddsCount: { type: Number, default: 0 },
 			salesCount: { type: Number, default: 0 },
+			viewsByDevice: {
+				mobile: { type: Number, default: 0 },
+				desktop: { type: Number, default: 0 },
+				tablet: { type: Number, default: 0 },
+				bot: { type: Number, default: 0 },
+			},
+			recentViews: [
+				{
+					viewedAt: { type: Date, default: Date.now },
+					device: { type: String, enum: ['mobile', 'desktop', 'tablet', 'bot'], default: 'desktop' },
+					browser: { type: String },
+					os: { type: String },
+					url: { type: String },
+					referrer: { type: String },
+					ip: { type: String },
+					isBot: { type: Boolean, default: false },
+					botName: { type: String },
+					userAgent: { type: String },
+					rejectionReason: { type: String },
+					manuallyApproved: { type: Boolean, default: false }
+				}
+			],
 			lastViewedAt: { type: Date }
 		},
 		effectiveScore: {
