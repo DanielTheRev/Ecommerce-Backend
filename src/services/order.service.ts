@@ -230,7 +230,28 @@ export class OrderService {
 			/* calculate dynamic shipping logic */
 			const config = await EcommerceService.getConfig(models);
 			const threshold = config.shippingConfig?.freeShippingThreshold ?? 80000;
-			const subtotalBase = processedOrderItems.reduce((acc, item) => acc + ((item.data.price?.cashTransferPrice || 0) * item.quantity), 0);
+			const subtotalBase = processedOrderItems.reduce((acc, item) => {
+				let unitPrice = item.data.price?.cashTransferPrice || 0;
+				switch (paymentMethod.type) {
+					case PaymentType.CARD:
+						if (installments !== undefined && installments === 1) {
+							unitPrice = item.data.price?.card_ticket1PayPrice || item.data.price?.listPrice || 0;
+						} else {
+							unitPrice = item.data.price?.listPrice || 0;
+						}
+						break;
+					case PaymentType.TICKET:
+						unitPrice = item.data.price?.card_ticket1PayPrice || item.data.price?.listPrice || 0;
+						break;
+					case PaymentType.CASH:
+					case PaymentType.BANK_TRANSFER:
+					case PaymentType.ALIAS_TRANSFER:
+					default:
+						unitPrice = item.data.price?.cashTransferPrice || 0;
+						break;
+				}
+				return acc + (unitPrice * item.quantity);
+			}, 0);
 			const totalItems = processedOrderItems.reduce((acc, item) => acc + item.quantity, 0);
 
 			let appliedShippingCost = shippingMethod.cost;
