@@ -842,6 +842,13 @@ export class ProductController {
 				newProfitMargin,
 				exactMatch: !!exactMatch
 			});
+			if (result.updatedCount === 0 && result.errors && result.errors.length > 0) {
+				res.status(400).json({
+					...result,
+					message: result.errors[0]?.error || 'No se pudo recalcular ningún producto'
+				});
+				return;
+			}
 			res.status(200).json(result);
 		} catch (error) {
 			next(error);

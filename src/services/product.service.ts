@@ -3831,7 +3831,9 @@ export class ProductService {
 		const config = await EcommerceService.getConfig(models);
 		const { venta } = await getDolar(config.dollarQuoteType || 'oficial', config.customDollarRate || 0);
 
-		const products = await models.Product.find({ _id: { $in: validIds } }).select('+finance');
+		const products = await models.Product.find({ _id: { $in: validIds } }).select(
+			'+finance brand model category status price images'
+		);
 
 		let updatedCount = 0;
 		const updatedIds: string[] = [];
@@ -3896,13 +3898,18 @@ export class ProductService {
 					config
 				});
 
-				product.price = price;
-				product.finance = finance;
-				await product.save();
+				await models.Product.updateOne(
+					{ _id: product._id },
+					{
+						$set: { price, finance },
+						$unset: { prices: '' }
+					}
+				);
 
 				updatedCount++;
 				updatedIds.push(String(product._id));
 			} catch (err: any) {
+				console.error(`❌ Error al recalcular producto ${product._id} (${product.model}):`, err);
 				errors.push({
 					_id: String(product._id),
 					model: product.model,
