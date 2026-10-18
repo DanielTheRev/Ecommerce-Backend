@@ -120,6 +120,12 @@ export class PaymentMethodController {
 			const data = req.body;
 			const paymentMethod = await PaymentMethodService.create(req.models!, data);
 
+			try {
+				const { CacheService } = await import('@/services/cache.service');
+				const tenantSlug = req.tenant?.slug || 'global';
+				CacheService.invalidate(tenantSlug, 'ecommerce_config_public');
+			} catch (_) {}
+
 			return res.status(201).json(paymentMethod);
 		} catch (error) {
 			return next(error)
@@ -133,6 +139,12 @@ export class PaymentMethodController {
 			const data = req.body;
 			const paymentMethod = await PaymentMethodService.update(req.models!, id, data);
 
+			try {
+				const { CacheService } = await import('@/services/cache.service');
+				const tenantSlug = req.tenant?.slug || 'global';
+				CacheService.invalidate(tenantSlug, 'ecommerce_config_public');
+			} catch (_) {}
+
 			return res.json(paymentMethod);
 		} catch (error) {
 			return next(error)
@@ -145,6 +157,12 @@ export class PaymentMethodController {
 		try {
 			const { id } = req.params;
 			await PaymentMethodService.delete(req.models!, id);
+
+			try {
+				const { CacheService } = await import('@/services/cache.service');
+				const tenantSlug = req.tenant?.slug || 'global';
+				CacheService.invalidate(tenantSlug, 'ecommerce_config_public');
+			} catch (_) {}
 
 			return res.json({
 				success: true,

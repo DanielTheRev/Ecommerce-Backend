@@ -82,6 +82,11 @@ export class EcommerceService {
 				publicConfig.integrations.googleAuth.clientId = safeDecryptString(publicConfig.integrations.googleAuth.clientId);
 			}
 
+			const activeTransferMethod = await models.PaymentMethod.findOne({
+				type: { $in: ['BANK_TRANSFER', 'ALIAS_TRANSFER'] },
+				isActive: true
+			}).lean();
+
 			const data: IEcommerceConfigPublic = {
 				name: publicConfig.name || 'Mi Tienda',
 				logo: publicConfig.logo || '',
@@ -141,11 +146,11 @@ export class EcommerceService {
 						excludedPaymentTypes: publicConfig.paymentGateways?.mercadopago?.excludedPaymentTypes || [],
 					},
 					transfer: {
-						active: publicConfig.paymentGateways?.transfer?.active || false,
-						alias: publicConfig.paymentGateways?.transfer?.alias || '',
-						cbuCvu: publicConfig.paymentGateways?.transfer?.cbuCvu || '',
-						bankName: publicConfig.paymentGateways?.transfer?.bankName || '',
-						titular: publicConfig.paymentGateways?.transfer?.titular || ''
+						active: (publicConfig.paymentGateways?.transfer?.active ?? true),
+						alias: activeTransferMethod?.alias || publicConfig.paymentGateways?.transfer?.alias || '',
+						cbuCvu: activeTransferMethod?.cbuCvu || publicConfig.paymentGateways?.transfer?.cbuCvu || '',
+						bankName: activeTransferMethod?.bankName || publicConfig.paymentGateways?.transfer?.bankName || '',
+						titular: activeTransferMethod?.titular || publicConfig.paymentGateways?.transfer?.titular || ''
 					}
 				},
 				homeLayout: publicConfig.homeLayout

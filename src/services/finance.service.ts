@@ -83,12 +83,16 @@ export class FinanceService {
 				? pricingMethodChoice
 				: EcommerceConfig.pricingStrategy.method;
 
+		const isARS = EcommerceConfig.costCurrency === 'ARS';
+
 		const processedAdditionalCosts = additionalCosts.map((item) => {
 			const itemValue = Number(item.value) || 0;
 			const category = item.category || 'expense';
 			const type = item.type || 'fixed';
+			let calculatedAmountInARS = 0;
 
 			if (type === 'fixed') {
+				calculatedAmountInARS = isARS ? itemValue : itemValue * Number(dolar);
 				if (category === 'tax') {
 					fixedTaxesRaw += itemValue;
 				} else {
@@ -96,6 +100,7 @@ export class FinanceService {
 				}
 			} else if (type === 'percent_over_provider') {
 				const cost = Number(providerCost) * (itemValue / 100);
+				calculatedAmountInARS = isARS ? cost : cost * Number(dolar);
 				if (category === 'tax') {
 					percentOverProviderTaxesRaw += cost;
 				} else {
@@ -109,7 +114,8 @@ export class FinanceService {
 				concept: item.concept,
 				type,
 				category,
-				value: itemValue
+				value: itemValue,
+				calculatedAmountInARS: Math.round(calculatedAmountInARS)
 			};
 		});
 
@@ -123,7 +129,6 @@ export class FinanceService {
 		const cft6Factor = this.normalizePercentage(Number(rawCFT6));
 		const ivaFactor = 1 + Number(EcommerceConfig.taxes?.iva || 21) / 100;
 
-		const isARS = EcommerceConfig.costCurrency === 'ARS';
 		const totalOperationalExpensesRaw = fixedExpensesRaw + percentOverProviderExpensesRaw;
 		const totalTaxesOverProviderRaw = fixedTaxesRaw + percentOverProviderTaxesRaw;
 
@@ -387,7 +392,9 @@ export class FinanceService {
 			// 3. Ensamblar resultado
 			const { _internal: i } = listResult;
 			const EcommerceConfig = data.config || (data.models ? await EcommerceService.getConfig(data.models) : null);
-			const shippingConcept = (data.additionalCosts || []).find((c) => c.category === 'shipping');
+			const shippingConcept = (data.additionalCosts || []).find(
+				(c) => c.category === 'shipping' || /env[ií]o/i.test(c.concept || '')
+			);
 			const shippingSubsidy = shippingConcept
 				? Number(shippingConcept.value) || 0
 				: (EcommerceConfig?.shippingConfig?.defaultItemSubsidy ?? 4000);

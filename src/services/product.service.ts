@@ -3614,5 +3614,310 @@ export class ProductService {
 			}
 		};
 	}
+
+	/**
+	 * Previsualiza la eliminación masiva de un concepto de costo adicional (ej: "IVA")
+	 * filtrando sin importar mayúsculas, minúsculas ni tildes, y recalcula los precios y ganancias
+	 * (incluyendo escenario con cupón de 10% OFF en Transferencia y 3 Cuotas) sin modificar la base de datos.
+	 */
+	static async previewBulkRemoveAdditionalCost(
+		models: TenantModels,
+		options: {
+			conceptQuery: string;
+			statusFilter?: string;
+			categoryFilter?: string;
+			newProfitMargin?: number;
+			exactMatch?: boolean;
+		}
+	) {
+		const rawQuery = String(options.conceptQuery || '').trim();
+		if (!rawQuery) {
+			throw new AppError('conceptQuery is required', 'Debés ingresar el nombre del costo adicional a buscar (ej: IVA)', 400);
+		}
+
+		const normalizeConcept = (s: string) =>
+			String(s || '')
+				.normalize('NFD')
+				.replace(/[\u0300-\u036f]/g, '')
+				.toLowerCase()
+				.replace(/[^a-z0-9]/g, '')
+				.trim();
+
+		const normTarget = normalizeConcept(rawQuery);
+		if (!normTarget) {
+			throw new AppError('Invalid conceptQuery', 'El texto de búsqueda no es válido', 400);
+		}
+
+		const filter: any = {};
+		if (options.statusFilter && options.statusFilter !== 'all') {
+			filter.status = options.statusFilter;
+		}
+		if (options.categoryFilter && options.categoryFilter.trim()) {
+			filter.category = options.categoryFilter.trim();
+		}
+
+		const products = await models.Product.find(filter)
+			.select('+finance brand model category status price images')
+			.sort({ category: 1, model: 1 })
+			.lean() as any[];
+
+		const config = await EcommerceService.getConfig(models);
+		const { venta } = await getDolar(config.dollarQuoteType || 'oficial', config.customDollarRate || 0);
+
+		const items: any[] = [];
+		const isExact = !!options.exactMatch;
+
+		for (const p of products) {
+			const additionalCosts = Array.isArray(p.finance?.additionalCosts) ? p.finance.additionalCosts : [];
+			const matchesCondition = (c: any) =>
+				isExact
+					? String(c.concept || '').trim() === rawQuery
+					: normalizeConcept(c.concept).includes(normTarget);
+
+			const matchedCosts = additionalCosts.filter(matchesCondition);
+
+			if (matchedCosts.length === 0) continue;
+
+			const remainingCosts = additionalCosts
+				.filter((c: any) => !matchesCondition(c))
+				.map((c: any) => ({
+					concept: c.concept,
+					type: c.type,
+					value: Number(c.value) || 0,
+					category: c.category || (/env[ií]o/i.test(c.concept || '') ? 'shipping' : 'expense')
+				}));
+
+			const providerCost = Number(p.finance?.providerCost?.inARS || p.finance?.providerCost?.inUSD || 0);
+			if (providerCost <= 0) continue;
+
+			const currentMargin = Number(p.finance?.pricingStrategy?.targetProfit || (config?.pricingStrategy as any)?.profit || (config?.pricingStrategy as any)?.defaultProfitMargin || 30);
+			const targetMargin =
+				options.newProfitMargin !== undefined &&
+				options.newProfitMargin !== null &&
+				!isNaN(Number(options.newProfitMargin)) &&
+				Number(options.newProfitMargin) > 0
+					? Number(options.newProfitMargin)
+					: currentMargin;
+
+			const pricingMethod = (p.finance?.pricingStrategy?.method || config?.pricingStrategy?.method || 'margin') as any;
+			const discountTransfer = p.price?.discountPercentageTransfer;
+
+			const { price: newPrice, finance: newFinance } = await FinanceService.CalculatePrices({
+				providerCost,
+				additionalCosts: remainingCosts,
+				discountPercentageTransfer: discountTransfer,
+				useCustomProfit: true,
+				customProfitMargin: targetMargin,
+				pricingMethodChoice: pricingMethod,
+				dolar: venta,
+				models,
+				config
+			});
+
+			const oldListPrice = Number(p.price?.listPrice || 0);
+			const oldTransferPrice = Number(p.price?.cashTransferPrice || 0);
+			const oldProfitTransfer = Number(p.finance?.calculatedProfits?.transfer || 0);
+			const oldProfit3Installments = Number(p.finance?.calculatedProfits?.card3Installments || 0);
+
+			const newListPrice = Number(newPrice.listPrice || 0);
+			const newTransferPrice = Number(newPrice.cashTransferPrice || 0);
+			const newProfitTransfer = Number(newFinance.calculatedProfits?.transfer || 0);
+			const newProfit1Pay = Number(newFinance.calculatedProfits?.card_ticket1Pay || 0);
+			const newProfit3Installments = Number(newFinance.calculatedProfits?.card3Installments || 0);
+
+			// Costo total cubierto en el nuevo escenario
+			const totalCostNew = newTransferPrice - newProfitTransfer;
+			// Ganancia neta con cupón -10% (PRIMERACOMPRA) en Transferencia
+			const newProfitTransferCoupon10 = Math.round(newTransferPrice * 0.90 - totalCostNew);
+			// Ganancia neta con cupón -10% (PRIMERACOMPRA) en 3 Cuotas sin interés (MP descuenta su tasa sobre el 90% cobrado)
+			const netFromMP3Installments = totalCostNew + newProfit3Installments;
+			const newProfit3InstallmentsCoupon10 = Math.round(netFromMP3Installments * 0.90 - totalCostNew);
+
+			// Reserva de reposición que queda en bolsillo del comerciante
+			const restockConcept = (newFinance.additionalCosts || []).find((c: any) =>
+				/reposici[oó]n/i.test(c.concept || '')
+			);
+			const restockReserveARS = Math.round(Number((restockConcept as any)?.calculatedAmountInARS || 0));
+
+			const removedAmountARS = matchedCosts.reduce(
+				(acc: number, c: any) => acc + Number(c.calculatedAmountInARS || 0),
+				0
+			);
+
+			const primaryImage =
+				p.images && p.images.length > 0
+					? (typeof p.images[0] === 'string' ? p.images[0] : p.images[0]?.url || '')
+					: '';
+
+			items.push({
+				_id: String(p._id),
+				model: p.model || '',
+				brand: p.brand || '',
+				category: p.category || '',
+				status: p.status || 'published',
+				image: primaryImage,
+				providerCost,
+				oldMargin: currentMargin,
+				newMargin: targetMargin,
+				matchedConcepts: matchedCosts.map((c: any) => ({
+					concept: c.concept,
+					type: c.type,
+					value: c.value,
+					calculatedAmountInARS: Math.round(Number(c.calculatedAmountInARS || 0))
+				})),
+				remainingConcepts: (newFinance.additionalCosts || []).map((c: any) => ({
+					concept: c.concept,
+					type: c.type,
+					value: c.value,
+					calculatedAmountInARS: Math.round(Number(c.calculatedAmountInARS || 0))
+				})),
+				removedAmountARS: Math.round(removedAmountARS),
+				restockReserveARS,
+				oldListPrice,
+				newListPrice,
+				diffListPrice: newListPrice - oldListPrice,
+				oldTransferPrice,
+				newTransferPrice,
+				diffTransferPrice: newTransferPrice - oldTransferPrice,
+				oldProfitTransfer,
+				newProfitTransfer,
+				oldProfit3Installments,
+				newProfit3Installments,
+				newProfit1Pay,
+				newProfitTransferCoupon10,
+				newProfit3InstallmentsCoupon10
+			});
+		}
+
+		return {
+			conceptQuery: rawQuery,
+			totalMatched: items.length,
+			items
+		};
+	}
+
+	/**
+	 * Aplica la eliminación masiva del concepto de costo adicional confirmado a los IDs seleccionados
+	 * y recalcula sus precios y finanzas en la base de datos.
+	 */
+	static async applyBulkRemoveAdditionalCost(
+		models: TenantModels,
+		options: {
+			productIds: string[];
+			conceptQuery: string;
+			newProfitMargin?: number;
+			exactMatch?: boolean;
+		}
+	) {
+		const rawQuery = String(options.conceptQuery || '').trim();
+		if (!rawQuery) {
+			throw new AppError('conceptQuery is required', 'El concepto a eliminar es requerido', 400);
+		}
+		if (!Array.isArray(options.productIds) || options.productIds.length === 0) {
+			throw new AppError('productIds required', 'Debés seleccionar al menos un producto para actualizar', 400);
+		}
+
+		const normalizeConcept = (s: string) =>
+			String(s || '')
+				.normalize('NFD')
+				.replace(/[\u0300-\u036f]/g, '')
+				.toLowerCase()
+				.replace(/[^a-z0-9]/g, '')
+				.trim();
+
+		const normTarget = normalizeConcept(rawQuery);
+		const validIds = options.productIds.filter((id) => Types.ObjectId.isValid(id));
+
+		const config = await EcommerceService.getConfig(models);
+		const { venta } = await getDolar(config.dollarQuoteType || 'oficial', config.customDollarRate || 0);
+
+		const products = await models.Product.find({ _id: { $in: validIds } }).select('+finance');
+
+		let updatedCount = 0;
+		const updatedIds: string[] = [];
+		const errors: any[] = [];
+		const isExact = !!options.exactMatch;
+
+		for (const product of products) {
+			try {
+				const additionalCosts = Array.isArray(product.finance?.additionalCosts)
+					? product.finance.additionalCosts
+					: [];
+
+				const matchesCondition = (c: any) =>
+					isExact
+						? String(c.concept || '').trim() === rawQuery
+						: normalizeConcept(c.concept).includes(normTarget);
+
+				const matchedCosts = additionalCosts.filter(matchesCondition);
+				if (matchedCosts.length === 0) continue;
+
+				const remainingCosts = additionalCosts
+					.filter((c: any) => !matchesCondition(c))
+					.map((c: any) => ({
+						concept: c.concept,
+						type: c.type,
+						value: Number(c.value) || 0,
+						category: (c.category || (/env[ií]o/i.test(c.concept || '') ? 'shipping' : 'expense')) as any
+					}));
+
+				const providerCost = Number(
+					product.finance?.providerCost?.inARS || product.finance?.providerCost?.inUSD || 0
+				);
+				if (providerCost <= 0) continue;
+
+				const currentMargin = Number(
+					product.finance?.pricingStrategy?.targetProfit ||
+						(config?.pricingStrategy as any)?.profit ||
+						(config?.pricingStrategy as any)?.defaultProfitMargin ||
+						30
+				);
+				const targetMargin =
+					options.newProfitMargin !== undefined &&
+					options.newProfitMargin !== null &&
+					!isNaN(Number(options.newProfitMargin)) &&
+					Number(options.newProfitMargin) > 0
+						? Number(options.newProfitMargin)
+						: currentMargin;
+
+				const pricingMethod = (product.finance?.pricingStrategy?.method ||
+					config?.pricingStrategy?.method ||
+					'margin') as any;
+
+				const { price, finance } = await FinanceService.CalculatePrices({
+					providerCost,
+					additionalCosts: remainingCosts,
+					discountPercentageTransfer: (product.price as any)?.discountPercentageTransfer,
+					useCustomProfit: true,
+					customProfitMargin: targetMargin,
+					pricingMethodChoice: pricingMethod,
+					dolar: venta,
+					models,
+					config
+				});
+
+				product.price = price;
+				product.finance = finance;
+				await product.save();
+
+				updatedCount++;
+				updatedIds.push(String(product._id));
+			} catch (err: any) {
+				errors.push({
+					_id: String(product._id),
+					model: product.model,
+					error: err.message || 'Error al recalcular producto'
+				});
+			}
+		}
+
+		return {
+			success: errors.length === 0,
+			updatedCount,
+			updatedIds,
+			errors
+		};
+	}
 }
+
 

@@ -580,36 +580,45 @@ export class ProductController {
 				productType: productType
 			});
 
-			if (q && typeof q === 'string') {
-				let customAccessToken: string | undefined;
-				let customPixelId: string | undefined;
-				let customTestEventCode: string | undefined;
+			if (q && typeof q === 'string' && q.trim()) {
+				const cleanQuery = q.trim();
+				const visitorInfo = extractVisitorInfo(req);
 
-				if (req.models) {
-					try {
-						const { EcommerceService } = await import('../services/ecommerce.service');
-						const config = await EcommerceService.getConfig(req.models);
-						if (config.integrations?.metaPixel?.active && config.integrations.metaPixel.pixelId && config.integrations.metaPixel.accessToken) {
-							customPixelId = config.integrations.metaPixel.pixelId;
-							customAccessToken = config.integrations.metaPixel.accessToken;
-							customTestEventCode = config.integrations.metaPixel.testEventCode;
+				if (!visitorInfo.isBot) {
+					let customAccessToken: string | undefined;
+					let customPixelId: string | undefined;
+					let customTestEventCode: string | undefined;
+
+					if (req.models) {
+						try {
+							const { EcommerceService } = await import('../services/ecommerce.service');
+							const config = await EcommerceService.getConfig(req.models);
+							if (config.integrations?.metaPixel?.active && config.integrations.metaPixel.pixelId && config.integrations.metaPixel.accessToken) {
+								customPixelId = config.integrations.metaPixel.pixelId;
+								customAccessToken = config.integrations.metaPixel.accessToken;
+								customTestEventCode = config.integrations.metaPixel.testEventCode;
+							}
+						} catch (e) {
+							console.error('[Meta CAPI] Error loading store config in searchProducts:', e);
 						}
-					} catch (e) {
-						console.error('[Meta CAPI] Error loading store config in searchProducts:', e);
 					}
-				}
 
-				MetaService.trackEvent({
-					eventName: 'Search',
-					customData: {
-						search_string: q,
-					},
-					userData: {
-						clientIp: req.ip,
-						clientUserAgent: req.get('user-agent'),
-					},
-					eventSourceUrl: `${req.protocol}://${req.get('host')}${req.originalUrl}`,
-				}, customAccessToken, customPixelId, customTestEventCode).catch(err => console.error('[Meta CAPI] Error tracking Search:', err));
+					const userData = MetaService.extractUserDataFromReq(req);
+					const referer = req.get('referer');
+					const sourceUrl = (referer && referer.includes('vura.com.ar'))
+						? referer
+						: `https://vura.com.ar/products?q=${encodeURIComponent(cleanQuery)}`;
+
+					MetaService.trackEvent({
+						eventName: 'Search',
+						eventId: `search_${cleanQuery.toLowerCase()}`,
+						customData: {
+							search_string: cleanQuery,
+						},
+						userData,
+						eventSourceUrl: sourceUrl,
+					}, customAccessToken, customPixelId, customTestEventCode).catch(err => console.error('[Meta CAPI] Error tracking Search:', err));
+				}
 			}
 
 			res.status(200).json({
@@ -797,5 +806,47 @@ export class ProductController {
 			next(error);
 		}
 	}
+
+	// POST /api/products/admin/bulk-additional-cost/preview - Previsualizar quita masiva de un concepto de costo adicional (ej: IVA)
+	static async previewBulkAdditionalCostRemoval(
+		req: AuthRequest,
+		res: Response,
+		next: NextFunction
+	): Promise<void> {
+		try {
+			const { conceptQuery, statusFilter, categoryFilter, newProfitMargin, exactMatch } = req.body || {};
+			const result = await ProductService.previewBulkRemoveAdditionalCost(req.models!, {
+				conceptQuery,
+				statusFilter,
+				categoryFilter,
+				newProfitMargin,
+				exactMatch: !!exactMatch
+			});
+			res.status(200).json(result);
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// POST /api/products/admin/bulk-additional-cost/apply - Aplicar quita masiva de costo adicional a los productos confirmados
+	static async applyBulkAdditionalCostRemoval(
+		req: AuthRequest,
+		res: Response,
+		next: NextFunction
+	): Promise<void> {
+		try {
+			const { productIds, conceptQuery, newProfitMargin, exactMatch } = req.body || {};
+			const result = await ProductService.applyBulkRemoveAdditionalCost(req.models!, {
+				productIds,
+				conceptQuery,
+				newProfitMargin,
+				exactMatch: !!exactMatch
+			});
+			res.status(200).json(result);
+		} catch (error) {
+			next(error);
+		}
+	}
 }
+
 

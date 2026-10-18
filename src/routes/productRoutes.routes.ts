@@ -17,6 +17,8 @@ const multerConfig = multer().fields([
 router.post('/finance/calculate', protect, adminOnly, ProductController.calculatePrices); // Calculadora de precios con financiamiento
 router.get('/admin/quality-audit', protect, adminOnly, ProductController.getQualityAudit); // Auditoría de calidad de productos (guía de talles e imagen SEO)
 router.get('/admin/check-supplier-link', protect, adminOnly, ProductController.checkSupplierLink); // Verificación de duplicados por link de proveedor
+router.post('/admin/bulk-additional-cost/preview', protect, adminOnly, ProductController.previewBulkAdditionalCostRemoval); // Previsualizar quita masiva de costo adicional
+router.post('/admin/bulk-additional-cost/apply', protect, adminOnly, ProductController.applyBulkAdditionalCostRemoval); // Aplicar quita masiva de costo adicional confirmada
 router.get('/admin/list', protect, adminOnly, ProductController.getProducts); // products con precios completos
 router.post('/calculate-prices', protect, adminOnly, validateSchema(PriceCalculatorSchema), ProductController.calculatePrice); // Calculadora de precios
 router.get('/complete/:id', protect, adminOnly, ProductController.getProductWCompletePrices); // product con precios completos
