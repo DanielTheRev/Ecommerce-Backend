@@ -854,6 +854,28 @@ export class ProductController {
 			next(error);
 		}
 	}
+
+	// PATCH /api/products/:id/quick-pricing - Calibración quirúrgica rápida de precios y finanzas
+	static async updateQuickPricing(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const id = req.params.id;
+			const { providerCost, profitMargin, discountPercentageTransfer, additionalCosts } = req.body || {};
+			const result = await ProductService.updateProductQuickPricing(req.models!, id, {
+				providerCost,
+				profitMargin,
+				discountPercentageTransfer,
+				additionalCosts
+			});
+			if (req.tenant?.slug) {
+				const { CacheService } = await import('@/services/cache.service');
+				CacheService.invalidatePrefix(req.tenant.slug, 'home');
+				CacheService.invalidatePrefix(req.tenant.slug, 'products');
+			}
+			res.status(200).json(result);
+		} catch (error) {
+			next(error);
+		}
+	}
 }
 
 

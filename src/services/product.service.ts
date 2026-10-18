@@ -3925,6 +3925,98 @@ export class ProductService {
 			errors
 		};
 	}
+
+	/**
+	 * Calibración rápida de precios y finanzas para un solo producto (Modal Rápido).
+	 * Permite ajustar costo de proveedor, margen de ganancia, % de descuento en transferencia y/o adicionales
+	 * recalculando atómicamente con FinanceService y actualizando vía updateOne sin riesgo de validación Mongoose.
+	 */
+	static async updateProductQuickPricing(
+		models: TenantModels,
+		id: string,
+		data: {
+			providerCost?: number;
+			profitMargin?: number;
+			discountPercentageTransfer?: number;
+			additionalCosts?: any[];
+		}
+	) {
+		if (!Types.ObjectId.isValid(id)) {
+			throw new AppError('Invalid ID', 'ID de producto inválido', 400);
+		}
+		const product = await models.Product.findById(id).select('+finance brand model category status price images');
+		if (!product) {
+			throw new AppError('Product not found', 'Producto no encontrado', 404);
+		}
+
+		const config = await EcommerceService.getConfig(models);
+		const { venta } = await getDolar(config.dollarQuoteType || 'oficial', config.customDollarRate || 0);
+
+		const finalCosts = Array.isArray(data.additionalCosts)
+			? data.additionalCosts
+			: (product.finance?.additionalCosts || []);
+
+		const finalProviderCost =
+			data.providerCost !== undefined && Number(data.providerCost) > 0
+				? Number(data.providerCost)
+				: Number(product.finance?.providerCost?.inARS || product.finance?.providerCost?.inUSD || 0);
+
+		if (finalProviderCost <= 0) {
+			throw new AppError('Provider cost must be greater than zero', 'El costo de proveedor debe ser mayor a 0', 400);
+		}
+
+		const currentMargin = Number(
+			product.finance?.pricingStrategy?.targetProfit ||
+			(config?.pricingStrategy as any)?.profit ||
+			(config?.pricingStrategy as any)?.defaultProfitMargin ||
+			30
+		);
+
+		const finalMargin =
+			data.profitMargin !== undefined && !isNaN(Number(data.profitMargin)) && Number(data.profitMargin) > 0
+				? Number(data.profitMargin)
+				: currentMargin;
+
+		const finalDiscountTransfer =
+			data.discountPercentageTransfer !== undefined && !isNaN(Number(data.discountPercentageTransfer))
+				? Number(data.discountPercentageTransfer)
+				: ((product.price as any)?.discountPercentageTransfer ?? 15);
+
+		const pricingMethod = (product.finance?.pricingStrategy?.method ||
+			config?.pricingStrategy?.method ||
+			'margin') as any;
+
+		const { price, finance } = await FinanceService.CalculatePrices({
+			providerCost: finalProviderCost,
+			additionalCosts: finalCosts,
+			discountPercentageTransfer: finalDiscountTransfer,
+			useCustomProfit: true,
+			customProfitMargin: finalMargin,
+			pricingMethodChoice: pricingMethod,
+			dolar: venta,
+			models,
+			config
+		});
+
+		await models.Product.updateOne(
+			{ _id: product._id },
+			{
+				$set: { price, finance },
+				$unset: { prices: '' }
+			}
+		);
+
+		return {
+			success: true,
+			product: {
+				_id: String(product._id),
+				brand: product.brand,
+				model: product.model,
+				price,
+				finance
+			}
+		};
+	}
 }
 
 

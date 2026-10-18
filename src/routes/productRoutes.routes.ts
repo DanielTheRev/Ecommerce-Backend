@@ -30,6 +30,7 @@ router.patch('/bulk-status', protect, adminOnly, ProductController.bulkUpdateSta
 router.patch('/:id/ranking-score', protect, adminOnly, ProductController.updateRankingScore); // Actualizar score de ranking ELO
 router.get('/:id/views', protect, adminOnly, ProductController.getProductViews); // Auditoría de vistas, dispositivos y bots
 router.post('/:id/views/approve', protect, adminOnly, ProductController.approveViewPoint); // Forzar aprobación manual de punto de vista
+router.patch('/:id/quick-pricing', protect, adminOnly, ProductController.updateQuickPricing); // Calibración quirúrgica rápida de precios
 router.patch('/:id', protect, adminOnly, multerConfig, validateSchema(UpdateProductSchema), ProductController.patchProduct); // Actualización parcial
 router.delete('/:id', protect, adminOnly, ProductController.deleteProduct); // Eliminar producto
 
