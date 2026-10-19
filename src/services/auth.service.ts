@@ -4,6 +4,7 @@ import { AuthProvider } from '@/interfaces/auth.interface';
 import { ISecureUser, Role } from '@/interfaces/user.interface';
 import { TenantModels } from '@/config/modelRegistry';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
 import { UserService } from './user.service';
@@ -182,6 +183,13 @@ export class AuthService {
 		}
 	}
 
+	private static hashOtpCode(code: string): string {
+		return crypto
+			.createHash('sha256')
+			.update(`${code}:${process.env.JWT_SECRET || 'vura_otp_secret'}`)
+			.digest('hex');
+	}
+
 	static async sendOtp(
 		models: TenantModels,
 		email: string,
@@ -200,11 +208,12 @@ export class AuthService {
 		}
 
 		const code = Math.floor(100000 + Math.random() * 900000).toString();
+		const codeHash = this.hashOtpCode(code);
 
 		const otpToken = jwt.sign(
 			{
 				email: cleanEmail,
-				code,
+				codeHash,
 				isNewUser,
 				name: userData?.name?.trim() || '',
 				lastName: userData?.lastName?.trim() || '',
@@ -242,7 +251,13 @@ export class AuthService {
 		}
 
 		const cleanSubmitted = submittedCode.trim().replace(/\s+/g, '');
-		if (decoded.code !== cleanSubmitted) {
+		const expectedHash = this.hashOtpCode(cleanSubmitted);
+
+		const isMatch = decoded.codeHash
+			? decoded.codeHash === expectedHash
+			: decoded.code === cleanSubmitted; // fallback de compatibilidad
+
+		if (!isMatch) {
 			throw new AppError('Incorrect code', 'El código de 6 dígitos ingresado es incorrecto', 400);
 		}
 
