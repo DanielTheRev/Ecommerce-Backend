@@ -237,7 +237,7 @@ export class HomeService {
 		const categoriesMenu = resolved['categoriesMenu'] || null;
 
 		const result: IHomeConfig = {
-			// homeLayout: config?.homeLayout,
+			homeLayout: config?.homeLayout,
 			heroSlides: resolved['heroSlides'] || [],
 			offers: dynamicOffers,
 			productByBrand: resolved['productByBrand'] || [],

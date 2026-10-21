@@ -34,8 +34,12 @@ export class ShopTheLookService {
 				if (cached) return cached;
 			}
 
-			const looks = await models.ShopTheLook.find()
-				.sort({ createdAt: -1 })
+			const looks = await models.ShopTheLook.find({ isActive: true })
+				.sort({ effectiveScore: -1, createdAt: -1 })
+				.populate({
+					path: 'products.product',
+					match: { status: 'published' }
+				})
 				.populate({
 					path: 'looks.hotspots.product',
 					match: { status: 'published' }
@@ -43,15 +47,45 @@ export class ShopTheLookService {
 				.lean() as any[];
 
 			for (const look of looks) {
-				if (!look.slug && look.title) {
-					const generatedSlug = await this.generateUniqueSlug(models, look.title, String(look._id));
+				const titleOrName = look.name || look.title || 'Look';
+				if (!look.name) look.name = titleOrName;
+				if (!look.title) look.title = titleOrName;
+
+				if (!look.slug) {
+					const generatedSlug = await this.generateUniqueSlug(models, titleOrName, String(look._id));
 					look.slug = generatedSlug;
 					models.ShopTheLook.findByIdAndUpdate(look._id, { $set: { slug: generatedSlug } }).catch(() => {});
+				}
+
+				// Auto-inicialización transparente de puntaje ELO si no existía
+				if (look.effectiveScore === undefined || look.effectiveScore === null) {
+					const baseScore = look.rankingScore ?? 100;
+					const likes = look.likes || 0;
+					const shares = look.shares || 0;
+					const calculatedEffective = baseScore + (likes * 3) + (shares * 5);
+					look.rankingScore = baseScore;
+					look.effectiveScore = calculatedEffective;
+					models.ShopTheLook.findByIdAndUpdate(look._id, {
+						$set: {
+							rankingScore: baseScore,
+							effectiveScore: calculatedEffective,
+							'metrics.viewsCount': 0,
+							'metrics.likesCount': likes,
+							'metrics.sharesCount': shares,
+							'metrics.cartAddsCount': 0,
+							'metrics.salesCount': 0
+						}
+					}).catch(() => {});
+				}
+
+				// Limpiar referencias a productos no publicados/eliminados
+				if (look.products) {
+					look.products = look.products.filter((p: any) => p.product !== null && p.product !== undefined);
 				}
 				if (look.looks) {
 					look.looks.forEach((l: any) => {
 						if (l.hotspots) {
-							l.hotspots = l.hotspots.filter((h: any) => h.product !== null);
+							l.hotspots = l.hotspots.filter((h: any) => h.product !== null && h.product !== undefined);
 						}
 					});
 				}
@@ -66,7 +100,7 @@ export class ShopTheLookService {
 
 			return result;
 		} catch (error) {
-			throw new AppError('Error fetching Shop The Look items', 'Error al obtener las campañas', 500);
+			throw new AppError('Error fetching Shop The Look items', 'Error al obtener los looks', 500);
 		}
 	}
 
@@ -78,6 +112,10 @@ export class ShopTheLookService {
 			if (isObjectId) {
 				look = await models.ShopTheLook.findById(identifier)
 					.populate({
+						path: 'products.product',
+						match: { status: 'published' }
+					})
+					.populate({
 						path: 'looks.hotspots.product',
 						match: { status: 'published' }
 					})
@@ -87,6 +125,10 @@ export class ShopTheLookService {
 			if (!look) {
 				look = await models.ShopTheLook.findOne({ slug: identifier.toLowerCase().trim() })
 					.populate({
+						path: 'products.product',
+						match: { status: 'published' }
+					})
+					.populate({
 						path: 'looks.hotspots.product',
 						match: { status: 'published' }
 					})
@@ -94,19 +136,26 @@ export class ShopTheLookService {
 			}
 
 			if (!look) {
-				throw new AppError('Look not found', 'Campaña no encontrada', 404);
+				throw new AppError('Look not found', 'Look no encontrado', 404);
 			}
 
-			if (!look.slug && look.title) {
-				const generatedSlug = await this.generateUniqueSlug(models, look.title, String(look._id));
+			const titleOrName = look.name || look.title || 'Look';
+			if (!look.name) look.name = titleOrName;
+			if (!look.title) look.title = titleOrName;
+
+			if (!look.slug) {
+				const generatedSlug = await this.generateUniqueSlug(models, titleOrName, String(look._id));
 				look.slug = generatedSlug;
 				models.ShopTheLook.findByIdAndUpdate(look._id, { $set: { slug: generatedSlug } }).catch(() => {});
 			}
 
+			if (look.products) {
+				look.products = look.products.filter((p: any) => p.product !== null && p.product !== undefined);
+			}
 			if (look.looks) {
 				look.looks.forEach((l: any) => {
 					if (l.hotspots) {
-						l.hotspots = l.hotspots.filter((h: any) => h.product !== null);
+						l.hotspots = l.hotspots.filter((h: any) => h.product !== null && h.product !== undefined);
 					}
 				});
 			}
@@ -114,17 +163,35 @@ export class ShopTheLookService {
 			return look as unknown as IShopTheLookDocument;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
-			throw new AppError('Error fetching Shop The Look item', 'Error al obtener la campaña', 500);
+			throw new AppError('Error fetching Shop The Look item', 'Error al obtener el look', 500);
 		}
 	}
 
 	static async createLook(models: TenantModels, data: IShopTheLook, tenantSlug?: string): Promise<IShopTheLookDocument> {
 		try {
+			const lookName = data.name || data.title || 'Look';
+			if (!data.name) data.name = lookName;
+			if (!data.title) data.title = lookName;
+
 			if (data.slug) {
 				data.slug = await this.generateUniqueSlug(models, data.slug);
-			} else if (data.title) {
-				data.slug = await this.generateUniqueSlug(models, data.title);
+			} else {
+				data.slug = await this.generateUniqueSlug(models, lookName);
 			}
+
+			const baseScore = data.rankingScore !== undefined && data.rankingScore !== null && !isNaN(Number(data.rankingScore))
+				? Number(data.rankingScore)
+				: 100;
+			data.rankingScore = baseScore;
+			data.effectiveScore = baseScore;
+			data.order = data.order !== undefined && !isNaN(Number(data.order)) ? Number(data.order) : 0;
+			data.metrics = {
+				viewsCount: 0,
+				likesCount: data.likes || 0,
+				sharesCount: data.shares || 0,
+				cartAddsCount: 0,
+				salesCount: 0
+			};
 
 			const newLook = await models.ShopTheLook.create(data);
 
@@ -136,7 +203,7 @@ export class ShopTheLookService {
 
 			return newLook;
 		} catch (error) {
-			throw new AppError('Error creating Shop The Look item', 'Error al crear la campaña', 400);
+			throw new AppError('Error creating Shop The Look item', 'Error al crear el look', 400);
 		}
 	}
 
@@ -148,21 +215,33 @@ export class ShopTheLookService {
 				: await models.ShopTheLook.findOne({ slug: lookId }).lean()) as unknown as IShopTheLookDocument;
 
 			if (!currentLook) {
-				throw new AppError('Look not found', 'Campaña no encontrada', 404);
+				throw new AppError('Look not found', 'Look no encontrado', 404);
 			}
 
 			const realId = currentLook._id ? String(currentLook._id) : lookId;
+			const lookName = data.name || data.title || currentLook.name || currentLook.title || 'Look';
 
 			if (data.slug) {
 				data.slug = await this.generateUniqueSlug(models, data.slug, realId);
-			} else if (data.title && (!currentLook.slug || data.title !== currentLook.title)) {
-				data.slug = await this.generateUniqueSlug(models, data.title, realId);
+			} else if ((data.name || data.title) && (!currentLook.slug || data.name !== currentLook.name || data.title !== currentLook.title)) {
+				data.slug = await this.generateUniqueSlug(models, lookName, realId);
 			}
 
-			if (data.looks) {
+			// Gestión de borrado de imágenes de galería eliminadas
+			if (data.gallery && currentLook.gallery) {
+				const oldImages = currentLook.gallery.map((g: any) => g.public_id).filter(Boolean);
+				const newImages = data.gallery.map((g: any) => g.public_id).filter(Boolean);
+				const imagesToDelete = oldImages.filter(id => !newImages.includes(id));
+
+				for (const publicId of imagesToDelete) {
+					await ImageService.DeleteImage(publicId).catch(e => console.error('Failed to delete old gallery image', e));
+				}
+			}
+
+			// Gestión de borrado de imágenes legacy si aplica
+			if (data.looks && currentLook.looks) {
 				const oldImages = currentLook.looks.map((l: any) => l.mainImage?.public_id).filter(Boolean);
 				const newImages = data.looks.map((l: any) => l.mainImage?.public_id).filter(Boolean);
-
 				const imagesToDelete = oldImages.filter(id => !newImages.includes(id));
 
 				for (const publicId of imagesToDelete) {
@@ -170,11 +249,35 @@ export class ShopTheLookService {
 				}
 			}
 
+			if (data.rankingScore !== undefined && data.rankingScore !== null && !isNaN(Number(data.rankingScore))) {
+				const newBase = Number(data.rankingScore);
+				data.rankingScore = newBase;
+				const views = currentLook.metrics?.viewsCount || 0;
+				const likes = currentLook.likes || currentLook.metrics?.likesCount || 0;
+				const shares = currentLook.shares || currentLook.metrics?.sharesCount || 0;
+				const carts = currentLook.metrics?.cartAddsCount || 0;
+				const sales = currentLook.metrics?.salesCount || 0;
+
+				data.effectiveScore = newBase + (views * 1) + (likes * 3) + (shares * 5) + (carts * 10) + (sales * 30);
+			}
+
+			if (data.order !== undefined && !isNaN(Number(data.order))) {
+				data.order = Number(data.order);
+			}
+
 			const updatedLook = await models.ShopTheLook.findByIdAndUpdate(
 				realId,
 				{ $set: data },
 				{ new: true, runValidators: true }
-			).populate('looks.hotspots.product');
+			)
+			.populate({
+				path: 'products.product',
+				match: { status: 'published' }
+			})
+			.populate({
+				path: 'looks.hotspots.product',
+				match: { status: 'published' }
+			});
 
 			if (tenantSlug) {
 				const { CacheService } = await import('@/services/cache.service');
@@ -186,7 +289,7 @@ export class ShopTheLookService {
 		} catch (error) {
 			console.log(error);
 			if (error instanceof AppError) throw error;
-			throw new AppError('Error updating Shop The Look item', 'Error al actualizar la campaña', 400);
+			throw new AppError('Error updating Shop The Look item', 'Error al actualizar el look', 400);
 		}
 	}
 
@@ -198,14 +301,25 @@ export class ShopTheLookService {
 				: await models.ShopTheLook.findOne({ slug: lookId }).lean()) as unknown as IShopTheLookDocument;
 
 			if (!currentLook) {
-				throw new AppError('Look not found', 'Campaña no encontrada', 404);
+				throw new AppError('Look not found', 'Look no encontrado', 404);
 			}
 
 			const realId = currentLook._id ? String(currentLook._id) : lookId;
 
-			const imagesToDelete = currentLook.looks.map((l: any) => l.mainImage?.public_id).filter(Boolean);
-			for (const publicId of imagesToDelete) {
-				await ImageService.DeleteImage(publicId).catch(e => console.error('Failed to delete image', e));
+			// Borrar imágenes de galería de Cloudinary
+			if (currentLook.gallery) {
+				const imagesToDelete = currentLook.gallery.map((g: any) => g.public_id).filter(Boolean);
+				for (const publicId of imagesToDelete) {
+					await ImageService.DeleteImage(publicId).catch(e => console.error('Failed to delete gallery image', e));
+				}
+			}
+
+			// Borrar imágenes legacy de Cloudinary
+			if (currentLook.looks) {
+				const imagesToDelete = currentLook.looks.map((l: any) => l.mainImage?.public_id).filter(Boolean);
+				for (const publicId of imagesToDelete) {
+					await ImageService.DeleteImage(publicId).catch(e => console.error('Failed to delete legacy image', e));
+				}
 			}
 
 			await models.ShopTheLook.findByIdAndDelete(realId);
@@ -217,7 +331,134 @@ export class ShopTheLookService {
 			}
 		} catch (error) {
 			if (error instanceof AppError) throw error;
-			throw new AppError('Error deleting Shop The Look item', 'Error al eliminar la campaña', 400);
+			throw new AppError('Error deleting Shop The Look item', 'Error al eliminar el look', 400);
+		}
+	}
+
+	static async trackEngagement(
+		models: TenantModels,
+		lookId: string,
+		action: 'like' | 'share' | 'view' | 'cart',
+		tenantSlug?: string
+	): Promise<{ likes: number; shares: number; effectiveScore: number; metrics?: any }> {
+		const isObjectId = mongoose.Types.ObjectId.isValid(lookId);
+		const filter = isObjectId ? { _id: lookId } : { slug: lookId };
+
+		// Pesos de ELO
+		const weights: Record<string, number> = {
+			view: 1,
+			like: 3,
+			share: 5,
+			cart: 10
+		};
+
+		const scoreIncrement = weights[action] || 1;
+		const incUpdate: Record<string, number> = {
+			effectiveScore: scoreIncrement
+		};
+
+		if (action === 'view') {
+			incUpdate['metrics.viewsCount'] = 1;
+		} else if (action === 'like') {
+			incUpdate['likes'] = 1;
+			incUpdate['metrics.likesCount'] = 1;
+		} else if (action === 'share') {
+			incUpdate['shares'] = 1;
+			incUpdate['metrics.sharesCount'] = 1;
+		} else if (action === 'cart') {
+			incUpdate['metrics.cartAddsCount'] = 1;
+		}
+
+		const updated = await models.ShopTheLook.findOneAndUpdate(
+			filter,
+			{ $inc: incUpdate },
+			{ new: true, select: 'likes shares metrics effectiveScore rankingScore' }
+		).lean();
+
+		if (!updated) {
+			throw new AppError('Look not found', 'Look no encontrado', 404);
+		}
+
+		if (tenantSlug) {
+			const { CacheService } = await import('@/services/cache.service');
+			CacheService.invalidatePrefix(tenantSlug, 'shopthelook');
+			CacheService.invalidatePrefix(tenantSlug, 'home');
+		}
+
+		return {
+			likes: updated.likes || 0,
+			shares: updated.shares || 0,
+			effectiveScore: updated.effectiveScore || 0,
+			metrics: updated.metrics
+		};
+	}
+
+	static async updateRankingScore(
+		models: TenantModels,
+		lookId: string,
+		data: { rankingScore?: number; order?: number },
+		tenantSlug?: string
+	): Promise<IShopTheLookDocument> {
+		const isObjectId = mongoose.Types.ObjectId.isValid(lookId);
+		const filter = isObjectId ? { _id: lookId } : { slug: lookId };
+		const look = await models.ShopTheLook.findOne(filter);
+
+		if (!look) {
+			throw new AppError('Look not found', 'Look no encontrado', 404);
+		}
+
+		if (data.rankingScore !== undefined && !isNaN(Number(data.rankingScore))) {
+			const newBase = Number(data.rankingScore);
+			look.rankingScore = newBase;
+			const views = look.metrics?.viewsCount || 0;
+			const likes = look.likes || look.metrics?.likesCount || 0;
+			const shares = look.shares || look.metrics?.sharesCount || 0;
+			const carts = look.metrics?.cartAddsCount || 0;
+			const sales = look.metrics?.salesCount || 0;
+
+			look.effectiveScore = newBase + (views * 1) + (likes * 3) + (shares * 5) + (carts * 10) + (sales * 30);
+		}
+
+		if (data.order !== undefined && !isNaN(Number(data.order))) {
+			look.order = Number(data.order);
+		}
+
+		await look.save();
+
+		if (tenantSlug) {
+			const { CacheService } = await import('@/services/cache.service');
+			CacheService.invalidatePrefix(tenantSlug, 'shopthelook');
+			CacheService.invalidatePrefix(tenantSlug, 'home');
+		}
+
+		return look;
+	}
+
+	static async recordProductSaleInLooks(
+		models: TenantModels,
+		productId: string,
+		quantity: number = 1,
+		tenantSlug?: string
+	): Promise<void> {
+		try {
+			const saleWeight = 30;
+			const scoreIncrement = saleWeight * quantity;
+			const res = await models.ShopTheLook.updateMany(
+				{ 'products.product': productId },
+				{
+					$inc: {
+						'metrics.salesCount': quantity,
+						effectiveScore: scoreIncrement
+					}
+				}
+			);
+			if (res.modifiedCount > 0 && tenantSlug) {
+				const { CacheService } = await import('@/services/cache.service');
+				CacheService.invalidatePrefix(tenantSlug, 'shopthelook');
+				CacheService.invalidatePrefix(tenantSlug, 'home');
+			}
+		} catch (error) {
+			console.error('[ShopTheLookService] Error recording sale in looks:', error);
 		}
 	}
 }

@@ -4,6 +4,9 @@ import { IProductDocument } from '@/interfaces/product.interface';
 export interface IShopTheLookImage {
 	url: string;
 	public_id: string;
+	width?: number;
+	height?: number;
+	alt?: string;
 }
 
 export interface IShopTheLookHotspotColor {
@@ -11,9 +14,10 @@ export interface IShopTheLookHotspotColor {
 	hex?: string;
 }
 
-export interface IShopTheLookHotspot {
+export interface IShopTheLookProductItem {
+	_id?: Types.ObjectId | string;
 	product: Types.ObjectId | IProductDocument;
-	position: {
+	position?: {
 		x: number;
 		y: number;
 	};
@@ -23,20 +27,45 @@ export interface IShopTheLookHotspot {
 	isActive: boolean;
 }
 
+// Retrocompatibilidad con nombre anterior
+export type IShopTheLookHotspot = IShopTheLookProductItem;
+
 export interface ILookItem {
 	_id?: Types.ObjectId | string;
 	name?: string;
-	mainImage: IShopTheLookImage;
-	hotspots: IShopTheLookHotspot[];
+	mainImage?: IShopTheLookImage;
+	gallery?: IShopTheLookImage[];
+	hotspots?: IShopTheLookProductItem[];
+	products?: IShopTheLookProductItem[];
 	isActive: boolean;
 }
 
+export interface IShopTheLookMetrics {
+	viewsCount?: number;
+	likesCount?: number;
+	sharesCount?: number;
+	cartAddsCount?: number;
+	salesCount?: number;
+}
+
+// Look individual e independiente (Chau Campañas)
 export interface IShopTheLook {
-	title: string;
-	subtitle: string;
-	slug?: string;
-	looks: ILookItem[];
+	name: string;
+	title?: string; // Retrocompatibilidad
+	subtitle?: string; // Retrocompatibilidad
+	slug: string;
+	description?: string;
+	occasion?: string;
+	gallery: IShopTheLookImage[];
+	products: IShopTheLookProductItem[];
+	looks?: ILookItem[]; // Retrocompatibilidad temporal
+	likes?: number;
+	shares?: number;
 	isActive: boolean;
+	order?: number;
+	rankingScore?: number;
+	effectiveScore?: number;
+	metrics?: IShopTheLookMetrics;
 }
 
 export interface IShopTheLookDocument extends IShopTheLook, Document {

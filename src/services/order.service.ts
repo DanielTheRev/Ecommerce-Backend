@@ -855,6 +855,8 @@ export class OrderService {
 				const prodId = (item.productId?._id || item.productId || item.productSnapshot?._id)?.toString();
 				if (prodId) {
 					await ProductService.recordProductSale(models, prodId, item.quantity || 1);
+					const { ShopTheLookService } = await import('./shopTheLook.service');
+					await ShopTheLookService.recordProductSaleInLooks(models, prodId, item.quantity || 1);
 				}
 			}
 		} catch (err) {

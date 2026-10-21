@@ -3,7 +3,7 @@ import { ShopTheLookService } from '@/services/shopTheLook.service';
 import { AuthRequest } from '@/middleware/auth';
 import { AppError } from '@/errors/app.error';
 import { ImageService } from '@/services/images.service';
-import { IShopTheLook } from '@/interfaces/shopTheLook.interface';
+import { IShopTheLook, IShopTheLookImage, IShopTheLookProductItem } from '@/interfaces/shopTheLook.interface';
 
 export class ShopTheLookController {
 	static async getActiveLooks(req: AuthRequest, res: Response, next: NextFunction) {
@@ -25,44 +25,85 @@ export class ShopTheLookController {
 		}
 	}
 
+	static async trackEngagement(req: AuthRequest, res: Response, next: NextFunction) {
+		try {
+			const { id } = req.params;
+			const { action } = req.body; // 'like' | 'share'
+			const validActions = ['like', 'share', 'view', 'cart'];
+			if (!validActions.includes(action)) {
+				throw new AppError('Invalid action', 'Acción inválida (debe ser like, share, view o cart)', 400);
+			}
+
+			const result = await ShopTheLookService.trackEngagement(req.models!, id, action, req.tenant?.slug);
+			return res.status(200).json(result);
+		} catch (error) {
+			return next(error);
+		}
+	}
+
 	static async createLook(req: AuthRequest, res: Response, next: NextFunction) {
 		try {
-			const { title, subtitle, isActive, looks, slug } = req.body;
+			const { name, title, description, subtitle, occasion, isActive, looks, products, gallery, slug, order, rankingScore } = req.body;
 			const tenantSlug = req.tenant?.slug as string;
+			const lookName = name || title;
 
-			if (!title) throw new AppError('Title is required', 'El título es requerido', 400);
+			if (!lookName) throw new AppError('Name is required', 'El nombre del look es requerido', 400);
 
+			const files = (req.files as Express.Multer.File[]) || [];
+			let parsedGallery: IShopTheLookImage[] = [];
+			let parsedProducts: IShopTheLookProductItem[] = [];
+
+			if (gallery) {
+				try {
+					parsedGallery = typeof gallery === 'string' ? JSON.parse(gallery) : gallery;
+				} catch (e) {
+					parsedGallery = [];
+				}
+			}
+
+			if (products) {
+				try {
+					parsedProducts = typeof products === 'string' ? JSON.parse(products) : products;
+				} catch (e) {
+					parsedProducts = [];
+				}
+			}
+
+			// Subida de imágenes para la galería
+			const galleryFiles = files.filter(f => f.fieldname.startsWith('gallery_') || f.fieldname === 'gallery' || f.fieldname.startsWith('image_'));
+			for (let i = 0; i < galleryFiles.length; i++) {
+				const file = galleryFiles[i];
+				const imageId = `look-${Date.now()}-${i}`;
+				const uploadedImage = await ImageService.UploadImage(file, imageId, `${tenantSlug}/shop-the-look`);
+				parsedGallery.push({
+					url: uploadedImage.secure_url,
+					public_id: uploadedImage.public_id,
+					width: uploadedImage.width,
+					height: uploadedImage.height
+				});
+			}
+
+			// Manejo de compatibilidad con campañas legacy si se envían looks anidados
 			let parsedLooks: any[] = [];
 			if (looks) {
 				try {
 					parsedLooks = typeof looks === 'string' ? JSON.parse(looks) : looks;
 				} catch (e) {
-					throw new AppError('Invalid looks format', 'Formato de looks inválido', 400);
-				}
-			}
-
-			const files = req.files as Express.Multer.File[] || [];
-
-			for (let i = 0; i < parsedLooks.length; i++) {
-				const lookData = parsedLooks[i];
-				const file = files.find(f => f.fieldname === `image_${i}`);
-				if (file) {
-					const imageId = `shop-the-look-${Date.now()}-${i}`;
-					const uploadedImage = await ImageService.UploadImage(file, imageId, `${tenantSlug}/shop-the-look`);
-					lookData.mainImage = {
-						url: uploadedImage.secure_url,
-						public_id: uploadedImage.public_id
-					};
-				} else if (!lookData.mainImage || !lookData.mainImage.url) {
-					throw new AppError(`Missing image for look index ${i}`, `Falta imagen para el look en la posición ${i}`, 400);
+					parsedLooks = [];
 				}
 			}
 
 			const data: IShopTheLook = {
-				title,
-				subtitle: subtitle || '',
-				slug: slug ? String(slug).trim().toLowerCase() : undefined,
+				name: lookName,
+				title: lookName,
+				description: description || subtitle || '',
+				subtitle: subtitle || description || '',
+				occasion: occasion || '',
+				slug: slug ? String(slug).trim().toLowerCase() : undefined as any,
 				isActive: isActive === 'true' || isActive === true,
+				gallery: parsedGallery,
+				products: parsedProducts,
+				order: order !== undefined ? Number(order) : 0,
 				looks: parsedLooks
 			};
 
@@ -76,47 +117,88 @@ export class ShopTheLookController {
 	static async updateLook(req: AuthRequest, res: Response, next: NextFunction) {
 		try {
 			const { id } = req.params;
-			const { title, subtitle, isActive, looks, slug } = req.body;
+			const { name, title, description, subtitle, occasion, isActive, looks, products, gallery, slug, order, likes, shares, rankingScore } = req.body;
 			const tenantSlug = req.tenant?.slug as string;
 
-			let parsedLooks: any[] = [];
-			if (looks) {
+			const updateData: Partial<IShopTheLook> = {};
+			const lookName = name || title;
+			if (lookName !== undefined) {
+				updateData.name = lookName;
+				updateData.title = lookName;
+			}
+			if (description !== undefined || subtitle !== undefined) {
+				updateData.description = description || subtitle || '';
+				updateData.subtitle = subtitle || description || '';
+			}
+			if (occasion !== undefined) updateData.occasion = occasion;
+			if (slug !== undefined) updateData.slug = String(slug).trim().toLowerCase();
+			if (isActive !== undefined) updateData.isActive = isActive === 'true' || isActive === true;
+			if (order !== undefined) updateData.order = Number(order);
+			if (rankingScore !== undefined) updateData.rankingScore = Number(rankingScore);
+			if (likes !== undefined) updateData.likes = Number(likes);
+			if (shares !== undefined) updateData.shares = Number(shares);
+
+			if (gallery) {
 				try {
-					parsedLooks = typeof looks === 'string' ? JSON.parse(looks) : looks;
+					updateData.gallery = typeof gallery === 'string' ? JSON.parse(gallery) : gallery;
 				} catch (e) {
-					throw new AppError('Invalid looks format', 'Formato de looks inválido', 400);
+					// mantener si falla parse
 				}
 			}
 
-			const updateData: Partial<IShopTheLook> = {};
-			if (title !== undefined) updateData.title = title;
-			if (subtitle !== undefined) updateData.subtitle = subtitle;
-			if (slug !== undefined) updateData.slug = String(slug).trim().toLowerCase();
-			if (isActive !== undefined) updateData.isActive = isActive === 'true' || isActive === true;
+			if (products) {
+				try {
+					updateData.products = typeof products === 'string' ? JSON.parse(products) : products;
+				} catch (e) {
+					// mantener si falla parse
+				}
+			}
+
+			// Subir nuevas fotos añadidas
+			const files = (req.files as Express.Multer.File[]) || [];
+			const galleryFiles = files.filter(f => f.fieldname.startsWith('gallery_') || f.fieldname === 'gallery' || f.fieldname.startsWith('image_'));
+			if (galleryFiles.length > 0) {
+				if (!updateData.gallery) updateData.gallery = [];
+				for (let i = 0; i < galleryFiles.length; i++) {
+					const file = galleryFiles[i];
+					const imageId = `look-update-${Date.now()}-${i}`;
+					const uploadedImage = await ImageService.UploadImage(file, imageId, `${tenantSlug}/shop-the-look`);
+					updateData.gallery.push({
+						url: uploadedImage.secure_url,
+						public_id: uploadedImage.public_id,
+						width: uploadedImage.width,
+						height: uploadedImage.height
+					});
+				}
+			}
 
 			if (looks) {
-				const files = req.files as Express.Multer.File[] || [];
-
-				for (let i = 0; i < parsedLooks.length; i++) {
-					const lookData = parsedLooks[i];
-					const file = files.find(f => f.fieldname === `image_${i}`);
-					if (file) {
-						const imageId = `shop-the-look-update-${Date.now()}-${i}`;
-						const uploadedImage = await ImageService.UploadImage(file, imageId, `${tenantSlug}/shop-the-look`);
-						lookData.mainImage = {
-							url: uploadedImage.secure_url,
-							public_id: uploadedImage.public_id
-						};
-					} else if (!lookData.mainImage || !lookData.mainImage.url) {
-						throw new AppError(`Missing image for look index ${i}`, `Falta imagen para el look en la posición ${i}`, 400);
-					}
+				try {
+					updateData.looks = typeof looks === 'string' ? JSON.parse(looks) : looks;
+				} catch (e) {
+					// mantener si falla parse
 				}
-				updateData.looks = parsedLooks;
 			}
 
 			const updatedLook = await ShopTheLookService.updateLook(req.models!, id, updateData, tenantSlug);
 
 			return res.status(200).json(updatedLook);
+		} catch (error) {
+			return next(error);
+		}
+	}
+
+	static async updateRankingScore(req: AuthRequest, res: Response, next: NextFunction) {
+		try {
+			const { id } = req.params;
+			const { rankingScore, order } = req.body;
+			const result = await ShopTheLookService.updateRankingScore(
+				req.models!,
+				id,
+				{ rankingScore, order },
+				req.tenant?.slug
+			);
+			return res.status(200).json({ success: true, data: result });
 		} catch (error) {
 			return next(error);
 		}
