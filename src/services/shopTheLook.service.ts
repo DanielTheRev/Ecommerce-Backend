@@ -25,6 +25,47 @@ export class ShopTheLookService {
 		return slug;
 	}
 
+	/**
+	 * Hidrata en tiempo real las imágenes de variantes de las prendas en el look
+	 * consultando directamente la variante activa del producto poblado.
+	 * Si la variante no tiene imagen asignada, se setea a null de forma estricta (sin fallbacks).
+	 */
+	static hydrateLiveVariantImages(look: any): void {
+		if (!look) return;
+
+		const processItems = (items: any[]) => {
+			if (!Array.isArray(items)) return;
+			for (const item of items) {
+				const prod = item.product;
+				if (!prod || typeof prod !== 'object') continue;
+
+				// Buscar variante activa que coincida con el SKU o Color seleccionado en el pin
+				const variant = prod.variants?.find((v: any) =>
+					(item.selectedSku && v.sku === item.selectedSku) ||
+					(item.selectedColor?.name && v.color?.name?.trim().toLowerCase() === item.selectedColor.name.trim().toLowerCase())
+				);
+
+				// Solo si la variante específica tiene foto viva, se la asignamos
+				if (variant?.imageReference?.url) {
+					item.variantImage = {
+						url: variant.imageReference.url,
+						public_id: variant.imageReference.public_id || ''
+					};
+				} else {
+					// Si la variante no tiene foto: null directo, sin inventar imágenes ni fallbacks
+					item.variantImage = null;
+				}
+			}
+		};
+
+		if (look.products) processItems(look.products);
+		if (look.looks) {
+			for (const subLook of look.looks) {
+				if (subLook.hotspots) processItems(subLook.hotspots);
+			}
+		}
+	}
+
 	static async getActiveLooks(models: TenantModels, tenantSlug?: string): Promise<IShopTheLookDocument[]> {
 		try {
 			const cacheKey = 'shopthelook:active';
@@ -89,6 +130,9 @@ export class ShopTheLookService {
 						}
 					});
 				}
+
+				// Hidratación en tiempo real de imágenes de variantes
+				this.hydrateLiveVariantImages(look);
 			}
 
 			const result = looks as unknown as IShopTheLookDocument[];
@@ -159,6 +203,9 @@ export class ShopTheLookService {
 					}
 				});
 			}
+
+			// Hidratación en tiempo real de imágenes de variantes
+			this.hydrateLiveVariantImages(look);
 
 			return look as unknown as IShopTheLookDocument;
 		} catch (error) {
@@ -238,17 +285,6 @@ export class ShopTheLookService {
 				}
 			}
 
-			// Gestión de borrado de imágenes legacy si aplica
-			if (data.looks && currentLook.looks) {
-				const oldImages = currentLook.looks.map((l: any) => l.mainImage?.public_id).filter(Boolean);
-				const newImages = data.looks.map((l: any) => l.mainImage?.public_id).filter(Boolean);
-				const imagesToDelete = oldImages.filter(id => !newImages.includes(id));
-
-				for (const publicId of imagesToDelete) {
-					await ImageService.DeleteImage(publicId).catch(e => console.error('Failed to delete old image', e));
-				}
-			}
-
 			if (data.rankingScore !== undefined && data.rankingScore !== null && !isNaN(Number(data.rankingScore))) {
 				const newBase = Number(data.rankingScore);
 				data.rankingScore = newBase;
@@ -277,7 +313,10 @@ export class ShopTheLookService {
 			.populate({
 				path: 'looks.hotspots.product',
 				match: { status: 'published' }
-			});
+			})
+			.lean();
+
+			this.hydrateLiveVariantImages(updatedLook);
 
 			if (tenantSlug) {
 				const { CacheService } = await import('@/services/cache.service');
@@ -285,7 +324,7 @@ export class ShopTheLookService {
 				CacheService.invalidatePrefix(tenantSlug, 'home');
 			}
 
-			return updatedLook as IShopTheLookDocument;
+			return updatedLook as unknown as IShopTheLookDocument;
 		} catch (error) {
 			console.log(error);
 			if (error instanceof AppError) throw error;
