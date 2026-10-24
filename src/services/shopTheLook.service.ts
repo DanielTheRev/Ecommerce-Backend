@@ -285,6 +285,11 @@ export class ShopTheLookService {
 				}
 			}
 
+			// Borrado de imagen SEO previa si fue reemplazada
+			if (data.seo?.metaImage?.public_id && currentLook.seo?.metaImage?.public_id && data.seo.metaImage.public_id !== currentLook.seo.metaImage.public_id) {
+				await ImageService.DeleteImage(currentLook.seo.metaImage.public_id).catch(e => console.error('Failed to delete replaced SEO image', e));
+			}
+
 			if (data.rankingScore !== undefined && data.rankingScore !== null && !isNaN(Number(data.rankingScore))) {
 				const newBase = Number(data.rankingScore);
 				data.rankingScore = newBase;
@@ -359,6 +364,11 @@ export class ShopTheLookService {
 				for (const publicId of imagesToDelete) {
 					await ImageService.DeleteImage(publicId).catch(e => console.error('Failed to delete legacy image', e));
 				}
+			}
+
+			// Borrar imagen SEO de Cloudinary si existe
+			if (currentLook.seo?.metaImage?.public_id) {
+				await ImageService.DeleteImage(currentLook.seo.metaImage.public_id).catch(e => console.error('Failed to delete SEO image', e));
 			}
 
 			await models.ShopTheLook.findByIdAndDelete(realId);

@@ -67,6 +67,14 @@ export const ShopTheLookSchema = new Schema<IShopTheLookDocument>(
 			sharesCount: { type: Number, default: 0 },
 			cartAddsCount: { type: Number, default: 0 },
 			salesCount: { type: Number, default: 0 }
+		},
+		seo: {
+			metaTitle: { type: String, trim: true },
+			metaDescription: { type: String, trim: true },
+			metaImage: {
+				url: { type: String },
+				public_id: { type: String }
+			}
 		}
 	},
 	{

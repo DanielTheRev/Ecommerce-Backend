@@ -1,5 +1,5 @@
 import { Document, Types } from 'mongoose';
-import { IProductDocument } from '@/interfaces/product.interface';
+import { IProductDocument, IProductSeo } from '@/interfaces/product.interface';
 
 export interface IShopTheLookImage {
 	url: string;
@@ -66,6 +66,7 @@ export interface IShopTheLook {
 	rankingScore?: number;
 	effectiveScore?: number;
 	metrics?: IShopTheLookMetrics;
+	seo?: IProductSeo;
 }
 
 export interface IShopTheLookDocument extends IShopTheLook, Document {

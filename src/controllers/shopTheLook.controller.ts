@@ -93,6 +93,28 @@ export class ShopTheLookController {
 				}
 			}
 
+			// Parsear SEO
+			let parsedSeo: any = undefined;
+			if (req.body.seo) {
+				try {
+					parsedSeo = typeof req.body.seo === 'string' ? JSON.parse(req.body.seo) : req.body.seo;
+				} catch (e) {
+					parsedSeo = undefined;
+				}
+			}
+
+			// Subida de imagen dedicada para SEO (OpenGraph) si existe
+			const seoImageFile = files.find(f => f.fieldname === 'seoImage' || f.fieldname === 'seo_image');
+			if (seoImageFile) {
+				const seoImageId = `look-seo-${Date.now()}`;
+				const uploadedSeoImage = await ImageService.UploadImage(seoImageFile, seoImageId, `${tenantSlug}/shop-the-look/seo`);
+				if (!parsedSeo) parsedSeo = {};
+				parsedSeo.metaImage = {
+					url: uploadedSeoImage.secure_url,
+					public_id: uploadedSeoImage.public_id
+				};
+			}
+
 			const data: IShopTheLook = {
 				name: lookName,
 				title: lookName,
@@ -104,7 +126,8 @@ export class ShopTheLookController {
 				gallery: parsedGallery,
 				products: parsedProducts,
 				order: order !== undefined ? Number(order) : 0,
-				looks: parsedLooks
+				looks: parsedLooks,
+				...(parsedSeo ? { seo: parsedSeo } : {})
 			};
 
 			const newLook = await ShopTheLookService.createLook(req.models!, data, tenantSlug);
@@ -117,7 +140,7 @@ export class ShopTheLookController {
 	static async updateLook(req: AuthRequest, res: Response, next: NextFunction) {
 		try {
 			const { id } = req.params;
-			const { name, title, description, subtitle, occasion, isActive, looks, products, gallery, slug, order, likes, shares, rankingScore } = req.body;
+			const { name, title, description, subtitle, occasion, isActive, looks, products, gallery, slug, order, likes, shares, rankingScore, seo, deletedSeoOgImage } = req.body;
 			const tenantSlug = req.tenant?.slug as string;
 
 			const updateData: Partial<IShopTheLook> = {};
@@ -137,6 +160,23 @@ export class ShopTheLookController {
 			if (rankingScore !== undefined) updateData.rankingScore = Number(rankingScore);
 			if (likes !== undefined) updateData.likes = Number(likes);
 			if (shares !== undefined) updateData.shares = Number(shares);
+
+			// Parsear SEO
+			let parsedSeo: any = undefined;
+			if (seo) {
+				try {
+					parsedSeo = typeof seo === 'string' ? JSON.parse(seo) : seo;
+				} catch (e) {
+					parsedSeo = undefined;
+				}
+			}
+
+			// Manejo de imagen SEO previa eliminada
+			if (deletedSeoOgImage && typeof deletedSeoOgImage === 'string' && deletedSeoOgImage.trim()) {
+				await ImageService.DeleteImage(deletedSeoOgImage.trim()).catch(e => console.error('Failed to delete old SEO image', e));
+				if (!parsedSeo) parsedSeo = {};
+				parsedSeo.metaImage = { url: '', public_id: '' };
+			}
 
 			if (gallery) {
 				try {
@@ -170,6 +210,22 @@ export class ShopTheLookController {
 						height: uploadedImage.height
 					});
 				}
+			}
+
+			// Subida de nueva imagen SEO si fue enviada
+			const seoImageFile = files.find(f => f.fieldname === 'seoImage' || f.fieldname === 'seo_image');
+			if (seoImageFile) {
+				const seoImageId = `look-seo-update-${Date.now()}`;
+				const uploadedSeoImage = await ImageService.UploadImage(seoImageFile, seoImageId, `${tenantSlug}/shop-the-look/seo`);
+				if (!parsedSeo) parsedSeo = {};
+				parsedSeo.metaImage = {
+					url: uploadedSeoImage.secure_url,
+					public_id: uploadedSeoImage.public_id
+				};
+			}
+
+			if (parsedSeo !== undefined) {
+				updateData.seo = parsedSeo;
 			}
 
 			if (looks) {
