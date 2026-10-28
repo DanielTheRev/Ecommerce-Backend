@@ -11,7 +11,7 @@ export class ShippingController {
 	 */
 	static async calculateShipping(req: AuthRequest, res: Response, next: NextFunction) {
 		try {
-			const { state, zipCode, items, subtotal: manualSubtotal } = req.body;
+			const { state, zipCode, items, subtotal: manualSubtotal, couponDiscount = 0 } = req.body;
 			const config = await EcommerceService.getConfig(req.models!);
 
 			let subtotal = Number(manualSubtotal) || 0;
@@ -44,7 +44,8 @@ export class ShippingController {
 			}
 
 			const calc = calculateDynamicShippingCost({
-				subtotal,
+				// Evaluar umbral de envío gratis sobre el total neto a pagar tras cupón
+				subtotal: Math.max(0, subtotal - Math.max(0, Number(couponDiscount) || 0)),
 				itemCount,
 				accumulatedSubsidy,
 				stateOrProvince: state || '',

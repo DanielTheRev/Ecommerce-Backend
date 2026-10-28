@@ -254,6 +254,28 @@ export class OrderService {
 			}, 0);
 			const totalItems = processedOrderItems.reduce((acc, item) => acc + item.quantity, 0);
 
+			// Aplicar descuento por cupón o primera compra automática sobre la mercancía
+			let couponDiscountAmount = 0;
+			let appliedCouponCode: string | undefined = undefined;
+			const couponToValidate = data.couponCode || 'PRIMERACOMPRA';
+			const payerEmail = user?.email || data.formPayerData?.email;
+
+
+			const couponResult = await CouponService.validateCoupon(models, {
+				code: couponToValidate,
+				subtotal: subtotalBase,
+				email: payerEmail,
+				userId
+			});
+
+			if (couponResult.isValid && couponResult.discountAmount > 0) {
+				couponDiscountAmount = couponResult.discountAmount;
+				appliedCouponCode = couponResult.code;
+			}
+
+			// Subtotal neto tras descuento de cupón para evaluar el umbral de envío gratis
+			const netMerchandiseTotal = Math.max(0, subtotalBase - couponDiscountAmount);
+
 			let appliedShippingCost = shippingMethod.cost;
 
 			if (shippingMethod.type === ShippingType.HOME_DELIVERY) {
@@ -265,7 +287,7 @@ export class OrderService {
 				}, 0);
 
 				const calc = calculateDynamicShippingCost({
-					subtotal: subtotalBase,
+					subtotal: netMerchandiseTotal,
 					itemCount: totalItems,
 					accumulatedSubsidy,
 					stateOrProvince: state,
@@ -284,7 +306,7 @@ export class OrderService {
 			} else if (shippingMethod.type === ShippingType.PICKUP || shippingMethod.type === ShippingType.STORE_PICKUP) {
 				appliedShippingCost = 0;
 			} else if (shippingMethod.type === ShippingType.BRANCH_PICKUP) {
-				if (subtotalBase >= threshold) {
+				if (netMerchandiseTotal >= threshold) {
 					appliedShippingCost = 0;
 				} else {
 					appliedShippingCost = shippingMethod.cost || (config.shippingConfig?.minShippingFloor ?? 5000);
@@ -338,24 +360,7 @@ export class OrderService {
 			const { venta: dolarVenta } = await getDolar(config.dollarQuoteType || 'oficial', config.customDollarRate || 0);
 			const isARS = config.costCurrency === 'ARS';
 
-			// Aplicar descuento por cupón o primera compra automática
-			let couponDiscountAmount = 0;
-			let appliedCouponCode: string | undefined = undefined;
-			const couponToValidate = data.couponCode || 'PRIMERACOMPRA';
-			const payerEmail = user?.email || data.formPayerData?.email;
-
-			const couponResult = await CouponService.validateCoupon(models, {
-				code: couponToValidate,
-				subtotal: finalCost,
-				email: payerEmail,
-				userId
-			});
-
-			if (couponResult.isValid && couponResult.discountAmount > 0) {
-				couponDiscountAmount = couponResult.discountAmount;
-				appliedCouponCode = couponResult.code;
-			}
-
+			// Total a pagar restando el descuento de cupón previamente calculado sobre la mercancía
 			const payableTotal = Math.max(0, finalCost - couponDiscountAmount);
 
 			const baseCost = orderItems.reduce((acc, item) => acc + (isARS ? item.costPriceSnapshot.inARS : item.costPriceSnapshot.inUSD) * item.quantity, 0);
