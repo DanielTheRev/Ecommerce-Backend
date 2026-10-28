@@ -28,6 +28,7 @@ router.post('/bulk-create', protect, adminOnly, ProductController.bulkCreateProd
 router.patch('/bulk-update', protect, adminOnly, ProductController.bulkUpdateProducts); // Actualización masiva (IA)
 router.patch('/bulk-status', protect, adminOnly, ProductController.bulkUpdateStatus); // Actualización masiva de estado
 router.patch('/:id/ranking-score', protect, adminOnly, ProductController.updateRankingScore); // Actualizar score de ranking ELO
+router.post('/:id/ranking-score/reset', protect, adminOnly, ProductController.resetRankingScore); // Reiniciar score de ranking ELO a base
 router.get('/:id/views', protect, adminOnly, ProductController.getProductViews); // Auditoría de vistas, dispositivos y bots
 router.post('/:id/views/approve', protect, adminOnly, ProductController.approveViewPoint); // Forzar aprobación manual de punto de vista
 router.patch('/:id/quick-pricing', protect, adminOnly, ProductController.updateQuickPricing); // Calibración quirúrgica rápida de precios

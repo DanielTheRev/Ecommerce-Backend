@@ -23,6 +23,7 @@ router.put('/recommendations', EcommerceConfigController.updateRecommendationsCo
 router.get('/catalog-ranking', EcommerceConfigController.getCatalogRankingConfig);
 router.put('/catalog-ranking', EcommerceConfigController.updateCatalogRankingConfig);
 router.post('/catalog-ranking/recalculate', EcommerceConfigController.recalculateRankingScores);
+router.post('/catalog-ranking/reset-base', EcommerceConfigController.resetRankingBaseScores);
 router.get('/connection', EcommerceConfigController.getConnectionSettings);
 router.post('/connection/regenerate-key', EcommerceConfigController.regenerateApiKey);
 router.put('/connection/allowed-origins', EcommerceConfigController.updateAllowedOrigins);

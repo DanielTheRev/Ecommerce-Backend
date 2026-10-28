@@ -1768,6 +1768,66 @@ export class ProductService {
 	}
 
 	/**
+	 * Reinicia masivamente los scores ELO de todos los productos del catálogo a su base.
+	 * Si resetBaseTo100 es true: establece rankingScore = 100, effectiveScore = 100 y métricas en 0.
+	 * Si resetBaseTo100 es false: conserva el rankingScore asignado (o 100 si no tiene), establece effectiveScore = rankingScore y métricas en 0.
+	 */
+	static async resetAllToRankingBase(models: TenantModels, resetBaseTo100: boolean = false): Promise<{ updatedCount: number }> {
+		const products = await models.Product.find({}).select('_id rankingScore');
+		if (!products || products.length === 0) {
+			return { updatedCount: 0 };
+		}
+
+		const bulkOps = products.map((p) => {
+			const targetBase = resetBaseTo100 ? 100 : (p.rankingScore !== undefined && p.rankingScore !== null ? Number(p.rankingScore) : 100);
+			return {
+				updateOne: {
+					filter: { _id: p._id },
+					update: {
+						$set: {
+							rankingScore: targetBase,
+							effectiveScore: targetBase,
+							'metrics.viewsCount': 0,
+							'metrics.botViewsCount': 0,
+							'metrics.cartAddsCount': 0,
+							'metrics.salesCount': 0,
+							'metrics.viewsByDevice': { mobile: 0, desktop: 0, tablet: 0, bot: 0 }
+						}
+					}
+				}
+			};
+		});
+
+		const result = await models.Product.bulkWrite(bulkOps);
+		return { updatedCount: result.modifiedCount || bulkOps.length };
+	}
+
+	/**
+	 * Reinicia el score ELO de un producto individual a su base.
+	 */
+	static async resetProductRankingBase(models: TenantModels, productId: string, resetBaseTo100: boolean = false): Promise<IProduct> {
+		const product = await models.Product.findById(productId);
+		if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
+
+		const targetBase = resetBaseTo100 ? 100 : (product.rankingScore !== undefined && product.rankingScore !== null ? Number(product.rankingScore) : 100);
+
+		product.rankingScore = targetBase;
+		product.effectiveScore = targetBase;
+		if (!product.metrics) {
+			product.metrics = { viewsCount: 0, botViewsCount: 0, cartAddsCount: 0, salesCount: 0, viewsByDevice: { mobile: 0, desktop: 0, tablet: 0, bot: 0 } };
+		} else {
+			product.metrics.viewsCount = 0;
+			product.metrics.botViewsCount = 0;
+			product.metrics.cartAddsCount = 0;
+			product.metrics.salesCount = 0;
+			product.metrics.viewsByDevice = { mobile: 0, desktop: 0, tablet: 0, bot: 0 };
+		}
+
+		await product.save();
+		return (product.toObject ? product.toObject() : product) as unknown as IProduct;
+	}
+
+	/**
 	 * Novedades Inteligentes (Smart Fill):
 	 * 1. Prioriza los productos marcados como destacados (isFeatured: true), más recientes primero.
 	 * 2. Si hay menos del límite, rellena con los últimos productos creados (createdAt: -1) sin duplicar.

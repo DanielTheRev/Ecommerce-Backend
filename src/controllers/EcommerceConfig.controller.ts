@@ -244,6 +244,22 @@ export class EcommerceConfigController {
 		}
 	}
 
+	// POST /api/config/catalog-ranking/reset-base - Reiniciar scores ELO a base (masivo)
+	static async resetRankingBaseScores(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { resetBaseTo100 } = req.body || {};
+			const { ProductService } = await import('@/services/product.service');
+			const result = await ProductService.resetAllToRankingBase(req.models!, Boolean(resetBaseTo100));
+			res.status(200).json({
+				success: true,
+				message: `Reinicio de ranking a base completado. ${result.updatedCount} productos reiniciados.`,
+				updatedCount: result.updatedCount
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
+
 	// POST /api/Ecommerce/config/test-email - Enviar email de prueba
 	static async sendTestEmail(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {

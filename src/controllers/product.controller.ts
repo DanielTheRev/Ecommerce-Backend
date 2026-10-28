@@ -742,6 +742,22 @@ export class ProductController {
 		}
 	}
 
+	// POST /api/products/:id/ranking-score/reset - Reiniciar puntaje ELO de un producto individual a base (admin)
+	static async resetRankingScore(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { id } = req.params;
+			const { resetBaseTo100 } = req.body || {};
+			const updated = await ProductService.resetProductRankingBase(req.models!, id, Boolean(resetBaseTo100));
+			res.status(200).json({
+				success: true,
+				message: 'Puntaje de ranking reiniciado a base exitosamente',
+				data: updated
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
+
 	// POST /api/products/:id/track-cart - Registrar adición al carrito para score ELO (público)
 	static async trackCartAdd(req: Request, res: Response, next: NextFunction): Promise<void> {
 		try {

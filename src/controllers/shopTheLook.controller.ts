@@ -260,6 +260,44 @@ export class ShopTheLookController {
 		}
 	}
 
+	static async resetAllRankingBase(req: AuthRequest, res: Response, next: NextFunction) {
+		try {
+			const { resetBaseTo100 } = req.body || {};
+			const result = await ShopTheLookService.resetAllToRankingBase(
+				req.models!,
+				Boolean(resetBaseTo100),
+				req.tenant?.slug
+			);
+			return res.status(200).json({
+				success: true,
+				message: `Reinicio de ranking a base completado. ${result.updatedCount} outfits reiniciados.`,
+				updatedCount: result.updatedCount
+			});
+		} catch (error) {
+			return next(error);
+		}
+	}
+
+	static async resetRankingScore(req: AuthRequest, res: Response, next: NextFunction) {
+		try {
+			const { id } = req.params;
+			const { resetBaseTo100 } = req.body || {};
+			const result = await ShopTheLookService.resetLookRankingBase(
+				req.models!,
+				id,
+				Boolean(resetBaseTo100),
+				req.tenant?.slug
+			);
+			return res.status(200).json({
+				success: true,
+				message: 'Puntaje de ranking del outfit reiniciado a base exitosamente',
+				data: result
+			});
+		} catch (error) {
+			return next(error);
+		}
+	}
+
 	static async deleteLook(req: AuthRequest, res: Response, next: NextFunction) {
 		try {
 			const { id } = req.params;

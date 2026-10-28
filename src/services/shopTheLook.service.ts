@@ -483,6 +483,91 @@ export class ShopTheLookService {
 		return look;
 	}
 
+	/**
+	 * Reinicia masivamente los scores ELO de todos los looks a su base.
+	 */
+	static async resetAllToRankingBase(
+		models: TenantModels,
+		resetBaseTo100: boolean = false,
+		tenantSlug?: string
+	): Promise<{ updatedCount: number }> {
+		const looks = await models.ShopTheLook.find({}).select('_id rankingScore');
+		if (!looks || looks.length === 0) {
+			return { updatedCount: 0 };
+		}
+
+		const bulkOps = looks.map((look) => {
+			const targetBase = resetBaseTo100 ? 100 : (look.rankingScore !== undefined && look.rankingScore !== null ? Number(look.rankingScore) : 100);
+			return {
+				updateOne: {
+					filter: { _id: look._id },
+					update: {
+						$set: {
+							rankingScore: targetBase,
+							effectiveScore: targetBase,
+							'metrics.viewsCount': 0,
+							'metrics.likesCount': 0,
+							'metrics.sharesCount': 0,
+							'metrics.cartAddsCount': 0,
+							'metrics.salesCount': 0
+						}
+					}
+				}
+			};
+		});
+
+		const result = await models.ShopTheLook.bulkWrite(bulkOps);
+
+		if (tenantSlug) {
+			const { CacheService } = await import('@/services/cache.service');
+			CacheService.invalidatePrefix(tenantSlug, 'shopthelook');
+			CacheService.invalidatePrefix(tenantSlug, 'home');
+		}
+
+		return { updatedCount: result.modifiedCount || bulkOps.length };
+	}
+
+	/**
+	 * Reinicia el score ELO de un look individual a su base.
+	 */
+	static async resetLookRankingBase(
+		models: TenantModels,
+		lookId: string,
+		resetBaseTo100: boolean = false,
+		tenantSlug?: string
+	): Promise<IShopTheLookDocument> {
+		const isObjectId = mongoose.Types.ObjectId.isValid(lookId);
+		const filter = isObjectId ? { _id: lookId } : { slug: lookId };
+		const look = await models.ShopTheLook.findOne(filter);
+
+		if (!look) {
+			throw new AppError('Look not found', 'Look no encontrado', 404);
+		}
+
+		const targetBase = resetBaseTo100 ? 100 : (look.rankingScore !== undefined && look.rankingScore !== null ? Number(look.rankingScore) : 100);
+		look.rankingScore = targetBase;
+		look.effectiveScore = targetBase;
+		if (!look.metrics) {
+			look.metrics = { viewsCount: 0, likesCount: 0, sharesCount: 0, cartAddsCount: 0, salesCount: 0 };
+		} else {
+			look.metrics.viewsCount = 0;
+			look.metrics.likesCount = 0;
+			look.metrics.sharesCount = 0;
+			look.metrics.cartAddsCount = 0;
+			look.metrics.salesCount = 0;
+		}
+
+		await look.save();
+
+		if (tenantSlug) {
+			const { CacheService } = await import('@/services/cache.service');
+			CacheService.invalidatePrefix(tenantSlug, 'shopthelook');
+			CacheService.invalidatePrefix(tenantSlug, 'home');
+		}
+
+		return look;
+	}
+
 	static async recordProductSaleInLooks(
 		models: TenantModels,
 		productId: string,
