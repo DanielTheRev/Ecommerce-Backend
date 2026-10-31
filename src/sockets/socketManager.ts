@@ -15,6 +15,7 @@ import { parse } from 'cookie';
 import { Server as HTTPServer } from 'http';
 import jwt from 'jsonwebtoken';
 import { Socket, Server as SocketIOServer } from 'socket.io';
+import { isOriginAllowed } from '@/config/cors';
 
 export interface ActiveScannerInfo {
 	socketId: string;
@@ -90,7 +91,13 @@ class SocketManager {
 	initialize(server: HTTPServer) {
 		this.io = new SocketIOServer(server, {
 			cors: {
-				origin: true,
+				origin: (origin, callback) => {
+					if (isOriginAllowed(origin)) {
+						callback(null, true);
+					} else {
+						callback(new Error('CORS not allowed for Socket.IO origin'));
+					}
+				},
 				credentials: true
 			},
 			path: '/api/socket.io',

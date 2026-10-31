@@ -88,6 +88,17 @@ export const resolveTenant = async (
 				tenantSlug = req.query.tenant.trim().toLowerCase();
 			} else if (typeof req.query.tenantSlug === 'string' && req.query.tenantSlug.trim()) {
 				tenantSlug = req.query.tenantSlug.trim().toLowerCase();
+			} else if (req.originalUrl.includes('/mercadopago/callback') && typeof req.query.state === 'string') {
+				try {
+					const decoded = jwt.decode(req.query.state) as { tenantSlug?: string };
+					if (decoded && decoded.tenantSlug) {
+						tenantSlug = decoded.tenantSlug.trim().toLowerCase();
+					} else {
+						tenantSlug = req.query.state.trim().toLowerCase();
+					}
+				} catch {
+					tenantSlug = (req.query.state as string).trim().toLowerCase();
+				}
 			} else if (req.originalUrl.includes('/mercadopago-notification/') || req.originalUrl.includes('/webhooks/')) {
 				const parts = req.originalUrl.split('/');
 				const index = parts.findIndex(p => p === 'mercadopago-notification' || p === 'webhooks');

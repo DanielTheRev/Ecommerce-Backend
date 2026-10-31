@@ -47,6 +47,13 @@ export const protect = async (
 		// Verificar token
 		const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
 
+		// MULTI-TENANT: Validar aislamiento cruzado de tiendas
+		if (decoded.tenantSlug && req.tenant?.slug) {
+			if (decoded.tenantSlug.trim().toLowerCase() !== req.tenant.slug.trim().toLowerCase()) {
+				throw new AppError('Tenant mismatch', 'Tu sesión no corresponde a esta tienda.', 403);
+			}
+		}
+
 		// MULTI-TENANT: Buscar usuario en la DB del tenant
 		if (!req.models) {
 			throw new AppError('Tenant not resolved', 'Tenant no resuelto antes de autenticación', 500);
@@ -153,6 +160,13 @@ export const optionalAuth = async (req: AuthRequest, res: Response, next: NextFu
 		try {
 			// Verificar token
 			const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
+
+		// MULTI-TENANT: Validar aislamiento cruzado de tiendas
+		if (decoded.tenantSlug && req.tenant?.slug) {
+			if (decoded.tenantSlug.trim().toLowerCase() !== req.tenant.slug.trim().toLowerCase()) {
+				throw new AppError('Tenant mismatch', 'Tu sesión no corresponde a esta tienda.', 403);
+			}
+		}
 
 			// MULTI-TENANT: Buscar usuario en la DB del tenant
 			const user = await req.models.User.findById(decoded.userID).lean() as any as IUser;

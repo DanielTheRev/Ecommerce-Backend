@@ -9,6 +9,21 @@ export function errorMiddleware(err: Error, req: Request, res: Response, next: N
 		});
 	}
 
+	// Manejo amigable de errores de Multer (tamaño de archivo excedido o formato inválido)
+	if ((err as any).name === 'MulterError') {
+		const multerErr = err as any;
+		if (multerErr.code === 'LIMIT_FILE_SIZE') {
+			return res.status(400).json({
+				success: false,
+				message: 'El archivo supera el tamaño máximo permitido.'
+			});
+		}
+		return res.status(400).json({
+			success: false,
+			message: multerErr.message || 'Error en la subida del archivo.'
+		});
+	}
+
 	// Manejo amigable de errores de clave duplicada en MongoDB (E11000)
 	if ((err as any).code === 11000) {
 		const keyPattern = (err as any).keyPattern || {};

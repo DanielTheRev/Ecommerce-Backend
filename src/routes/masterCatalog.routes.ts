@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { MasterCatalogController } from '@/controllers/masterCatalog.controller';
+import { requireSuperAdmin } from '@/middleware/masterAuth.middleware';
 
 const router: Router = Router();
 
@@ -7,7 +8,7 @@ const router: Router = Router();
 router.get('/lookup/:barcode', MasterCatalogController.lookupBarcode);
 router.get('/search', MasterCatalogController.search);
 
-// Siembra y mantenimiento (puede ejecutarse en setup o inicialización)
-router.post('/seed', MasterCatalogController.seed);
+// Siembra y mantenimiento (exclusivo para SuperAdmin / clave maestra)
+router.post('/seed', requireSuperAdmin, MasterCatalogController.seed);
 
 export default router;

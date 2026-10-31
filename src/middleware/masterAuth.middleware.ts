@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AppError } from '@/errors/app.error';
+import crypto from 'crypto';
 
 export interface MasterAuthRequest extends Request {
 	masterUser?: {
@@ -30,16 +31,26 @@ export const requireSuperAdmin = (
 ): void => {
 	try {
 		const masterKeyHeader = req.headers['x-master-key'] as string;
-		const configuredMasterKey = process.env.MASTER_ADMIN_KEY || 'vex_master_secret_2026';
+		const configuredMasterKey = process.env.MASTER_ADMIN_KEY;
 
-		// Opción 1: Autenticación por Master Secret Key en header
-		if (masterKeyHeader && masterKeyHeader === configuredMasterKey) {
-			req.masterUser = {
-				email: 'master@vex.ar',
-				role: 'superadmin',
-				isMaster: true
-			};
-			return next();
+		// Opción 1: Autenticación por Master Secret Key en header (comparación segura timingSafeEqual)
+		if (masterKeyHeader) {
+			if (!configuredMasterKey || configuredMasterKey.trim().length < 16) {
+				console.warn('🚨 [MasterAuth] Intento de acceso x-master-key pero MASTER_ADMIN_KEY no está configurada o es demasiado corta');
+				throw new AppError('Master Key Disabled', 'Autenticación maestra no configurada en el servidor', 500);
+			}
+
+			const headerHash = crypto.createHash('sha256').update(masterKeyHeader).digest();
+			const configHash = crypto.createHash('sha256').update(configuredMasterKey).digest();
+
+			if (crypto.timingSafeEqual(headerHash, configHash)) {
+				req.masterUser = {
+					email: 'master@vex.ar',
+					role: 'superadmin',
+					isMaster: true
+				};
+				return next();
+			}
 		}
 
 		// Opción 2: Autenticación por Bearer JWT Token

@@ -3,6 +3,7 @@ import { IMasterProduct, IMasterProductDocument, IMasterProductLookupResult } fr
 import { MasterProductSchema } from '@/models/MasterProduct.model';
 import { SEED_MASTER_PRODUCTS } from '@/data/seedMasterCatalog';
 import { Model } from 'mongoose';
+import { escapeRegex } from '@/utils/regex.util';
 
 export class MasterCatalogService {
 	private constructor() {}
@@ -127,7 +128,7 @@ export class MasterCatalogService {
 
 		try {
 			const MasterModel = this.getMasterProductModel();
-			const regex = new RegExp(q, 'i');
+			const regex = new RegExp(escapeRegex(q), 'i');
 
 			const results = await MasterModel.find({
 				$or: [

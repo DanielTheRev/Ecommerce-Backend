@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { adminOnly, protect } from '../middleware/auth';
+import { adminOnly, protect, staffOnly } from '../middleware/auth';
 import { UserController } from '../controllers/user.controller';
 
 const router: Router = Router();
@@ -35,8 +35,8 @@ router.patch('/staff/:id/toggle-status', protect, adminOnly, UserController.togg
 // DELETE /api/users/staff/:id - Eliminar empleado (admin)
 router.delete('/staff/:id', protect, adminOnly, UserController.deleteStaff);
 
-// POST /api/users/staff/verify-pin - Validar PIN de mostrador (staff)
-router.post('/staff/verify-pin', protect, UserController.verifyPin);
+// POST /api/users/staff/verify-pin - Validar PIN de mostrador (solo staff autenticado)
+router.post('/staff/verify-pin', protect, staffOnly, UserController.verifyPin);
 
 /* ========================================================== */
 /*             NOTIFICACIONES PUSH MÓVILES (EXPO)             */

@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { BentoController } from '@/controllers/bento.controller';
 import { protect, adminOnly } from '@/middleware/auth';
-import multer from 'multer';
+import { imageUpload } from '@/config/multer';
 
-const multerConfig = multer().any();
+const multerConfig = imageUpload.any();
 
 const router: Router = Router();
 

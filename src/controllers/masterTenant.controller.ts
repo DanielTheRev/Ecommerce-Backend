@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { MasterAuthRequest } from '@/middleware/masterAuth.middleware';
 import { MasterTenantService } from '@/services/masterTenant.service';
 import { AppError } from '@/errors/app.error';
+import crypto from 'crypto';
 
 export class MasterTenantController {
 	/**
@@ -12,11 +13,22 @@ export class MasterTenantController {
 	static async login(req: MasterAuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
 			const { masterKey, password } = req.body;
-			const configuredKey = process.env.MASTER_ADMIN_KEY || 'vex_master_secret_2026';
+			const configuredKey = process.env.MASTER_ADMIN_KEY;
+
+			if (!configuredKey || configuredKey.trim().length < 16) {
+				console.warn('🚨 [MasterLogin] Intento de login pero MASTER_ADMIN_KEY no está configurada o es demasiado corta');
+				throw new AppError('Master Auth Disabled', 'El login maestro no está configurado en el servidor.', 500);
+			}
 
 			const inputKey = (masterKey || password || '').trim();
+			if (!inputKey) {
+				throw new AppError('Invalid Credentials', 'Clave de acceso de SuperAdmin incorrecta.', 401);
+			}
 
-			if (!inputKey || inputKey !== configuredKey) {
+			const inputHash = crypto.createHash('sha256').update(inputKey).digest();
+			const configHash = crypto.createHash('sha256').update(configuredKey).digest();
+
+			if (!crypto.timingSafeEqual(inputHash, configHash)) {
 				throw new AppError('Invalid Credentials', 'Clave de acceso de SuperAdmin incorrecta.', 401);
 			}
 

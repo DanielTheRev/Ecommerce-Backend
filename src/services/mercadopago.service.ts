@@ -51,7 +51,7 @@ export class MercadoPagoService {
 				}
 			});
 
-			console.log('result exchangeAuthorizationCode', result);
+			console.log('✅ MercadoPago OAuth code exchanged successfully for user_id:', result.user_id);
 
 			// 4. Retornamos los tokens para que el Controller los guarde en la BD
 			return {
@@ -108,7 +108,7 @@ export class MercadoPagoService {
 	 * Crea una "Order" en MercadoPago (Checkout API vía Orders)
 	 */
 	static async createOrder(accessToken: string, mpOrderData: CreateOrderRequest) {
-		console.log('Create order: Creating order with accessToken: ', accessToken);
+		// AccessToken protegido
 		try {
 			const client = new MercadoPagoConfig({
 				accessToken: accessToken,
@@ -230,7 +230,8 @@ export class MercadoPagoService {
 			hmac.update(manifest);
 			const expectedHash = hmac.digest('hex');
 
-			return expectedHash === hash;
+			if (hash.length !== expectedHash.length) return false;
+			return crypto.timingSafeEqual(Buffer.from(hash, 'utf8'), Buffer.from(expectedHash, 'utf8'));
 		} catch (error) {
 			console.error('Error validating Mercado Pago signature:', error);
 			return false;

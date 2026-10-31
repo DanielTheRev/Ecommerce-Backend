@@ -3,6 +3,7 @@ import { AppError } from '@/errors/app.error';
 import { EcommercePaymentProviders } from '@/interfaces/ecommerce.interface';
 import { ClothingGender, ClothingSizeType, IProduct, IProductCreateDTO, IProductUpdateDTO, ISizeGuide, ProductType, ProductStatus } from '@/interfaces/product.interface';
 import { paginate } from '@/utils/pagination.util';
+import { escapeRegex } from '@/utils/regex.util';
 import createDOMPurify from 'dompurify';
 import { JSDOM } from 'jsdom';
 import { Types } from 'mongoose';
@@ -790,7 +791,7 @@ export class ProductService {
 			const andConditions: any[] = [];
 
 			if (q && typeof q === 'string' && q.trim() !== '') {
-				const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 				const trimmedQ = q.trim();
 				const isUrl = /^https?:\/\//i.test(trimmedQ) || trimmedQ.includes('www.');
 
@@ -1268,11 +1269,12 @@ export class ProductService {
 	static async getSearchSuggestions(models: TenantModels, queryText: string, limit: number = 10, productType?: string): Promise<IProduct[]> {
 		try {
 			const Model = this.getModel(models, productType);
+			const escapedQuery = escapeRegex(queryText);
 			const query = {
 				status: 'published',
 				$or: [
-					{ brand: { $regex: queryText, $options: 'i' } },
-					{ model: { $regex: queryText, $options: 'i' } }
+					{ brand: { $regex: escapedQuery, $options: 'i' } },
+					{ model: { $regex: escapedQuery, $options: 'i' } }
 				]
 			};
 			const products = await Model.find(query)
@@ -3629,7 +3631,7 @@ export class ProductService {
 			cleanBaseUrl = cleanInput.split('?')[0].split('#')[0].replace(/\/+$/, '');
 		}
 
-		const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 
 		const filter: any = {
 			$or: [

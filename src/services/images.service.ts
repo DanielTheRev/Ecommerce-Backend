@@ -2,11 +2,11 @@ import { AppError } from '@/errors/app.error';
 import { v2 as cloudinary } from 'cloudinary';
 import DataURIParser from 'datauri/parser';
 import path from 'path';
-import dotenv from 'dotenv';
+
 import { randomUUID } from 'crypto';
 
 // Cargar variables de entorno
-dotenv.config();
+
 
 cloudinary.config({
 	cloud_name: process.env.CL_NAME,

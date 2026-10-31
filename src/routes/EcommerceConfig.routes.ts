@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { EcommerceConfigController } from '@/controllers/EcommerceConfig.controller';
 import { protect, adminOnly } from '@/middleware/auth';
-import multer from 'multer';
+import { imageUpload } from '@/config/multer';
 
-const upload = multer();
+const upload = imageUpload;
 const router: Router = Router();
 
 router.get(
@@ -17,6 +17,7 @@ router.get('/public', EcommerceConfigController.getPublicConfig);
 router.use(protect, adminOnly);
 
 router.get('/dolares', EcommerceConfigController.getDolares);
+router.get('/mercadopago/auth-url', EcommerceConfigController.getMercadoPagoAuthUrl);
 router.get('/mercadopago-methods', EcommerceConfigController.getMercadoPagoMethods);
 router.get('/recommendations', EcommerceConfigController.getRecommendationsConfig);
 router.put('/recommendations', EcommerceConfigController.updateRecommendationsConfig);

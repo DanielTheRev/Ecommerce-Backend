@@ -3,15 +3,16 @@ import { AuthError } from '@/errors/auth.error';
 import { AuthProvider } from '@/interfaces/auth.interface';
 import { ISecureUser, Role } from '@/interfaces/user.interface';
 import { TenantModels } from '@/config/modelRegistry';
-import dotenv from 'dotenv';
+
 import crypto from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
 import { UserService } from './user.service';
 
-dotenv.config();
+
 
 export class AuthService {
+	private static readonly otpAttempts = new Map<string, { attempts: number; lockedUntil?: number }>();
 	private static readonly CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 	static readonly cookieOptions = {
 		expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 días
@@ -186,14 +187,15 @@ export class AuthService {
 	private static hashOtpCode(code: string): string {
 		return crypto
 			.createHash('sha256')
-			.update(`${code}:${process.env.JWT_SECRET || 'vura_otp_secret'}`)
+			.update(`${code}:${process.env.JWT_SECRET || (() => { throw new AppError('Missing JWT_SECRET', 'Falta JWT_SECRET en las variables de entorno', 500); })()}`)
 			.digest('hex');
 	}
 
 	static async sendOtp(
 		models: TenantModels,
 		email: string,
-		userData?: { name?: string; lastName?: string; dni?: string }
+		userData?: { name?: string; lastName?: string; dni?: string },
+		tenantSlug?: string
 	) {
 		const cleanEmail = (email || '').trim().toLowerCase();
 		if (!cleanEmail || !cleanEmail.includes('@')) {
@@ -207,7 +209,7 @@ export class AuthService {
 			throw new AppError('Name is required for registration', 'Por favor ingresá tu nombre para registrarte', 400);
 		}
 
-		const code = Math.floor(100000 + Math.random() * 900000).toString();
+		const code = crypto.randomInt(100000, 1000000).toString();
 		const codeHash = this.hashOtpCode(code);
 
 		const otpToken = jwt.sign(
@@ -217,7 +219,8 @@ export class AuthService {
 				isNewUser,
 				name: userData?.name?.trim() || '',
 				lastName: userData?.lastName?.trim() || '',
-				dni: userData?.dni?.trim() || ''
+				dni: userData?.dni?.trim() || '',
+				tenantSlug: tenantSlug ? tenantSlug.trim().toLowerCase() : ''
 			},
 			process.env.JWT_SECRET!,
 			{ expiresIn: '10m' }
@@ -237,7 +240,8 @@ export class AuthService {
 	static async verifyOtp(
 		models: TenantModels,
 		otpToken: string,
-		submittedCode: string
+		submittedCode: string,
+		expectedTenantSlug?: string
 	) {
 		if (!otpToken || !submittedCode) {
 			throw new AppError('Missing token or code', 'Ingresá el código de 6 dígitos enviado a tu correo', 400);
@@ -250,6 +254,24 @@ export class AuthService {
 			throw new AppError('Invalid or expired token', 'El código venció o es inválido. Volvé a ingresar tu mail para recibir uno nuevo.', 400);
 		}
 
+		if (decoded.tenantSlug && expectedTenantSlug && decoded.tenantSlug.toLowerCase() !== expectedTenantSlug.trim().toLowerCase()) {
+			throw new AppError('Tenant mismatch', 'Este código de acceso no corresponde a esta tienda.', 403);
+		}
+
+		const email = (decoded.email || '').trim().toLowerCase();
+		const attemptKey = `${decoded.tenantSlug || ''}:${email}`;
+		const now = Date.now();
+		const record = AuthService.otpAttempts.get(attemptKey);
+
+		if (record?.lockedUntil && now < record.lockedUntil) {
+			const remainingMinutes = Math.ceil((record.lockedUntil - now) / 60000);
+			throw new AppError(
+				'Too many attempts',
+				`Demasiados intentos fallidos. Bloqueado temporalmente por ${remainingMinutes} minuto(s).`,
+				429
+			);
+		}
+
 		const cleanSubmitted = submittedCode.trim().replace(/\s+/g, '');
 		const expectedHash = this.hashOtpCode(cleanSubmitted);
 
@@ -258,10 +280,22 @@ export class AuthService {
 			: decoded.code === cleanSubmitted; // fallback de compatibilidad
 
 		if (!isMatch) {
-			throw new AppError('Incorrect code', 'El código de 6 dígitos ingresado es incorrecto', 400);
+			const current = record || { attempts: 0 };
+			current.attempts += 1;
+			if (current.attempts >= 5) {
+				current.lockedUntil = now + 15 * 60 * 1000;
+			}
+			AuthService.otpAttempts.set(attemptKey, current);
+
+			const remaining = Math.max(0, 5 - current.attempts);
+			if (remaining === 0) {
+				throw new AppError('Too many attempts', 'Demasiados intentos fallidos. Bloqueado temporalmente por 15 minutos.', 429);
+			}
+			throw new AppError('Incorrect code', `Código incorrecto. Te quedan ${remaining} intento(s).`, 400);
 		}
 
-		const email = decoded.email;
+		AuthService.otpAttempts.delete(attemptKey);
+
 		let user = await models.User.findOne({ email });
 
 		if (!user) {

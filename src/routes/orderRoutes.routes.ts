@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import multer from 'multer';
+import { receiptUpload } from '@/config/multer';
 import {
 	cancelOrder,
 	createOrder,
@@ -26,13 +26,13 @@ import { adminOnly, optionalAuth, protect } from '../middleware/auth';
 import { validateSchema } from '@/middleware/validator.middleware';
 import { CreateOrderSchema, PayOrderSchema, UpdatePaymentStatusSchema, UpdateShippingStatusSchema, TrackOrderSchema } from '@/schemas/order.schema';
 
-const upload = multer();
+const upload = receiptUpload;
 const router: Router = Router();
 // webhooks
 router.post('/mercadopago-notification', mercadopagoWebhook);
 router.post('/mercadopago-notification/:tenantSlug', mercadopagoWebhook); // Nueva ruta para webhooks personalizados
 router.post('/ualabis-notification', ualaWebhook);
-router.get('/ualabis-failedNotifications', getNotificationsUala);
+router.get('/ualabis-failedNotifications', protect, adminOnly, getNotificationsUala);
 
 // Rutas para usuarios autenticados
 router.post('/', optionalAuth, validateSchema(CreateOrderSchema), createOrder); // Crear nueva orden

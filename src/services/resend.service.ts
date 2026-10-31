@@ -1,11 +1,11 @@
 import { Resend } from 'resend';
-import dotenv from 'dotenv';
+
 import { IOrder } from '@/interfaces/order.interface';
 import { ShippingType } from '@/interfaces/shippingMethods.interface';
 import { TenantModels } from '@/config/modelRegistry';
 import { IEmailBrandingConfig, IEmailTemplateItem, IEmailTemplatesConfig } from '@/interfaces/ecommerce.interface';
 
-dotenv.config();
+
 
 export class ResendService {
 	static #apikey = process.env.RESEND_API_KEY;

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { HeroController } from '../controllers/hero.controller';
-import multer from 'multer';
-const multerConfig = multer().fields([
+import { imageUpload } from '@/config/multer';
+const multerConfig = imageUpload.fields([
   { name: 'imageDesktop1', maxCount: 1 },
   { name: 'imageDesktop2', maxCount: 1 },
   { name: 'imageMobile1', maxCount: 1 },

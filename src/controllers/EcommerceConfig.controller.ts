@@ -3,6 +3,8 @@ import { Auth0MercadoPago, AuthRequest } from '@/middleware/auth';
 import { EcommerceService } from '@/services/ecommerce.service';
 import { MercadoPagoService } from '@/services/mercadopago.service';
 import { AppError } from '@/errors/app.error';
+import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 
 export class EcommerceConfigController {
 
@@ -36,18 +38,116 @@ export class EcommerceConfigController {
 		}
 	}
 
+	// GET /api/Ecommerce/config/mercadopago/auth-url - Generar URL segura de autorización OAuth con state firmado
+	static async getMercadoPagoAuthUrl(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const tenantSlug = req.tenant?.slug;
+			if (!tenantSlug) {
+				throw new AppError('Tenant required', 'Se requiere identificar la tienda para vincular Mercado Pago', 400);
+			}
+
+			const masterClientId = process.env.MP_MASTER_CLIENT_ID;
+			const redirectUri = process.env.MP_REDIRECT_URI;
+			if (!redirectUri) {
+				throw new AppError('Missing MP Credentials', 'Falta configurar la variable MP_REDIRECT_URI en tu archivo de entorno actual.', 500);
+			}
+
+			if (!masterClientId) {
+				throw new AppError('Missing MP Credentials', 'Falta MP_MASTER_CLIENT_ID en la configuración del servidor', 500);
+			}
+
+			const jwtSecret = process.env.JWT_SECRET;
+			if (!jwtSecret) {
+				throw new AppError('Server configuration error', 'Falta JWT_SECRET en las variables de entorno', 500);
+			}
+
+			const nonce = crypto.randomBytes(16).toString('hex');
+
+			// Token firmado anti-tampering y anti-CSRF con 15 minutos de validez
+			const stateToken = jwt.sign(
+				{
+					tenantSlug,
+					adminId: req.user?._id ? String(req.user._id) : undefined,
+					nonce,
+					purpose: 'mp_oauth_link'
+				},
+				jwtSecret,
+				{ expiresIn: '15m' }
+			);
+
+			const authUrl = `https://auth.mercadopago.com/authorization?client_id=${masterClientId}&response_type=code&platform_id=mp&state=${encodeURIComponent(stateToken)}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+
+			res.status(200).json({
+				success: true,
+				authUrl,
+				state: stateToken
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
+
 	static handleMercadoPagoCallback = async (req: Auth0MercadoPago, res: Response) => {
 		const { code, state } = req.query;
 		console.log('MercadoPago Callback:', { code, state });
 
-		const panelBase = process.env.PANEL_URL || 'https://control-panel-50s.pages.dev';
+		const panelBase = process.env.PANEL_URL;
+		if (!panelBase) {
+			console.error('❌ Falta configurar PANEL_URL en el archivo de entorno.');
+			res.status(500).send('Error de configuración del servidor: Falta PANEL_URL en el entorno.');
+			return;
+		}
 
 		try {
 			if (!code || typeof code !== 'string') {
 				throw new Error('Código de autorización no proporcionado');
 			}
 
-			await EcommerceService.handleMercadoPagoOAuth(req.models!, code);
+			if (!state || typeof state !== 'string') {
+				console.warn('🚨 [Alerta de Seguridad] Callback de Mercado Pago recibido sin parámetro state');
+				const errorUrl = `${panelBase}/home/settings?mp_error=missing_state`;
+				return res.redirect(errorUrl);
+			}
+
+			const jwtSecret = process.env.JWT_SECRET;
+			if (!jwtSecret) {
+				throw new Error('Falta JWT_SECRET en variables de entorno');
+			}
+
+			let targetTenantSlug: string;
+
+			try {
+				const decoded = jwt.verify(state, jwtSecret) as { tenantSlug?: string; purpose?: string };
+				if (!decoded.tenantSlug || decoded.purpose !== 'mp_oauth_link') {
+					throw new Error('Token state inválido o propósito incorrecto');
+				}
+				targetTenantSlug = decoded.tenantSlug;
+			} catch (jwtErr: any) {
+				// Soporte retrocompatible seguro: si el state coincide exactamente con el tenant ya resuelto en la sesión autenticada del admin
+				if (req.tenant?.slug && state.trim().toLowerCase() === req.tenant.slug.toLowerCase()) {
+					console.log(`ℹ️ [OAuth MP] Aprobado por sesión de admin coincidente para slug: ${req.tenant.slug}`);
+					targetTenantSlug = req.tenant.slug;
+				} else {
+					console.warn('🚨 [Alerta de Seguridad] Intento de vinculación Mercado Pago con state inválido o expirado:', jwtErr.message);
+					const errorUrl = `${panelBase}/home/settings?mp_error=invalid_csrf_state`;
+					return res.redirect(errorUrl);
+				}
+			}
+
+			// Resolver conexión y modelos del tenant verificado
+			const { connectionManager } = await import('@/config/multitenancy');
+			const { getModelsForConnection } = await import('@/config/modelRegistry');
+			const tenant = await connectionManager.getTenantBySlug(targetTenantSlug);
+
+			if (!tenant) {
+				throw new Error(`Tienda "${targetTenantSlug}" no encontrada`);
+			}
+
+			const tenantDb = connectionManager.getTenantDb(tenant.dbName);
+			const targetModels = getModelsForConnection(tenantDb);
+
+			await EcommerceService.handleMercadoPagoOAuth(targetModels, code);
+			console.log(`✅ [OAuth MP] Cuenta de Mercado Pago vinculada exitosamente a la tienda: ${targetTenantSlug}`);
 
 			const frontendURL = `${panelBase}/home/settings?mp_success=true`;
 			return res.redirect(frontendURL);

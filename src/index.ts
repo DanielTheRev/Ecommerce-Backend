@@ -8,7 +8,7 @@ import morgan from 'morgan';
 import { connectionManager } from './config/multitenancy';
 import { errorMiddleware } from './middleware/error.middleware';
 import { resolveTenant } from './middleware/tenant';
-import { ITenant } from './interfaces/tenant.interface';
+import { loadAllTenantOrigins, isOriginAllowed } from './config/cors';
 import authRoutes from './routes/auth.routes';
 import ecommerceConfigRoutes from './routes/EcommerceConfig.routes';
 import heroRoutes from './routes/hero.routes';
@@ -36,11 +36,14 @@ import { MasterCatalogService } from './services/masterCatalog.service';
 
 // Cargar variables de entorno según el entorno (development vs production)
 const currentEnv = process.env.NODE_ENV || 'development';
-dotenv.config(); // Base .env
-dotenv.config({ path: `.env.${currentEnv}`, override: true });
-dotenv.config({ path: `.env.${currentEnv}.local`, override: true });
+const envFile = currentEnv === 'production' ? '.env' : `.env.${currentEnv}`;
+const envResult = dotenv.config({ path: envFile });
+if (envResult.error) {
+	console.warn(`⚠️ [ENV] No se encontró el archivo ${envFile}, intentando cargar .env base...`);
+	dotenv.config();
+}
 
-console.log(`🌱 Entorno activo: [${currentEnv}] | Puerto: [${process.env.PORT || 3000}]`);
+console.log(`🌱 Entorno activo: [${currentEnv}] desde [${envFile}] | Puerto: [${process.env.PORT || 3000}]`);
 
 // Crear aplicación Express
 const app: Application = express();
@@ -48,80 +51,6 @@ app.set('trust proxy', true);
 const PORT = process.env.PORT || 3000;
 
 // Middlewares de seguridad
-// CORS dinámico: los origins permitidos vienen de la config de cada tenant y defaults de producción
-const defaultOrigins = [
-	'http://localhost:3000',
-	'http://localhost:3001',
-	'http://localhost:4000',
-	'http://localhost:4200',
-	'http://localhost:4300',
-	'http://localhost:4500',
-	'http://localhost:4900',
-	'http://localhost:5000',
-	'http://localhost:5173',
-	'https://vura.com.ar',
-	'https://www.vura.com.ar',
-	'https://dashboard.vura.com.ar',
-	'https://admin.vura.com.ar',
-	'https://panel.vexx.com.ar',
-	'https://www.panel.vexx.com.ar',
-	"https://control-panel-50s.pages.dev/"
-];
-
-// Cache de origins por tenant para no consultar la DB en cada request
-const tenantOriginsCache = new Map<string, string[]>();
-
-async function loadAllTenantOrigins(): Promise<void> {
-	try {
-		const masterDb = connectionManager.getMasterDb();
-		const TenantModel = masterDb.model<ITenant>('Tenant');
-		const tenants = await TenantModel.find({ isActive: true }).lean();
-		for (const tenant of tenants) {
-			if (tenant.settings?.allowedOrigins) {
-				tenantOriginsCache.set(tenant.slug, tenant.settings.allowedOrigins);
-			}
-		}
-		console.log(`🔒 CORS: ${tenantOriginsCache.size} tenants cargados`);
-	} catch (error) {
-		console.error('⚠️ No se pudieron cargar origins de tenants (se cargarán después)');
-	}
-}
-
-function getAllAllowedOrigins(): string[] {
-	const allOrigins = [...defaultOrigins];
-	for (const origins of tenantOriginsCache.values()) {
-		allOrigins.push(...origins);
-	}
-	return allOrigins;
-}
-
-function isOriginAllowed(origin: string | undefined): boolean {
-	if (!origin) return true;
-	if (process.env.NODE_ENV !== 'production') return true;
-
-	const allowed = getAllAllowedOrigins();
-	if (allowed.includes(origin)) return true;
-
-	// Permitir automáticamente cualquier variante o subdominio de vura.com.ar, vexx.com.ar o Cloudflare Pages / Vercel
-	if (
-		origin === 'https://vura.com.ar' ||
-		origin === 'https://www.vura.com.ar' ||
-		origin.endsWith('.vura.com.ar') ||
-		origin === 'https://vexx.com.ar' ||
-		origin === 'https://panel.vexx.com.ar' ||
-		origin === 'https://panel.vexx.com.ar' ||
-		origin === 'https://www.vexx.com.ar' ||
-		origin === 'https://www.panel.vexx.com.ar' ||
-		origin.endsWith('.vexx.com.ar') ||
-		origin.endsWith('.vercel.app') ||
-		origin.endsWith('.pages.dev')
-	) {
-		return true;
-	}
-
-	return false;
-}
-
 app.use(helmet());
 app.use(
 	cors({

@@ -7,7 +7,12 @@ import { MercadoPagoService } from './mercadopago.service';
 import { ProductService } from './product.service';
 
 export class EcommerceService {
-	private static readonly SENSITIVE_FIELDS_SELECT = '+paymentGateways.uala.credentials.userName +paymentGateways.uala.credentials.clientId +paymentGateways.uala.credentials.clientSecret +paymentGateways.mercadopago.accessToken +paymentGateways.mercadopago.webhookSecret +integrations.metaPixel.accessToken +integrations.resend.apiKey +integrations.googleAuth.clientId';
+	private static readonly SENSITIVE_FIELDS_SELECT =
+		'+paymentGateways.uala.credentials.userName +paymentGateways.uala.credentials.clientId +paymentGateways.uala.credentials.clientSecret ' +
+		'+paymentGateways.mercadopago.accessToken +paymentGateways.mercadopago.webhookSecret ' +
+		'+paymentGateways.getnet.clientId +paymentGateways.getnet.clientSecret ' +
+		'+integrations.metaPixel.accessToken +integrations.resend.apiKey +integrations.googleAuth.clientId ' +
+		'+integrations.arca.cert +integrations.arca.key';
 
 	private constructor() { }
 
@@ -383,6 +388,11 @@ export class EcommerceService {
 				if (mp.publicKey) mp.publicKey = safeEncryptString(mp.publicKey);
 				if (mp.webhookSecret) mp.webhookSecret = safeEncryptString(mp.webhookSecret);
 			}
+			if (configObj.paymentGateways.getnet) {
+				const gn = configObj.paymentGateways.getnet;
+				if (gn.clientId) gn.clientId = safeEncryptString(gn.clientId);
+				if (gn.clientSecret) gn.clientSecret = safeEncryptString(gn.clientSecret);
+			}
 		}
 		if (configObj.integrations?.metaPixel?.accessToken) {
 			configObj.integrations.metaPixel.accessToken = safeEncryptString(configObj.integrations.metaPixel.accessToken);
@@ -392,6 +402,11 @@ export class EcommerceService {
 		}
 		if (configObj.integrations?.googleAuth?.clientId) {
 			configObj.integrations.googleAuth.clientId = safeEncryptString(configObj.integrations.googleAuth.clientId);
+		}
+		if (configObj.integrations?.arca) {
+			const arca = configObj.integrations.arca;
+			if (arca.cert) arca.cert = safeEncryptString(arca.cert);
+			if (arca.key) arca.key = safeEncryptString(arca.key);
 		}
 	}
 
@@ -418,6 +433,16 @@ export class EcommerceService {
 					mp.webhookSecret = safeDecryptString(mp.webhookSecret);
 				}
 			}
+			// Getnet
+			if (configObj.paymentGateways.getnet) {
+				const gn = configObj.paymentGateways.getnet;
+				if (gn.clientId && gn.clientId !== 'no asignado') {
+					gn.clientId = safeDecryptString(gn.clientId);
+				}
+				if (gn.clientSecret && gn.clientSecret !== 'no asignado') {
+					gn.clientSecret = safeDecryptString(gn.clientSecret);
+				}
+			}
 		}
 		if (configObj.integrations?.metaPixel?.accessToken) {
 			configObj.integrations.metaPixel.accessToken = safeDecryptString(configObj.integrations.metaPixel.accessToken);
@@ -427,6 +452,15 @@ export class EcommerceService {
 		}
 		if (configObj.integrations?.googleAuth?.clientId) {
 			configObj.integrations.googleAuth.clientId = safeDecryptString(configObj.integrations.googleAuth.clientId);
+		}
+		if (configObj.integrations?.arca) {
+			const arca = configObj.integrations.arca;
+			if (arca.cert && arca.cert !== 'no asignado') {
+				arca.cert = safeDecryptString(arca.cert);
+			}
+			if (arca.key && arca.key !== 'no asignado') {
+				arca.key = safeDecryptString(arca.key);
+			}
 		}
 		return configObj;
 	}

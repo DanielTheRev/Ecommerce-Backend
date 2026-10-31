@@ -1,6 +1,7 @@
 import mongoose, { Connection } from 'mongoose';
 import { TenantSchema } from '@/models/Tenant.model';
 import { ITenant } from '@/interfaces/tenant.interface';
+import { escapeRegex } from '@/utils/regex.util';
 
 /**
  * ConnectionManager - Gestiona la conexión base a MongoDB
@@ -28,7 +29,10 @@ class ConnectionManager {
 		}
 
 		this.connectPromise = (async () => {
-			const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
+			const mongoURI = process.env.MONGODB_URI;
+			if (!mongoURI) {
+				throw new Error('FATAL: Falta la variable MONGODB_URI en el archivo de entorno.');
+			}
 
 			this.baseConnection = await mongoose.createConnection(mongoURI, {
 				maxPoolSize: process.env.MONGODB_MAX_POOL_SIZE ? parseInt(process.env.MONGODB_MAX_POOL_SIZE, 10) : 10,
@@ -113,7 +117,7 @@ class ConnectionManager {
 			$or: [
 				{ slug: cleanSlug },
 				{ slug: slug },
-				{ slug: { $regex: new RegExp(`^${cleanSlug}$`, 'i') } }
+				{ slug: { $regex: new RegExp(`^${escapeRegex(cleanSlug)}$`, 'i') } }
 			],
 			isActive: true
 		}).lean() as ITenant | null;
@@ -161,7 +165,7 @@ class ConnectionManager {
 				{ domain: cleanDomain },
 				{ domain: `https://${cleanDomain}` },
 				{ domain: `http://${cleanDomain}` },
-				{ domain: { $regex: new RegExp(`^https?://${cleanDomain}/?$`, 'i') } }
+				{ domain: { $regex: new RegExp(`^https?://${escapeRegex(cleanDomain)}/?$`, 'i') } }
 			],
 			isActive: true
 		}).lean() as ITenant | null;

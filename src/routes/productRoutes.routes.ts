@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { ProductController } from '../controllers/product.controller';
 import { protect, adminOnly } from '../middleware/auth';
-import multer from 'multer';
+import { imageUpload } from '@/config/multer';
 
 import { validateSchema } from '@/middleware/validator.middleware';
 import { CreateProductSchema, UpdateProductSchema, PriceCalculatorSchema } from '@/schemas/product.schema';
@@ -9,7 +9,7 @@ import { CreateProductSchema, UpdateProductSchema, PriceCalculatorSchema } from 
 const router: Router = Router();
 
 
-const multerConfig = multer().fields([
+const multerConfig = imageUpload.fields([
 	{ name: 'images', maxCount: 10 },
 	{ name: 'seoImage', maxCount: 1 }
 ]);

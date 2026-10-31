@@ -691,6 +691,10 @@ export class ProductController {
 				throw new AppError('Invalid token purpose', 'Token no válido para exportación', 403);
 			}
 
+			if (decoded.tenantSlug && req.tenant?.slug && decoded.tenantSlug.trim().toLowerCase() !== req.tenant.slug.trim().toLowerCase()) {
+				throw new AppError('Tenant mismatch', 'Este token de exportación no pertenece a esta tienda.', 403);
+			}
+
 			const products = await ProductService.getPublicActiveProducts(req.models!);
 
 			res.status(200).json({

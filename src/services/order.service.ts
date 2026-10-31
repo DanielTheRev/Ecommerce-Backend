@@ -684,9 +684,19 @@ export class OrderService {
 			const statusDetail = String(result.status_detail || '').toLowerCase();
 
 			if (status === 'approved' || status === 'processed' || statusDetail === 'accredited') {
-				paymentStatus = PaymentStatus.APPROVED;
-				orderStatus = OrderStatus.PROCESSING_SHIPPING;
-				note = 'Pago acreditado con éxito';
+				const paidAmount = Number((result as any).transaction_amount || (result as any).amount || (result as any).total_amount || 0);
+				const expectedTotal = Number(order.finance.total || 0);
+
+				if (paidAmount > 0 && paidAmount < expectedTotal - 1) {
+					console.error(`🚨 [Fraude Detectado MP] Monto pagado ($${paidAmount}) menor al total de la orden ($${expectedTotal}) en orden ${order.id}`);
+					paymentStatus = PaymentStatus.REJECTED;
+					orderStatus = OrderStatus.PAYMENT_FAILED;
+					note = `Pago rechazado: Monto recibido ($${paidAmount}) no coincide con el total de la orden ($${expectedTotal})`;
+				} else {
+					paymentStatus = PaymentStatus.APPROVED;
+					orderStatus = OrderStatus.PROCESSING_SHIPPING;
+					note = 'Pago acreditado con éxito';
+				}
 			} else if (
 				status === 'created' ||
 				status === 'in_process' || 
@@ -1120,34 +1130,54 @@ export class OrderService {
 
 			if (!order) throw new AppError('Order not found', 'Orden no encontrada', 404);
 
-			order.paymentInfo.status = status === UalaOrderStatus.Aprobado
+			// Validar contra la API oficial de Ualá antes de aprobar
+			let isActuallyApproved = status === UalaOrderStatus.Aprobado;
+			let ualaInstallments = 1;
+
+			if (isActuallyApproved) {
+				if (!order.paymentInfo.transactionId) {
+					console.error('❌ Transaction ID missing for card order:', orderID);
+					isActuallyApproved = false;
+				} else {
+					const { orderStatus, error } = await PaymentService.getOrderStatus(order.paymentInfo.transactionId);
+					if (error || !orderStatus || ((orderStatus as any).status !== UalaOrderStatus.Aprobado && (orderStatus as any).state !== 'APPROVED')) {
+						console.warn(`🚨 [Pago no verificado Ualá] API oficial no reportó aprobación para ${orderID}`);
+						isActuallyApproved = false;
+					} else {
+						const paidAmount = Number((orderStatus as any).amount || (orderStatus as any).total || 0);
+						const expectedTotal = Number(order.finance.total || 0);
+						if (paidAmount > 0 && paidAmount < expectedTotal - 1) {
+							console.error(`🚨 [Fraude Detectado Ualá] Monto pagado ($${paidAmount}) menor al total ($${expectedTotal}) en orden ${orderID}`);
+							isActuallyApproved = false;
+						} else {
+							ualaInstallments = (orderStatus as any).customer?.card?.installments?.number || 1;
+						}
+					}
+				}
+			}
+
+			order.paymentInfo.status = isActuallyApproved
 				? PaymentStatus.APPROVED
 				: PaymentStatus.REJECTED;
 
 			if (order.paymentInfo.status === PaymentStatus.APPROVED) {
-				if (!order.paymentInfo.transactionId) {
-					console.error('Transaction ID missing for approved card order:', orderID);
-				} else {
-					const { orderStatus, error } = await PaymentService.getOrderStatus(order.paymentInfo.transactionId);
-					if (!error && orderStatus) {
-						const installments = (orderStatus as any).customer?.card?.installments?.number || 1;
+				const itemsForPaymentService = order.items.map(item => ({
+					data: item.productSnapshot as any,
+					quantity: item.quantity
+				}));
 
-						const itemsForPaymentService = order.items.map(item => ({
-							data: item.productSnapshot as any,
-							quantity: item.quantity
-						}));
+				const paymentService = new PaymentService(
+					itemsForPaymentService,
+					PaymentType.CARD,
+					order.shippingInfo.cost
+				);
 
-						const paymentService = new PaymentService(
-							itemsForPaymentService,
-							PaymentType.CARD,
-							order.shippingInfo.cost
-						);
-
-						order.finance.earnings = paymentService.getEarnings(installments);
-						order.finance.installments = installments;
-					}
-				}
+				order.finance.earnings = paymentService.getEarnings(ualaInstallments);
+				order.finance.installments = ualaInstallments;
 				order.paymentInfo.paymentDate = new Date();
+				order.status = OrderStatus.PROCESSING_SHIPPING;
+			} else {
+				order.status = OrderStatus.PAYMENT_FAILED;
 			}
 
 			await order.save();
@@ -1195,9 +1225,19 @@ export class OrderService {
 			const statusDetail = String(payment.status_detail || '').toLowerCase();
 
 			if (status === 'approved' || status === 'processed' || statusDetail === 'accredited') {
-				paymentStatus = PaymentStatus.APPROVED;
-				orderStatus = OrderStatus.PROCESSING_SHIPPING;
-				note = 'Pago acreditado con éxito';
+				const paidAmount = Number(payment.transaction_amount || payment.amount || 0);
+				const expectedTotal = Number(order.finance.total || 0);
+
+				if (paidAmount > 0 && paidAmount < expectedTotal - 1) {
+					console.error(`🚨 [Fraude Detectado MP] Monto pagado ($${paidAmount}) menor al total de la orden ($${expectedTotal}) en orden ${orderId}`);
+					paymentStatus = PaymentStatus.REJECTED;
+					orderStatus = OrderStatus.PAYMENT_FAILED;
+					note = `Pago rechazado: Monto recibido ($${paidAmount}) no coincide con el total de la orden ($${expectedTotal})`;
+				} else {
+					paymentStatus = PaymentStatus.APPROVED;
+					orderStatus = OrderStatus.PROCESSING_SHIPPING;
+					note = 'Pago acreditado con éxito';
+				}
 			} else if (
 				status === 'in_process' || 
 				status === 'processing' || 
@@ -1351,8 +1391,16 @@ export class OrderService {
 			let orderStatus: OrderStatus = OrderStatus.PENDING_PAYMENT;
 
 			if (status === 'approved' || status === 'paid' || status === 'authorized' || status === 'completed') {
-				paymentStatus = PaymentStatus.APPROVED;
-				orderStatus = OrderStatus.PROCESSING_SHIPPING;
+				const paidAmount = Number(paymentData.amount || paymentData.total_amount || 0);
+				const expectedTotal = Number(order.finance.total || 0);
+				if (paidAmount > 0 && paidAmount < expectedTotal - 1) {
+					console.error(`🚨 [Fraude Detectado Getnet] Monto pagado ($${paidAmount}) menor al total ($${expectedTotal}) en orden ${orderId}`);
+					paymentStatus = PaymentStatus.REJECTED;
+					orderStatus = OrderStatus.PAYMENT_FAILED;
+				} else {
+					paymentStatus = PaymentStatus.APPROVED;
+					orderStatus = OrderStatus.PROCESSING_SHIPPING;
+				}
 			} else if (status === 'rejected' || status === 'declined' || status === 'failed' || status === 'cancelled') {
 				paymentStatus = PaymentStatus.REJECTED;
 				orderStatus = OrderStatus.PAYMENT_FAILED;

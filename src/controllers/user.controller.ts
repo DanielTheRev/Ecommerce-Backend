@@ -198,7 +198,7 @@ export class UserController {
 	static async verifyPin(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
 			const { pinCode, staffId } = req.body;
-			const result = await UserService.verifyStaffPin(req.models!, pinCode, staffId);
+			const result = await UserService.verifyStaffPin(req.models!, pinCode, staffId, req.user?._id ? String(req.user._id) : undefined);
 
 			if (!result.valid) {
 				res.status(401).json({

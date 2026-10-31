@@ -10,7 +10,10 @@ const IV_LENGTH = 16;
 // Obtener clave desde variables de entorno o usar una por defecto para desarrollo
 // NOTA: En producción, asegurar que JWT_SECRET tenga suficiente longitud o usar una variable específica ENCRYPTION_KEY
 const getEncryptionKey = (): Buffer => {
-    const secret = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || 'default_secret_key_for_development_only_32_bytes';
+    const secret = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET;
+    if (!secret) {
+        throw new Error('FATAL: Falta configurar ENCRYPTION_KEY o JWT_SECRET en las variables de entorno.');
+    }
     // Si la clave no tiene 32 bytes, la hasheamos para asegurar el tamaño correcto
     return crypto.createHash('sha256').update(secret).digest();
 };

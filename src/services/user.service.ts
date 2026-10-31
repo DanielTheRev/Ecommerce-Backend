@@ -1,4 +1,5 @@
 import { AppError } from '@/errors/app.error';
+import { escapeRegex } from '@/utils/regex.util';
 import { IUser, Role } from '@/interfaces/user.interface';
 import { TenantModels } from '@/config/modelRegistry';
 
@@ -13,6 +14,7 @@ const defaultRewards = {
 };
 
 export class UserService {
+	private static readonly staffPinAttempts = new Map<string, { attempts: number; lockedUntil?: number }>();
 	static async getUserByGoogleID(models: TenantModels, id: string) {
 		try {
 			const user = (await models.User.findOne({ googleID: id }).lean()) as any as IUser;
@@ -124,9 +126,10 @@ export class UserService {
 			};
 
 			if (q) {
+				const escapedQ = escapeRegex(q);
 				filter.$or = [
-					{ name: { $regex: q, $options: 'i' } },
-					{ email: { $regex: q, $options: 'i' } }
+					{ name: { $regex: escapedQ, $options: 'i' } },
+					{ email: { $regex: escapedQ, $options: 'i' } }
 				];
 			}
 
@@ -209,7 +212,7 @@ export class UserService {
 			}
 
 			if (query?.search) {
-				const regex = { $regex: query.search.trim(), $options: 'i' };
+				const regex = { $regex: escapeRegex(query.search.trim()), $options: 'i' };
 				filter.$or = [
 					{ name: regex },
 					{ lastName: regex },
@@ -576,11 +579,33 @@ export class UserService {
 		}
 	}
 
-	static async verifyStaffPin(models: TenantModels, pinCode: string, staffId?: string) {
+	static async verifyStaffPin(models: TenantModels, pinCode: string, staffId?: string, operatorId?: string) {
 		try {
 			if (!pinCode || pinCode.trim().length < 4) {
 				throw new AppError('Invalid PIN', 'El PIN ingresado no es válido', 400);
 			}
+
+			const attemptKey = `${staffId || 'counter'}:${operatorId || 'staff'}`;
+			const now = Date.now();
+			const record = UserService.staffPinAttempts.get(attemptKey);
+
+			if (record?.lockedUntil && now < record.lockedUntil) {
+				const remainingMinutes = Math.ceil((record.lockedUntil - now) / 60000);
+				throw new AppError(
+					'Too many attempts',
+					`Demasiados intentos fallidos de PIN. Bloqueado temporalmente por ${remainingMinutes} minuto(s).`,
+					429
+				);
+			}
+
+			const registerFailedAttempt = () => {
+				const current = record || { attempts: 0 };
+				current.attempts += 1;
+				if (current.attempts >= 5) {
+					current.lockedUntil = now + 15 * 60 * 1000;
+				}
+				UserService.staffPinAttempts.set(attemptKey, current);
+			};
 
 			// Si se especifica el ID de un empleado específico
 			if (staffId) {
@@ -591,14 +616,17 @@ export class UserService {
 				}).select('+pinCode');
 
 				if (!staff || !staff.pinCode) {
+					registerFailedAttempt();
 					return { valid: false, message: 'Usuario no encontrado o no tiene PIN configurado' };
 				}
 
 				const isMatch = await staff.comparePin!(pinCode);
 				if (!isMatch) {
+					registerFailedAttempt();
 					return { valid: false, message: 'PIN incorrecto' };
 				}
 
+				UserService.staffPinAttempts.delete(attemptKey);
 				return {
 					valid: true,
 					user: {
@@ -620,7 +648,8 @@ export class UserService {
 
 			for (const staff of allStaffWithPin) {
 				if (await staff.comparePin!(pinCode)) {
-					return {
+					UserService.staffPinAttempts.delete(attemptKey);
+				return {
 						valid: true,
 						user: {
 							_id: staff._id,
@@ -633,6 +662,7 @@ export class UserService {
 				}
 			}
 
+			registerFailedAttempt();
 			return { valid: false, message: 'PIN no encontrado o inválido' };
 		} catch (error) {
 			if (error instanceof AppError) throw error;

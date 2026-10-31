@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { ShopTheLookController } from '@/controllers/shopTheLook.controller';
 import { protect, adminOnly } from '@/middleware/auth';
-import multer from 'multer';
+import { imageUpload } from '@/config/multer';
 
-const upload = multer();
+const upload = imageUpload;
 
 const router: Router = Router();
 

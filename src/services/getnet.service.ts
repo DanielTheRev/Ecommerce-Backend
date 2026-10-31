@@ -249,7 +249,8 @@ export class GetnetService {
 				.createHmac('sha256', webhookSecret)
 				.update(typeof body === 'string' ? body : JSON.stringify(body))
 				.digest('hex');
-			return signature === expectedSignature;
+			if (signature.length !== expectedSignature.length) return false;
+			return crypto.timingSafeEqual(Buffer.from(signature, 'utf8'), Buffer.from(expectedSignature, 'utf8'));
 		} catch {
 			return false;
 		}

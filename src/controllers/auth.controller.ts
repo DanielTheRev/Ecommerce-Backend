@@ -1,7 +1,7 @@
 import { AuthService } from '@/services/auth.service';
 import { NextFunction, Response } from 'express';
 import jwt from 'jsonwebtoken';
-import { ISecureUser } from '@/interfaces/user.interface';
+import { ISecureUser, Role } from '@/interfaces/user.interface';
 import { UserService } from '@/services/user.service';
 import { AuthProvider, ILoginUserWithGoogle } from '@/interfaces/auth.interface';
 import { AppError } from '@/errors/app.error';
@@ -51,6 +51,10 @@ export const LoginAdmin = async (req: AuthRequest, res: Response, next: NextFunc
 			email,
 			password
 		});
+		if (user.role !== Role.admin && user.role !== Role.employee) {
+			throw new AppError('Unauthorized', 'Acceso denegado: se requieren permisos de administración o empleado', 403);
+		}
+
 		return sendTokenResponse(200, res, user as ISecureUser, req.tenant?.slug || data.tenantSlug);
 	} catch (error) {
 		return next(error);
@@ -71,6 +75,9 @@ export const getUserProfile = async (req: AuthRequest, res: Response) => {
 	if (!token) return res.status(401).json({ message: 'no token provided' });
 	try {
 		const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userID: string; tenantSlug?: string };
+		if (decoded.tenantSlug && req.tenant?.slug && decoded.tenantSlug.toLowerCase() !== req.tenant.slug.toLowerCase()) {
+			return res.status(403).json({ message: 'Sesión no corresponde a esta tienda', valid: false });
+		}
 		const user = await UserService.getUserByID(req.models!, decoded.userID);
 		if (!user) return res.status(404).json({ message: 'User not found' });
 		return res.json(user);
@@ -108,7 +115,7 @@ export const logout = async (req: AuthRequest, res: Response) => {
 export const sendOtp = async (req: AuthRequest, res: Response, next: NextFunction) => {
 	const { email, name, lastName, dni } = req.body;
 	try {
-		const result = await AuthService.sendOtp(req.models!, email, { name, lastName, dni });
+		const result = await AuthService.sendOtp(req.models!, email, { name, lastName, dni }, req.tenant?.slug);
 		return res.status(200).json(result);
 	} catch (error) {
 		return next(error);
@@ -118,8 +125,8 @@ export const sendOtp = async (req: AuthRequest, res: Response, next: NextFunctio
 export const verifyOtp = async (req: AuthRequest, res: Response, next: NextFunction) => {
 	const { otpToken, code } = req.body;
 	try {
-		const user = await AuthService.verifyOtp(req.models!, otpToken, code);
-		return sendTokenResponse(200, res, user as ISecureUser);
+		const user = await AuthService.verifyOtp(req.models!, otpToken, code, req.tenant?.slug);
+		return sendTokenResponse(200, res, user as ISecureUser, req.tenant?.slug);
 	} catch (error) {
 		return next(error);
 	}

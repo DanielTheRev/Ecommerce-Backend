@@ -4,9 +4,9 @@ import { Router } from 'express';
 import { protect, adminOnly } from '@/middleware/auth';
 import { validateSchema } from '@/middleware/validator.middleware';
 import { CreateBannerSchema, UpdateBannerSchema } from '@/schemas/banner.schema';
-import multer from 'multer';
+import { imageUpload } from '@/config/multer';
 
-const upload = multer();
+const upload = imageUpload;
 
 const router: Router = Router();
 

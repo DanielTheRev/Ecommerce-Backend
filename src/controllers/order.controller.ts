@@ -3,6 +3,7 @@ import {
 	CreateOrderDTO,
 	PayOrderDTO,
 	PaymentStatus,
+	OrderStatus,
 	updatePaymentStatusDTO,
 	updateShippingStatusDTO
 } from '@/interfaces/order.interface';
@@ -16,6 +17,7 @@ import { ReceiptService } from '@/services/receipt.service';
 import { realtimeService } from '@/sockets/realtime.service';
 import { NextFunction, Response } from 'express';
 import UalaApiCheckout from 'ualabis-nodejs';
+import { AppError } from '@/errors/app.error';
 
 /* get failed notifications from Uala */
 export const getNotificationsUala = async (req: AuthRequest, res: Response) => {
@@ -31,8 +33,19 @@ export const ualaWebhook = async (req: AuthRequest, res: Response) => {
 	const data = req.body as UalaWebhook;
 	const id = req.query.id as string;
 
+	if (!req.models || !id) {
+		return res.sendStatus(200);
+	}
+
 	try {
-		const order = await OrderService.confirmCardPayment(req.models!, id, data.status);
+		const config = await EcommerceService.getConfig(req.models);
+		const ualaConfig = config.paymentGateways?.uala;
+		if (!ualaConfig?.active || !ualaConfig?.credentials?.clientId) {
+			console.warn('⚠️ Webhook de Ualá recibido pero la pasarela no está activa o configurada');
+			return res.sendStatus(200);
+		}
+
+		const order = await OrderService.confirmCardPayment(req.models, id, data.status);
 		if (req.tenant) {
 			realtimeService.notifyOrderUpdatedToAdmins(req.tenant.slug, order, 'payment');
 		}
@@ -572,6 +585,17 @@ export const getTicket = async (req: AuthRequest, res: Response, next: NextFunct
 			return res.status(404).json({ message: 'Orden no encontrada' });
 		}
 
+		// Validar titularidad (IDOR Protection)
+		const orderUserId = order.user?._id ? String(order.user._id) : (order.user ? String(order.user) : undefined);
+		const currentUserId = req.user?._id ? String(req.user._id) : undefined;
+		const isStaff = req.user?.role === 'admin' || req.user?.role === 'employee';
+		const isOwner = Boolean(currentUserId && orderUserId && currentUserId === orderUserId);
+		const isEmailMatch = Boolean(req.user?.email && order.buyerData?.email && req.user.email.toLowerCase() === order.buyerData.email.toLowerCase());
+
+		if (!isStaff && !isOwner && !isEmailMatch) {
+			throw new AppError('Forbidden', 'No tienes permiso para ver el ticket de esta orden.', 403);
+		}
+
 		const pdfBuffer = await ReceiptService.generateThermalReceipt(req.models!, order);
 
 		res.setHeader('Content-Type', 'application/pdf');
@@ -591,6 +615,31 @@ export const uploadPaymentReceipt = async (req: AuthRequest, res: Response, next
 
 		if (!file) {
 			return res.status(400).json({ status: 'fail', message: 'No se envió ningún archivo de comprobante' });
+		}
+
+		const targetOrder = await req.models!.Order.findById(id);
+		if (!targetOrder) {
+			throw new AppError('Order not found', 'Orden no encontrada', 404);
+		}
+
+		// Validar estado de la orden: solo pendientes de pago
+		if (targetOrder.status !== OrderStatus.PENDING_PAYMENT && targetOrder.paymentInfo?.status !== PaymentStatus.PENDING) {
+			throw new AppError('Invalid order status', 'Solo se puede adjuntar comprobante a órdenes pendientes de pago.', 400);
+		}
+
+		// Validar titularidad (IDOR Protection)
+		const orderUserId = targetOrder.user ? String(targetOrder.user) : undefined;
+		const currentUserId = req.user?._id ? String(req.user._id) : undefined;
+		const isStaff = req.user?.role === 'admin' || req.user?.role === 'employee';
+		const isOwner = Boolean(currentUserId && orderUserId && currentUserId === orderUserId);
+		const guestEmail = ((req.body?.email || req.query?.email || req.headers['x-buyer-email'] || '') as string).trim().toLowerCase();
+		const isGuestMatch = Boolean(guestEmail && targetOrder.buyerData?.email && guestEmail === targetOrder.buyerData.email.toLowerCase());
+
+		if (orderUserId && !isStaff && !isOwner) {
+			throw new AppError('Forbidden', 'No tienes permiso para adjuntar comprobante a esta orden.', 403);
+		}
+		if (!orderUserId && !isStaff && !isGuestMatch && targetOrder.buyerData?.email) {
+			throw new AppError('Forbidden', 'El correo provisto no coincide con el comprador de la orden.', 403);
 		}
 
 		const order = await OrderService.attachPaymentReceipt(req.models!, id, file);

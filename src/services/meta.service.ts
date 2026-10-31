@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import dotenv from 'dotenv';
+
 import { ParamBuilder, PII_DATA_TYPE, CookieSettings } from 'capi-param-builder-nodejs';
 import {
   IMetaEvent,
@@ -9,7 +9,7 @@ import {
   MetaStandardEventName,
 } from '@/interfaces/meta.interface';
 
-dotenv.config();
+
 
 export class MetaService {
   /**
