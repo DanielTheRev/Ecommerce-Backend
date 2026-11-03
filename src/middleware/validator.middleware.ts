@@ -1,22 +1,26 @@
 import { Request, Response, NextFunction } from 'express';
-import { ZodError, ZodObject } from 'zod';
+import { ZodError, ZodType } from 'zod';
 
-export const validateSchema = (schema: ZodObject) => (req: Request, res: Response, next: NextFunction) => {
+export const validateSchema = (schema: ZodType) => (req: Request, res: Response, next: NextFunction) => {
 	try {
-
-		console.log(req.body);
 		schema.parse({
 			body: req.body,
 			query: req.query,
-			params: req.params
+			params: req.params,
 		});
 		return next();
 	} catch (error) {
-		console.log(error);
 		if (error instanceof ZodError) {
+			const formattedIssues = error.issues.map((issue) => ({
+				field: issue.path.join('.').replace(/^(body|query|params)\./, ''),
+				message: issue.message,
+			}));
+			const firstMessage = formattedIssues[0]?.message || 'Datos de validación inválidos';
+
 			return res.status(400).json({
 				success: false,
-				message: 'Validation failed',
+				message: firstMessage,
+				errors: formattedIssues,
 			});
 		}
 		return next(error);

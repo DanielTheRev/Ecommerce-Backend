@@ -10,7 +10,6 @@ export class AppError extends Error {
 		isOperational = true
 	) {
 		super(message);
-		console.log(message);
 		this.statusCode = statusCode;
 		this.isOperational = isOperational;
 		this.messageToSendClient = messageToSendClient;

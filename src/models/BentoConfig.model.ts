@@ -1,6 +1,6 @@
 import { Schema, model } from 'mongoose';
 import { IBentoConfigDocument } from '@/interfaces/bento.interface';
-import { BentoBlockSchema } from './schemas/bentoBlock,schema';
+import { BentoBlockSchema } from './schemas/bentoBlock.schema';
 
 const BentoConfigSchema = new Schema<IBentoConfigDocument>(
   {

@@ -15,10 +15,10 @@ import heroRoutes from './routes/hero.routes';
 import menuRoutes from './routes/menu.routes';
 import visualMenuRoutes from './routes/visualMenu.routes';
 import homeRoutes from './routes/home.routes';
-import orderRoutes from './routes/orderRoutes.routes';
-import paymentMethodRoutes from './routes/paymentMethodRoutes.routes';
-import productRoutes from './routes/productRoutes.routes';
-import shippingRoutes from './routes/shippingRoutes.routes';
+import orderRoutes from './routes/order.routes';
+import paymentMethodRoutes from './routes/paymentMethod.routes';
+import productRoutes from './routes/product.routes';
+import shippingRoutes from './routes/shipping.routes';
 import shopTheLookRoutes from './routes/shopTheLook.routes';
 import { socketManager } from './sockets/socketManager';
 import providerRoutes from './routes/provider.routes';
@@ -32,6 +32,12 @@ import newsletterRoutes from './routes/newsletter.routes';
 import categoryGroupRoutes from './routes/categoryGroup.routes';
 import { getnetRoutes } from './routes/getnet.routes';
 import arcaRoutes from './routes/arca.routes';
+import cashRegisterRoutes from './routes/cashRegister.routes';
+import posRoutes from './routes/pos.routes';
+import accountMovementRoutes from './routes/accountMovement.routes';
+import masterRoutes from './routes/master.routes';
+import masterCatalogRoutes from './routes/masterCatalog.routes';
+import feedRoutes from './routes/feed.routes';
 import { MasterCatalogService } from './services/masterCatalog.service';
 
 // Cargar variables de entorno según el entorno (development vs production)
@@ -92,13 +98,6 @@ app.get('/health', (req: Request, res: Response) => {
 		environment: process.env.NODE_ENV || 'development'
 	});
 });
-
-import cashRegisterRoutes from './routes/cashRegisterRoutes.routes';
-import posRoutes from './routes/pos.routes';
-import accountMovementRoutes from './routes/accountMovement.routes';
-import masterRoutes from './routes/master.routes';
-import masterCatalogRoutes from './routes/masterCatalog.routes';
-import feedRoutes from './routes/feed.routes';
 
 // Rutas maestras de plataforma (SuperAdmin VEX — NO requieren resolveTenant)
 app.use('/api/master', masterRoutes);
