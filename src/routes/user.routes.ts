@@ -10,8 +10,11 @@ router.get('/me', protect, UserController.getMe);
 // PUT /api/users/me - Actualizar nombre, apellido, DNI, teléfono
 router.put('/me', protect, UserController.updateMe);
 
-// GET /api/users/clients - Obtener todos los clientes registrados (solo admin)
-router.get('/clients', protect, adminOnly, UserController.getAllClients);
+// GET /api/users/clients - Obtener todos los clientes registrados (personal del comercio)
+router.get('/clients', protect, staffOnly, UserController.getAllClients);
+
+// POST /api/users/clients - Dar de alta cliente rápido desde mostrador (personal del comercio)
+router.post('/clients', protect, staffOnly, UserController.createClient);
 
 /* ========================================================== */
 /*             RUTAS DE EMPLEADOS / PERSONAL                  */

@@ -16,5 +16,6 @@ router.post('/tenants', requireSuperAdmin, MasterTenantController.createTenant);
 router.patch('/tenants/:id/status', requireSuperAdmin, MasterTenantController.toggleStatus);
 router.patch('/tenants/:id/subscription', requireSuperAdmin, MasterTenantController.updateSubscription);
 router.patch('/tenants/:id/plan', requireSuperAdmin, MasterTenantController.updatePlan);
+router.patch('/tenants/:id/business-type', requireSuperAdmin, MasterTenantController.updateBusinessType);
 
 export default router;

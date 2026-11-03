@@ -398,7 +398,7 @@ export class ArcaService {
 		const arcaConfig = config.integrations?.arca;
 		const fiscalProfile = config.fiscalProfile;
 
-		const storeName = arcaConfig?.businessName || fiscalProfile?.businessName || config.name || 'NexoCommerce Store';
+		const storeName = arcaConfig?.businessName || fiscalProfile?.businessName || config.name || 'Comercio';
 		const storeCuit = arcaConfig?.cuit || fiscalProfile?.cuit || '00-00000000-0';
 		const storeTaxRegime = (arcaConfig?.taxRegime || fiscalProfile?.taxRegime || 'Monotributo').toUpperCase();
 		const storeIIBB = arcaConfig?.grossIncomeNumber || fiscalProfile?.grossIncomeNumber || storeCuit;

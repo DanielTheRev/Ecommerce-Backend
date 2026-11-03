@@ -41,7 +41,7 @@ export class MasterCatalogService {
 
 	/**
 	 * Consulta un producto por código de barras.
-	 * 1. Busca en la base de datos global de NexoCommerce.
+	 * 1. Busca en la base de datos global de Vexx.
 	 * 2. Si no existe, consulta como fallback inteligente a OpenFoodFacts.
 	 * 3. Si lo encuentra en la base externa, lo guarda silenciosamente en la DB global para siempre.
 	 */
@@ -151,7 +151,7 @@ export class MasterCatalogService {
 	/**
 	 * Crowdsourcing silencioso:
 	 * Cuando cualquier comerciante crea o actualiza un producto con código de barras en su tienda local,
-	 * se registra o enriquece de forma asíncrona en el catálogo global de NexoCommerce.
+	 * se registra o enriquece de forma asíncrona en el catálogo global de Vexx.
 	 */
 	public static silentlyUpsertFromProduct(data: {
 		barcode?: string;

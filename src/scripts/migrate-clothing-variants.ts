@@ -1,5 +1,5 @@
 /**
- * 🔄 Migración de Variantes — Vura DB (ClothingProducts)
+ * 🔄 Migración de Variantes — Multi-Tenant (ClothingProducts)
  *
  * Convierte el schema genérico de variantes al nuevo ClothingVariantSchema:
  *   ANTES: variants[].attributes = [{ key: "Talle", value: "M" }, ...]
@@ -19,7 +19,12 @@ import mongoose from 'mongoose';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const VURA_DB = 'vura_store_db';
+const rawDb = process.env.TENANT_DB_NAME || (process.argv.find(a => a.startsWith('--db='))?.split('=')[1]);
+if (!rawDb) {
+	console.error('❌ Debe especificar la base de datos con --db=<dbName>');
+	process.exit(1);
+}
+const TARGET_DB: string = rawDb;
 const DRY_RUN = !process.argv.includes('--apply');
 
 // Claves posibles del atributo "talle" según cómo lo hayan cargado en el panel
@@ -45,7 +50,7 @@ async function migrateClothingVariants() {
 	}
 
 	console.log('\n👕 ═══════════════════════════════════════════════════');
-	console.log('   Migración de Variantes — Vura ClothingProducts');
+	console.log(`   Migración de Variantes — DB: [${TARGET_DB}] ClothingProducts`);
 	console.log(`   Modo: ${DRY_RUN ? '🔍 DRY RUN (solo lectura)' : '⚡ APPLY (escritura real)'}`);
 	console.log('═══════════════════════════════════════════════════════\n');
 
@@ -54,7 +59,7 @@ async function migrateClothingVariants() {
 	}
 
 	const conn = await mongoose.createConnection(mongoURI).asPromise();
-	const db = conn.useDb(VURA_DB);
+	const db = conn.useDb(TARGET_DB);
 	const products = db.collection('products');
 
 	// ── 1. Buscar todos los ClothingProducts con variantes ──────────────────

@@ -18,7 +18,10 @@ export class PosController {
 			}
 
 			const cleanBarcode = barcode.trim();
-			const tenantSlug = req.tenant?.slug || (req as any).tenantSlug || 'vura';
+			const tenantSlug = req.tenant?.slug || (req as any).tenantSlug;
+			if (!tenantSlug) {
+				throw new AppError('Tenant is required', 'Tenant no identificado para operaciones POS', 400);
+			}
 			const parsedQuantity = quantity && Number(quantity) > 0 ? Number(quantity) : 1;
 			const senderName = req.user?.name || 'Lector Móvil (REST)';
 
@@ -68,7 +71,10 @@ export class PosController {
 	 */
 	static async getPairingData(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
-			const tenantSlug = req.tenant?.slug || (req as any).tenantSlug || 'vura';
+			const tenantSlug = req.tenant?.slug || (req as any).tenantSlug;
+			if (!tenantSlug) {
+				throw new AppError('Tenant is required', 'Tenant no identificado para operaciones POS', 400);
+			}
 			const terminalId = (req.query.terminalId as string) || 'caja-principal';
 			const cleanTerminal = terminalId.trim().toLowerCase();
 
@@ -80,7 +86,7 @@ export class PosController {
 				wsPath: '/api/socket.io',
 				serverUrl,
 				qrPayload: JSON.stringify({
-					type: 'NEXO_POS_TERMINAL',
+					type: 'VEXX_POS_TERMINAL',
 					version: '1.0',
 					action: 'pos_pair',
 					tenant: tenantSlug,
@@ -107,7 +113,10 @@ export class PosController {
 	 */
 	static async getActiveScanners(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
-			const tenantSlug = req.tenant?.slug || (req as any).tenantSlug || 'vura';
+			const tenantSlug = req.tenant?.slug || (req as any).tenantSlug;
+			if (!tenantSlug) {
+				throw new AppError('Tenant is required', 'Tenant no identificado para operaciones POS', 400);
+			}
 			const terminalId = req.query.terminalId as string | undefined;
 
 			const scanners = realtimeService.getActiveScanners(tenantSlug, terminalId);

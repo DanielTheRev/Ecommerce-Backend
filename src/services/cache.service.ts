@@ -89,7 +89,7 @@ export class CacheService {
 	/**
 	 * Invalida todas las claves que comiencen con un prefijo dentro de un tenant.
 	 * Si no se pasa tenantSlug, invalida para todos los tenants que coincidan con el prefijo.
-	 * Ej: invalidatePrefix('vura', 'menus') o invalidatePrefix('vura', 'home')
+	 * Ej: invalidatePrefix('tenantSlug', 'menus') o invalidatePrefix('tenantSlug', 'home')
 	 */
 	static invalidatePrefix(tenantSlug?: string, prefix?: string): void {
 		if (!prefix) return;

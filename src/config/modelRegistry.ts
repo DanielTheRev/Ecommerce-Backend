@@ -31,6 +31,8 @@ import { NewsletterSchema } from '@/models/Newsletter.model';
 import { MenuSchema } from '@/models/Menu.model';
 import { CategoryGroupSchema } from '@/models/CategoryGroup.model';
 import { invoiceSchema, IInvoiceDocument } from '@/models/Invoice.model';
+import { accountMovementSchema } from '@/models/AccountMovement.model';
+import { IAccountMovementDocument } from '@/interfaces/accountMovement.interface';
 
 // Interfaces
 import { ICashRegisterDocument, ICashRegisterModel } from '@/interfaces/cash-register.interface';
@@ -82,6 +84,7 @@ export interface TenantModels {
 	Menu: Model<IMenuDocument>;
 	CategoryGroup: Model<ICategoryGroupDocument>;
 	Invoice: Model<IInvoiceDocument>;
+	AccountMovement: Model<IAccountMovementDocument>;
 }
 
 export function getModelsForConnection(db: Connection): TenantModels {
@@ -217,6 +220,11 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		? (db.model('Invoice') as Model<IInvoiceDocument>)
 		: db.model<IInvoiceDocument>('Invoice', invoiceSchema);
 
+	// AccountMovement (Cuenta Corriente / Fiados)
+	const AccountMovementModel = db.models.AccountMovement
+		? (db.model('AccountMovement') as Model<IAccountMovementDocument>)
+		: db.model<IAccountMovementDocument>('AccountMovement', accountMovementSchema);
+
 	return {
 		Product: ProductModel,
 		TechProduct: TechProductModel,
@@ -244,6 +252,7 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		VisualMenu: VisualMenuModel,
 		Menu: MenuModel,
 		CategoryGroup: CategoryGroupModel,
-		Invoice: InvoiceModel
+		Invoice: InvoiceModel,
+		AccountMovement: AccountMovementModel
 	};
 }

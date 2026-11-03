@@ -6,12 +6,12 @@ dotenv.config();
 
 async function createInitialConfig() {
 	try {
-		const mongoURI = 'mongodb://localhost:27017/vura_store_db';
+		const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/dev_store_db';
 		await mongoose.connect(mongoURI);
 		console.log('✅ Conectado a MongoDB');
 
 		await EcommerceConfig.create({
-			name: 'Vura',
+			name: process.env.STORE_NAME || 'Mi Tienda',
 			profit: 10,
 			paymentGateways: {
 				uala: {

@@ -1,5 +1,5 @@
 /**
- * 🏆 Migración de Ranking ELO y Métricas — Vura DB
+ * 🏆 Migración de Ranking ELO y Métricas — Multi-Tenant
  *
  * Inicializa para todos los productos existentes:
  *   rankingScore: 100 (si no tiene)
@@ -18,7 +18,12 @@ dotenv.config();
 
 import mongoose from 'mongoose';
 
-const VURA_DB = process.env.VURA_DB_NAME || 'vura_store_db';
+const rawDb = process.env.TENANT_DB_NAME || (process.argv.find(a => a.startsWith('--db='))?.split('=')[1]);
+if (!rawDb) {
+	console.error('❌ Debe especificar la base de datos con --db=<dbName>');
+	process.exit(1);
+}
+const TARGET_DB: string = rawDb;
 const DRY_RUN = !process.argv.includes('--apply');
 
 async function migrateRanking() {
@@ -29,7 +34,7 @@ async function migrateRanking() {
 	}
 
 	console.log('\n🏆 ═══════════════════════════════════════════════════');
-	console.log('   Migración de Ranking ELO & Métricas — Vura DB');
+	console.log(`   Migración de Ranking ELO & Métricas — DB: [${TARGET_DB}]`);
 	console.log(`   Modo: ${DRY_RUN ? '🔍 DRY RUN (solo lectura)' : '⚡ APPLY (escritura real)'}`);
 	console.log('═══════════════════════════════════════════════════════\n');
 
@@ -38,13 +43,13 @@ async function migrateRanking() {
 	}
 
 	const conn = await mongoose.createConnection(mongoURI).asPromise();
-	const db = conn.useDb(VURA_DB);
+	const db = conn.useDb(TARGET_DB);
 	const productsCollection = db.collection('products');
 	const configCollection = db.collection('ecommerceconfigs');
 
 	// 1. Auditar productos existentes
 	const totalProducts = await productsCollection.countDocuments();
-	console.log(`📦 Total de productos encontrados en [${VURA_DB}]: ${totalProducts}`);
+	console.log(`📦 Total de productos encontrados en [${TARGET_DB}]: ${totalProducts}`);
 
 	const unrankedProducts = await productsCollection.countDocuments({
 		$or: [

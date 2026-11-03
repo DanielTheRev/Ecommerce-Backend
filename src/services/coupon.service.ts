@@ -108,8 +108,8 @@ export class CouponService {
 			};
 		}
 
-		// Caso especial: Cupón de Newsletter 'CLUBVURA10'
-		if (rawCode === 'CLUBVURA10') {
+		// Caso especial: Cupón de Newsletter 'NEWSLETTER10' o 'CLUB10'
+		if (rawCode === 'NEWSLETTER10' || rawCode === 'CLUB10') {
 			if (!userObj) {
 				return {
 					isValid: false,
@@ -118,7 +118,7 @@ export class CouponService {
 					discountValue: 10,
 					discountAmount: 0,
 					finalTotal: dto.subtotal,
-					message: 'Debés iniciar sesión con tu cuenta para utilizar el beneficio del Club Vura.'
+					message: 'Debés iniciar sesión con tu cuenta para utilizar el beneficio de suscriptor.'
 				};
 			}
 
@@ -133,7 +133,7 @@ export class CouponService {
 					discountValue: 10,
 					discountAmount: 0,
 					finalTotal: dto.subtotal,
-					message: 'Debés suscribirte al newsletter en la Home para activar el beneficio del Club Vura.'
+					message: 'Debés suscribirte al newsletter para activar este beneficio.'
 				};
 			}
 
@@ -158,7 +158,7 @@ export class CouponService {
 				discountValue: perc,
 				discountAmount,
 				finalTotal: Math.max(0, dto.subtotal - discountAmount),
-				message: '¡Genial! Se aplicó tu 10% OFF de Suscriptor del Club Vura.'
+				message: '¡Genial! Se aplicó tu 10% OFF de Suscriptor del Newsletter.',
 			};
 		}
 
@@ -280,8 +280,8 @@ export class CouponService {
 
 		// Verificar si es un cupón de Instagram y el usuario ya usó su beneficio de Instagram
 		const couponDesc = (coupon as any).description || '';
-		const isIgCode = rawCode.startsWith('VURAIG') || rawCode.includes('INSTAGRAM') || rawCode.includes('IG_') || rawCode.includes('IG-') || /(^|[^A-Z])IG($|[^A-Z0-9])/i.test(rawCode);
-		const isIg = isIgCode || couponDesc.toLowerCase().includes('instagram') || couponDesc.toLowerCase().includes('@vura');
+		const isIgCode = rawCode.startsWith('IG') || rawCode.includes('INSTAGRAM') || rawCode.includes('IG_') || rawCode.includes('IG-') || /(^|[^A-Z])IG($|[^A-Z0-9])/i.test(rawCode);
+		const isIg = isIgCode || couponDesc.toLowerCase().includes('instagram');
 		if (isIg && userObj?.rewards?.instagramUsed) {
 			return {
 				isValid: false,
@@ -429,13 +429,13 @@ export class CouponService {
 				await userDoc.save();
 				return;
 			}
-			if (rawCode === 'CLUBVURA10') {
+			if (rawCode === 'NEWSLETTER10' || rawCode === 'CLUB10') {
 				userDoc.rewards.newsletterUsed = true;
 				await userDoc.save();
 				return;
 			}
-			const isIgCode = rawCode.startsWith('VURAIG') || rawCode.includes('INSTAGRAM') || rawCode.includes('IG_') || rawCode.includes('IG-') || /(^|[^A-Z])IG($|[^A-Z0-9])/i.test(rawCode);
-			if (rawCode === 'VURAIG10' || isIgCode) {
+			const isIgCode = rawCode.startsWith('IG') || rawCode.includes('INSTAGRAM') || rawCode.includes('IG_') || rawCode.includes('IG-') || /(^|[^A-Z])IG($|[^A-Z0-9])/i.test(rawCode);
+			if (rawCode === 'INSTAGRAM10' || isIgCode) {
 				userDoc.rewards.instagramUsed = true;
 				await userDoc.save();
 			}
@@ -482,12 +482,12 @@ export class CouponService {
 			if (rawCode === 'PRIMERACOMPRA' || rawCode === 'FIRST10') {
 				userDoc.rewards.firstPurchaseUsed = false;
 				await userDoc.save();
-			} else if (rawCode === 'CLUBVURA10') {
+			} else if (rawCode === 'NEWSLETTER10' || rawCode === 'CLUB10') {
 				userDoc.rewards.newsletterUsed = false;
 				await userDoc.save();
 			} else {
-				const isIgCode = rawCode.startsWith('VURAIG') || rawCode.includes('INSTAGRAM') || rawCode.includes('IG_') || rawCode.includes('IG-') || /(^|[^A-Z])IG($|[^A-Z0-9])/i.test(rawCode);
-				if (rawCode === 'VURAIG10' || isIgCode) {
+				const isIgCode = rawCode.startsWith('IG') || rawCode.includes('INSTAGRAM') || rawCode.includes('IG_') || rawCode.includes('IG-') || /(^|[^A-Z])IG($|[^A-Z0-9])/i.test(rawCode);
+				if (rawCode === 'INSTAGRAM10' || isIgCode) {
 					userDoc.rewards.instagramUsed = false;
 					await userDoc.save();
 				}
@@ -601,19 +601,19 @@ export class CouponService {
 			if (rewards.newsletterSubscribed && !rewards.newsletterUsed) {
 				rewardCoupons.push({
 					_id: 'reward_newsletter',
-					code: 'CLUBVURA10',
+					code: 'NEWSLETTER10',
 					discountType: 'percentage',
 					discountValue: 10,
-					description: '10% OFF Suscriptor Club Vura'
+					description: '10% OFF Suscriptor Newsletter'
 				});
 			}
 			if (rewards.instagramClaimed && !rewards.instagramUsed) {
 				rewardCoupons.push({
 					_id: 'reward_instagram',
-					code: 'VURAIG10',
+					code: 'INSTAGRAM10',
 					discountType: 'percentage',
 					discountValue: 10,
-					description: '10% OFF Follower Instagram'
+					description: '10% OFF Seguidor Instagram'
 				});
 			}
 		}
@@ -636,8 +636,8 @@ export class CouponService {
 			if (userObj?.rewards?.instagramUsed) {
 				const code = (coupon.code || '').toUpperCase();
 				const desc = (coupon.description || '').toLowerCase();
-				const isIgCode = code.startsWith('VURAIG') || code.includes('INSTAGRAM') || code.includes('IG_') || code.includes('IG-') || /(^|[^A-Z])IG($|[^A-Z0-9])/i.test(code);
-				if (isIgCode || desc.includes('instagram') || desc.includes('@vura')) {
+				const isIgCode = code.startsWith('IG') || code.includes('INSTAGRAM') || code.includes('IG_') || code.includes('IG-') || /(^|[^A-Z])IG($|[^A-Z0-9])/i.test(code);
+				if (isIgCode || desc.includes('instagram')) {
 					return false;
 				}
 			}

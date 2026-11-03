@@ -12,10 +12,6 @@ export const defaultOrigins = [
 	'http://localhost:4900',
 	'http://localhost:5000',
 	'http://localhost:5173',
-	'https://vura.com.ar',
-	'https://www.vura.com.ar',
-	'https://dashboard.vura.com.ar',
-	'https://admin.vura.com.ar',
 	'https://panel.vexx.com.ar',
 	'https://www.panel.vexx.com.ar',
 	'https://control-panel-50s.pages.dev'
@@ -72,9 +68,6 @@ export function isOriginAllowed(origin: string | undefined): boolean {
 
 	// Permitir variantes y subdominios propios de la plataforma
 	if (
-		cleanOrigin === 'https://vura.com.ar' ||
-		cleanOrigin === 'https://www.vura.com.ar' ||
-		cleanOrigin.endsWith('.vura.com.ar') ||
 		cleanOrigin === 'https://vexx.com.ar' ||
 		cleanOrigin === 'https://panel.vexx.com.ar' ||
 		cleanOrigin === 'https://www.vexx.com.ar' ||

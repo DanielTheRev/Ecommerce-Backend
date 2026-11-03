@@ -81,7 +81,7 @@ export class GetnetController {
 			orderId: (order._id as any).toString(),
 			amount: order.finance.total,
 			currency: 'ARS',
-			description: `Compra en ${config.name || 'NexoCommerce'} - Orden #${order.orderNumber || orderId}`,
+			description: `Compra en ${config.name || req.tenant?.name || 'Comercio'} - Orden #${order.orderNumber || orderId}`,
 			customer: {
 				first_name: shippingAddress?.recipientName || userObj?.name || order.buyerData?.firstName || 'Cliente',
 				last_name: order.buyerData?.lastName || '',

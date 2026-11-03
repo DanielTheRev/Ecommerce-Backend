@@ -406,7 +406,10 @@ export class SupabaseRealtimeService implements IRealtimeService {
 			...notificationPayload
 		};
 
-		const slug = tenantSlug || 'vura';
+		const slug = tenantSlug;
+		if (!slug) {
+			throw new Error('[RealtimeService] tenantSlug es obligatorio para notificar a clientes');
+		}
 		await this.broadcast(`tenant:${slug}:client:${userId}`, 'client-notification', finalNotification);
 		console.log(`⚡ [Supabase Realtime] 👤 Notificación emitida a cliente [tenant:${slug}:client:${userId}]: "${notificationPayload.title}"`);
 
@@ -420,7 +423,10 @@ export class SupabaseRealtimeService implements IRealtimeService {
 		tenantSlug?: string
 	): Promise<void> {
 		const finalNotification = this.buildNotification(notificationPayload, NotificationAudience.USER);
-		const slug = tenantSlug || 'vura';
+		const slug = tenantSlug;
+		if (!slug) {
+			throw new Error('[RealtimeService] tenantSlug es obligatorio para notificar a clientes');
+		}
 		await this.broadcast(`tenant:${slug}:clients:all`, 'client-notification', finalNotification);
 		console.log(`⚡ [Supabase Realtime] 👥 Notificación masiva emitida a [tenant:${slug}:clients:all]`);
 

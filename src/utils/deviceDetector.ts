@@ -157,7 +157,7 @@ export function extractVisitorInfo(req: Request, fallbackSlug?: string): IVisito
 	let fullUrl = clientSourceUrl;
 
 	if (!fullUrl) {
-		const host = (headers['x-forwarded-host'] as string) || headers.host || 'vura.com.ar';
+		const host = (headers['x-forwarded-host'] as string) || headers.host || 'localhost';
 		const protocol = (headers['x-forwarded-proto'] as string) || (req.protocol || 'https');
 		const path = req.originalUrl || req.url || (fallbackSlug ? `/products/${fallbackSlug}` : '/');
 		

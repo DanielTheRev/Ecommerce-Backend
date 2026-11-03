@@ -5,6 +5,53 @@ export class FeedService {
 	private constructor() {}
 
 	/**
+	 * Resuelve el dominio base del tenant para generar URLs absolutas
+	 */
+	private static resolveStoreDomain(tenant?: ITenant): string {
+		if (tenant?.domain) {
+			const clean = tenant.domain.trim().replace(/\/+$/, '');
+			return clean.startsWith('http') ? clean : `https://${clean}`;
+		}
+		const slug = tenant?.slug || 'tienda';
+		return `https://${slug}.ganarplata.com`;
+	}
+
+	/**
+	 * Mapea el tipo de producto / categoría a la taxonomía estándar de Google Merchant / Meta
+	 */
+	private static resolveGoogleCategory(product: any, tenantBusinessType?: string): string {
+		const type = product.productType;
+		if (type === 'ClothingProduct' || tenantBusinessType === 'fashion') {
+			return 'Apparel & Accessories > Clothing';
+		}
+		if (type === 'TechProduct' || tenantBusinessType === 'tech_electronics') {
+			return 'Electronics';
+		}
+		if (
+			tenantBusinessType === 'kiosk_grocery' ||
+			tenantBusinessType === 'gastronomy' ||
+			tenantBusinessType === 'butcher' ||
+			tenantBusinessType === 'bakery'
+		) {
+			return 'Food, Beverages & Tobacco';
+		}
+		return product.category ? `General Merchandise > ${product.category}` : 'General Merchandise';
+	}
+
+	/**
+	 * Resuelve el valor del campo gender para Meta / Google
+	 */
+	private static resolveGender(product: any): string {
+		if (product.gender) {
+			const g = String(product.gender).toLowerCase();
+			if (g.includes('hombre') || g === 'male') return 'male';
+			if (g.includes('mujer') || g === 'female') return 'female';
+			return 'unisex';
+		}
+		return 'unisex';
+	}
+
+	/**
 	 * Genera el feed de productos para Meta Catalog (Facebook / Instagram)
 	 * Formatos soportados: 'xml' (Google Merchant / Meta RSS 2.0) y 'csv'
 	 */
@@ -13,6 +60,8 @@ export class FeedService {
 		tenant: ITenant | undefined,
 		format: 'xml' | 'csv' = 'xml'
 	): Promise<{ content: string; contentType: string; filename: string }> {
+		const tenantSlug = tenant?.slug || 'catalogo';
+
 		// Buscamos todos los productos publicados con al menos 1 imagen
 		const products = await models.Product.find({
 			status: 'published',
@@ -25,31 +74,38 @@ export class FeedService {
 
 		if (format === 'csv') {
 			return {
-				content: this.buildMetaCsv(validProducts),
+				content: this.buildMetaCsv(validProducts, tenant),
 				contentType: 'text/csv; charset=utf-8',
-				filename: 'vura-meta-catalog.csv'
+				filename: `${tenantSlug}-meta-catalog.csv`
 			};
 		}
 
 		return {
-			content: this.buildMetaXml(validProducts),
+			content: this.buildMetaXml(validProducts, tenant),
 			contentType: 'application/xml; charset=utf-8',
-			filename: 'vura-meta-catalog.xml'
+			filename: `${tenantSlug}-meta-catalog.xml`
 		};
 	}
 
 	/**
 	 * Construye el archivo XML en formato RSS 2.0 (Google Merchant / Meta Feed Standard)
 	 */
-	private static buildMetaXml(products: any[]): string {
+	private static buildMetaXml(products: any[], tenant?: ITenant): string {
+		const storeName = tenant?.name || 'Catálogo Oficial';
+		const storeDomain = this.resolveStoreDomain(tenant);
+
 		const itemsXml = products
 			.map((p) => {
 				const id = p._id.toString();
-				const title = this.sanitizeText(p.model || p.seo?.metaTitle || 'Prenda Vura');
+				const title = this.sanitizeText(p.model || p.seo?.metaTitle || 'Producto');
 				const rawDesc = p.description || p.largeDescription || p.seo?.metaDescription || p.model || '';
 				const description = this.sanitizeText(this.stripHtml(rawDesc));
-				const link = `https://vura.com.ar/products/${p.slug}`;
+				const link = `${storeDomain}/products/${p.slug}`;
 				const imageLink = p.images[0]?.url || '';
+				const brand = this.sanitizeText(p.brand || storeName);
+				const googleCategory = this.resolveGoogleCategory(p, tenant?.businessType);
+				const gender = this.resolveGender(p);
+
 				const additionalImages = (p.images.slice(1, 10) as Array<{ url: string }>)
 					.map((img) => img?.url)
 					.filter(Boolean);
@@ -82,13 +138,13 @@ export class FeedService {
         <g:description><![CDATA[${description}]]></g:description>
         <g:link>${this.escapeXml(link)}</g:link>
         <g:image_link>${this.escapeXml(imageLink)}</g:image_link>${additionalImagesXml}
-        <g:brand>Vura</g:brand>
+        <g:brand>${brand}</g:brand>
         <g:condition>new</g:condition>
         <g:availability>${availability}</g:availability>
         <g:price>${priceFormatted}</g:price>${salePriceTag}
-        <g:google_product_category>Apparel &amp; Accessories &gt; Clothing</g:google_product_category>
-        <g:fb_product_category>Clothing &amp; Accessories &gt; Clothing</g:fb_product_category>
-        <g:gender>female</g:gender>
+        <g:google_product_category>${this.escapeXml(googleCategory)}</g:google_product_category>
+        <g:fb_product_category>${this.escapeXml(googleCategory)}</g:fb_product_category>
+        <g:gender>${gender}</g:gender>
         <g:age_group>adult</g:age_group>
         <g:item_group_id>${id}</g:item_group_id>
       </item>`;
@@ -98,9 +154,9 @@ export class FeedService {
 		return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">
   <channel>
-    <title>Vura - Catálogo Oficial</title>
-    <link>https://vura.com.ar</link>
-    <description>Catálogo dinámico de productos Vura para Meta Commerce y Google Shopping</description>
+    <title>${this.escapeXml(storeName)} - Catálogo Oficial</title>
+    <link>${this.escapeXml(storeDomain)}</link>
+    <description>Catálogo dinámico de productos de ${this.escapeXml(storeName)} para Meta Commerce y Google Shopping</description>
 ${itemsXml}
   </channel>
 </rss>`;
@@ -109,7 +165,10 @@ ${itemsXml}
 	/**
 	 * Construye el archivo CSV con las columnas oficiales de Meta
 	 */
-	private static buildMetaCsv(products: any[]): string {
+	private static buildMetaCsv(products: any[], tenant?: ITenant): string {
+		const storeName = tenant?.name || 'Catálogo Oficial';
+		const storeDomain = this.resolveStoreDomain(tenant);
+
 		const headers = [
 			'id',
 			'title',
@@ -131,11 +190,14 @@ ${itemsXml}
 
 		const rows = products.map((p) => {
 			const id = p._id.toString();
-			const title = p.model || p.seo?.metaTitle || 'Prenda Vura';
+			const title = p.model || p.seo?.metaTitle || 'Producto';
 			const rawDesc = p.description || p.largeDescription || p.seo?.metaDescription || p.model || '';
 			const description = this.stripHtml(rawDesc);
-			const link = `https://vura.com.ar/products/${p.slug}`;
+			const link = `${storeDomain}/products/${p.slug}`;
 			const imageLink = p.images[0]?.url || '';
+			const brand = p.brand || storeName;
+			const googleCategory = this.resolveGoogleCategory(p, tenant?.businessType);
+			const gender = this.resolveGender(p);
 
 			let totalStock = 0;
 			if (Array.isArray(p.variants) && p.variants.length > 0) {
@@ -162,13 +224,13 @@ ${itemsXml}
 				this.escapeCsv(priceFormatted),
 				this.escapeCsv(link),
 				this.escapeCsv(imageLink),
-				this.escapeCsv('Vura'),
-				this.escapeCsv('Apparel & Accessories > Clothing'),
-				this.escapeCsv('Clothing & Accessories > Clothing'),
+				this.escapeCsv(brand),
+				this.escapeCsv(googleCategory),
+				this.escapeCsv(googleCategory),
 				this.escapeCsv(totalStock),
 				this.escapeCsv(salePriceFormatted),
 				this.escapeCsv(id),
-				this.escapeCsv('female'),
+				this.escapeCsv(gender),
 				this.escapeCsv('adult')
 			].join(',');
 		});

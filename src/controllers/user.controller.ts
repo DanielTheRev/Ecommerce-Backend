@@ -2,6 +2,8 @@ import { AuthRequest } from '@/middleware/auth';
 import { UserService } from '@/services/user.service';
 import { AuthService } from '@/services/auth.service';
 import { NextFunction, Response } from 'express';
+import { AppError } from '@/errors/app.error';
+import { Role } from '@/interfaces/user.interface';
 
 export class UserController {
 	// GET /api/users/me - Obtener perfil del usuario autenticado
@@ -43,7 +45,7 @@ export class UserController {
 		}
 	}
 
-	// GET /api/users/clients - Obtener todos los clientes registrados (admin)
+	// GET /api/users/clients - Obtener todos los clientes registrados (staff)
 	static async getAllClients(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
 			const page = parseInt(req.query.page as string) || 1;
@@ -53,6 +55,40 @@ export class UserController {
 			const result = await UserService.getAllClients(req.models!, page, limit, q);
 
 			res.status(200).json(result);
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	// POST /api/users/clients - Dar de alta cliente rápido (staff)
+	static async createClient(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { name, lastName, dni, phone, email, creditLimit } = req.body;
+			if (!name || !name.trim()) {
+				throw new AppError('Nombre requerido', 'El nombre del cliente es obligatorio.', 400);
+			}
+
+			// Si no viene email, generamos uno local identificable
+			const clientEmail = (email && email.trim()) ? email.trim().toLowerCase() : `cliente_${Date.now()}@local.com`;
+
+			const client = await UserService.createUser(req.models!, {
+				name: name.trim(),
+				lastName: lastName?.trim() || '',
+				dni: dni?.trim() || '',
+				phone: phone?.trim() || '',
+				email: clientEmail,
+				role: Role.user,
+				currentAccount: {
+					balance: 0,
+					creditLimit: Number(creditLimit) || 0,
+					isCreditAllowed: true
+				}
+			});
+
+			res.status(201).json({
+				status: 'success',
+				data: client
+			});
 		} catch (error) {
 			next(error);
 		}

@@ -20,7 +20,7 @@ export interface IBaseVariant {
 	barcode?: string;
 }
 
-// Vura (ClothingProduct) — talle obligatorio
+// Moda / Indumentaria (ClothingProduct) — talle obligatorio
 export interface IClothingVariant extends IBaseVariant {
 	size: string;
 }

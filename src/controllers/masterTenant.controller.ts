@@ -178,4 +178,28 @@ export class MasterTenantController {
 			next(error);
 		}
 	}
+
+	/**
+	 * PATCH /api/master/tenants/:id/business-type
+	 * Actualizar rubro comercial del comercio (Exclusivo SuperAdmin).
+	 */
+	static async updateBusinessType(req: MasterAuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { id } = req.params;
+			const { businessType } = req.body;
+
+			if (!businessType) {
+				throw new AppError('Validation Error', 'El rubro comercial (businessType) es requerido.', 400);
+			}
+
+			const tenant = await MasterTenantService.updateTenantBusinessType(id, businessType);
+			res.status(200).json({
+				success: true,
+				message: `Rubro comercial actualizado a "${businessType}".`,
+				data: tenant
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
 }

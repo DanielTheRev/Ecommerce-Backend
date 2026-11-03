@@ -5,6 +5,7 @@ import { decrypt, encrypt, safeDecryptString, safeEncryptString } from '@/utils/
 import { flattenObject } from '@/utils/object.util';
 import { MercadoPagoService } from './mercadopago.service';
 import { ProductService } from './product.service';
+import { getVerticalCapabilities } from '@/config/verticalCapabilities';
 
 export class EcommerceService {
 	private static readonly SENSITIVE_FIELDS_SELECT =
@@ -44,6 +45,7 @@ export class EcommerceService {
 				);
 
 			const decryptConfig = this.decryptEcommerceConfig(config as IEcommerceConfig);
+			decryptConfig.capabilities = getVerticalCapabilities(decryptConfig.businessType);
 			return decryptConfig;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
@@ -92,15 +94,18 @@ export class EcommerceService {
 				isActive: true
 			}).lean();
 
+			const capabilities = getVerticalCapabilities(publicConfig.businessType);
+
 			const data: IEcommerceConfigPublic = {
 				name: publicConfig.name || 'Mi Tienda',
 				logo: publicConfig.logo || '',
-				businessType: publicConfig.businessType || 'general',
+				businessType: publicConfig.businessType || 'kiosk_grocery',
+				capabilities,
 				contact: publicConfig.contact || { email: '', phone: '', address: '', whatsapp: '' },
 				social: publicConfig.social || { instagram: '', facebook: '', twitter: '', tiktok: '' },
 				brands: publicConfig.brands || [],
 				categories: publicConfig.categories || [],
-				clothingFits: publicConfig.clothingFits,
+				clothingFits: capabilities.hasClothingSizesAndFits ? publicConfig.clothingFits : [],
 				shippingConfig: publicConfig.shippingConfig,
 				workingHours: publicConfig.workingHours || {
 					weekdayStart: '10:00',
@@ -231,8 +236,18 @@ export class EcommerceService {
 				data.lastModifiedBy = userId;
 			}
 
+			// Inmutabilidad de businessType: el rubro comercial está sellado y no puede ser alterado desde el panel
+			if ('businessType' in data) {
+				delete (data as any).businessType;
+			}
+			if ('capabilities' in data) {
+				delete (data as any).capabilities;
+			}
+
 			// Aplanamos el objeto para permitir actualizaciones parciales en niveles profundos
 			const flattenedData = flattenObject(data);
+			delete (flattenedData as any).businessType;
+			delete (flattenedData as any).capabilities;
 
 			const updatedConfig = await models.EcommerceConfig.findOneAndUpdate(
 				{ key: 'global_config' },
@@ -245,6 +260,7 @@ export class EcommerceService {
 			if (!updatedConfig) throw new AppError('Failed to update config', 'Error al actualizar configuración', 500);
 
 			const finalConfig = this.decryptEcommerceConfig(updatedConfig);
+			finalConfig.capabilities = getVerticalCapabilities(finalConfig.businessType);
 
 			// Invalidar caché instantáneamente (Purge on Mutation)
 			if (tenantSlug) {

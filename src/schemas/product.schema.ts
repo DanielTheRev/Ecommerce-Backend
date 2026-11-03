@@ -55,7 +55,7 @@ const VariantColorSchema = z.object({
 	hex: z.string().min(1)
 });
 
-// Clothing Variant Schema (Vura) — size requerido, sin attributes
+// Clothing Variant Schema — size requerido, sin attributes
 const ClothingVariantZodSchema = z.object({
 	sku: z.string().optional(),
 	size: z.string().min(1, 'El talle es requerido'),
@@ -156,7 +156,7 @@ export const CombineWithItemZodSchema = z.union([
 	})
 ]);
 
-// 2. Clothing Product Schema (Indumentaria / Moda - Vura - Estricto)
+// 2. Clothing Product Schema (Indumentaria / Moda - Estricto)
 export const ClothingProductCreateSchema = z.object({
 	...BaseProductFields,
 	productType: z.literal(ProductType.CLOTHING),

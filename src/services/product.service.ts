@@ -18,6 +18,7 @@ import { CategoryGroupService } from './categoryGroup.service';
 import { ICategoryGroup } from '@/interfaces/categoryGroup.interface';
 import { PushNotificationService } from './pushNotification.service';
 import { IVisitorInfo } from '@/utils/deviceDetector';
+import { isProductTypeAllowed, getAllowedProductTypes } from '@/config/verticalCapabilities';
 
 
 export class ProductService {
@@ -1553,6 +1554,7 @@ export class ProductService {
 			} else {
 				// ✅ Visitante humano real (Celular, Desktop, Tablet)
 				const config = await EcommerceService.getConfig(models);
+
 				const viewWeight = config.catalogRanking?.viewWeight ?? 1;
 
 				const incFields: Record<string, number> = {
@@ -1669,6 +1671,7 @@ export class ProductService {
 	static async recordCartAdd(models: TenantModels, productId: string): Promise<void> {
 		try {
 			const config = await EcommerceService.getConfig(models);
+
 			const cartWeight = config.catalogRanking?.cartWeight ?? 5;
 
 			await models.Product.findByIdAndUpdate(productId, {
@@ -1688,6 +1691,7 @@ export class ProductService {
 	static async recordProductSale(models: TenantModels, productId: string, quantity: number = 1): Promise<void> {
 		try {
 			const config = await EcommerceService.getConfig(models);
+
 			const saleWeight = config.catalogRanking?.saleWeight ?? 25;
 
 			await models.Product.findByIdAndUpdate(productId, {
@@ -1888,8 +1892,19 @@ export class ProductService {
 
 	static async createProduct(models: TenantModels, data: IProductCreateDTO, imagesDTO: Express.Multer.File[], ogImageFile: Express.Multer.File | null, tenantSlug: string = 'general'): Promise<IProduct> {
 		try {
+			if (!data.productType) {
+				throw new AppError('Product type is required', 'El tipo de producto (productType) es obligatorio', 400);
+			}
+			if (!data.brand || typeof data.brand !== 'string' || !data.brand.trim()) {
+				throw new AppError('Brand is required', 'La marca del producto es obligatoria', 400);
+			}
 			const slug = this.generateSlug(data.brand, data.model);
+			const businessType = (await EcommerceService.getConfig(models)).businessType || 'kiosk_grocery';
+			if (!isProductTypeAllowed(businessType, data.productType)) {
+				throw new AppError('Product type not allowed', `El tipo de producto '${data.productType}' no está permitido para el rubro comercial '${businessType}'. Tipos permitidos: ${getAllowedProductTypes(businessType).join(', ')}`, 400);
+			}
 			const config = await EcommerceService.getConfig(models);
+
 			const { venta } = await getDolar(config.dollarQuoteType || 'oficial', config.customDollarRate || 0);
 
 			const parsedAdditionalCosts = typeof data.additionalCosts === 'string'
@@ -2085,7 +2100,7 @@ export class ProductService {
 				await newProduct.populate('provider');
 			}
 
-			// Crowdsourcing silencioso al catálogo global de NexoCommerce
+			// Crowdsourcing silencioso al catálogo global de Vexx
 			const barcodeToSync = baseData.barcode || baseData.variants?.[0]?.barcode;
 			if (barcodeToSync) {
 				try {
@@ -2469,6 +2484,7 @@ export class ProductService {
 				updateData.discountPercentageTransfer !== undefined
 			) {
 				const config = await EcommerceService.getConfig(models);
+
 				const { venta } = await getDolar(config.dollarQuoteType || 'oficial', config.customDollarRate || 0);
 				const currentCustomProfitMargin = updateData.customProfitMargin !== undefined ? updateData.customProfitMargin : product.finance?.pricingStrategy?.targetProfit;
 
@@ -2655,6 +2671,7 @@ export class ProductService {
 				if (!isNaN(newBaseScore)) {
 					updateData.rankingScore = newBaseScore;
 					const config = await EcommerceService.getConfig(models);
+
 					const viewWeight = config.catalogRanking?.viewWeight ?? 1;
 					const cartWeight = config.catalogRanking?.cartWeight ?? 5;
 					const saleWeight = config.catalogRanking?.saleWeight ?? 25;
@@ -3135,7 +3152,15 @@ export class ProductService {
 					throw new AppError('Missing required fields (model, brand, category)', 'Faltan campos obligatorios (modelo, marca, categoría)', 400);
 				}
 
-				const productType = item.productType || ProductType.CLOTHING;
+				if (!item.productType) {
+					throw new AppError('Missing productType', 'El tipo de producto (productType) es obligatorio', 400);
+				}
+
+				const productType = item.productType;
+				const businessType = config.businessType || 'kiosk_grocery';
+				if (!isProductTypeAllowed(businessType, productType)) {
+					throw new AppError('Product type not allowed', `El tipo de producto '${productType}' no está permitido para el rubro comercial '${businessType}'. Tipos permitidos: ${getAllowedProductTypes(businessType).join(', ')}`, 400);
+				}
 				const costPriceARS = Number(item.costPriceARS || item.price || item.providerCost || 0);
 
 				const rawAdditionalCosts = item.additionalCosts;
@@ -3176,7 +3201,7 @@ export class ProductService {
 					}
 				}
 
-				const brand = String(item.brand || 'Vura').trim();
+				const brand = String(item.brand).trim();
 				const slug = this.generateSlug(brand, item.model);
 
 				// Process images

@@ -183,6 +183,8 @@ export class EcommerceConfigController {
 	static async createConfig(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
 			const data = req.body;
+			delete data.businessType;
+			delete data.capabilities;
 			const userId = req.user ? (req.user._id as string).toString() : undefined;
 
 			const newConfig = await EcommerceService.createConfig(req.models!, data, userId);
@@ -201,6 +203,8 @@ export class EcommerceConfigController {
 	static async updateConfig(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
 			const data = req.body;
+			delete data.businessType;
+			delete data.capabilities;
 			const userId = req.user ? (req.user._id as string).toString() : undefined;
 
 			const { config: updatedConfig, shouldRecalculate } = await EcommerceService.updateConfig(req.models!, data, userId, req.tenant?.slug);

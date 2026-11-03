@@ -75,6 +75,22 @@ const userSchema = new Schema<IUser>(
 			instagramClaimed: { type: Boolean, default: false },
 			instagramUsed: { type: Boolean, default: false }
 		},
+		currentAccount: {
+			balance: {
+				type: Number,
+				default: 0,
+				min: [0, 'El saldo de cuenta corriente no puede ser negativo']
+			},
+			creditLimit: {
+				type: Number,
+				default: 0,
+				min: [0, 'El límite de crédito no puede ser negativo']
+			},
+			isCreditAllowed: {
+				type: Boolean,
+				default: true
+			}
+		},
 		isActive: {
 			type: Boolean,
 			default: true

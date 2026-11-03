@@ -605,9 +605,9 @@ export class ProductController {
 
 					const userData = MetaService.extractUserDataFromReq(req);
 					const referer = req.get('referer');
-					const sourceUrl = (referer && referer.includes('vura.com.ar'))
-						? referer
-						: `https://vura.com.ar/products?q=${encodeURIComponent(cleanQuery)}`;
+					const host = req.get('host') || 'localhost';
+					const protocol = req.protocol || 'https';
+					const sourceUrl = referer || `${protocol}://${host}/products?q=${encodeURIComponent(cleanQuery)}`;
 
 					MetaService.trackEvent({
 						eventName: 'Search',

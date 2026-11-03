@@ -16,7 +16,7 @@ export class MercadoPagoService {
 
 	/**
 		 * Intercambia el código de autorización por los tokens del vendedor (Access Token y Public Key).
-		 * Utiliza las credenciales maestras de NexoCommerce.
+		 * Utiliza las credenciales maestras de Vexx.
 		 */
 	static async exchangeAuthorizationCode(code: string, redirectUri: string) {
 		try {

@@ -80,6 +80,11 @@ export class UserService {
 				googleID: userData.googleID,
 				profilePhoto: userData.profilePhoto,
 				rewards: userData.rewards || { ...defaultRewards },
+				currentAccount: userData.currentAccount || {
+					balance: 0,
+					creditLimit: 0,
+					isCreditAllowed: true
+				},
 				isActive: true
 			});
 			return user;

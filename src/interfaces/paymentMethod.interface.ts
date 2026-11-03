@@ -6,7 +6,8 @@ export enum PaymentType {
 	BANK_TRANSFER = 'BANK_TRANSFER',
 	ALIAS_TRANSFER = 'ALIAS_TRANSFER',
 	CARD = 'CARD',
-	TICKET = 'TICKET'
+	TICKET = 'TICKET',
+	CURRENT_ACCOUNT = 'CURRENT_ACCOUNT'
 }
 
 export interface IPaymentMethod {

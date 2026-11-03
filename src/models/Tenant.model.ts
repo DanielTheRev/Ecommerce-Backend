@@ -23,8 +23,8 @@ export const TenantSchema = new Schema<ITenant>(
 		},
 		businessType: {
 			type: String,
-			enum: ['fashion', 'kiosk_grocery', 'gastronomy', 'tech_electronics', 'general'],
-			default: 'general'
+			enum: ['fashion', 'kiosk_grocery', 'gastronomy', 'tech_electronics', 'butcher', 'bakery'],
+			required: [true, 'El rubro comercial es obligatorio']
 		},
 		domain: {
 			type: String,

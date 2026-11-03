@@ -95,6 +95,7 @@ app.get('/health', (req: Request, res: Response) => {
 
 import cashRegisterRoutes from './routes/cashRegisterRoutes.routes';
 import posRoutes from './routes/pos.routes';
+import accountMovementRoutes from './routes/accountMovement.routes';
 import masterRoutes from './routes/master.routes';
 import masterCatalogRoutes from './routes/masterCatalog.routes';
 import feedRoutes from './routes/feed.routes';
@@ -123,6 +124,7 @@ const registerRoutes = (prefix: string) => {
 	app.use(`${prefix}/config`, resolveTenant, ecommerceConfigRoutes);
 	app.use(`${prefix}/cash-register`, resolveTenant, cashRegisterRoutes);
 	app.use(`${prefix}/pos`, resolveTenant, posRoutes);
+	app.use(`${prefix}/account-movements`, resolveTenant, accountMovementRoutes);
 	app.use(`${prefix}/shop-the-look`, resolveTenant, shopTheLookRoutes);
 	app.use(`${prefix}/provider`, resolveTenant, providerRoutes);
 	app.use(`${prefix}/addresses`, resolveTenant, addressRoutes);
@@ -139,7 +141,7 @@ const registerRoutes = (prefix: string) => {
 	app.use(`${prefix}/feeds`, feedRoutes);
 };
 
-// Soportar tanto /api/... como /... (compatible con api.vura.com.ar)
+// Soportar tanto /api/... como /... (compatibilidad directa con subdominios api.*)
 registerRoutes('/api');
 registerRoutes('');
 
@@ -150,7 +152,7 @@ app.use(errorMiddleware);
 app.get('/', (req: Request, res: Response) => {
 	res.status(200).json({
 		success: true,
-		message: 'NexoCommerce API — Multi-Tenant',
+		message: 'Vexx Core API — Multi-Tenant',
 		version: '2.0.0',
 		documentation: 'Envía header x-tenant-id para acceder a los endpoints'
 	});

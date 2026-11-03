@@ -76,7 +76,10 @@ export class MasterTenantService {
 		}
 
 		const plan = dto.plan || TenantPlan.basic;
-		const businessType: TenantBusinessType = dto.businessType || 'general';
+		if (!dto.businessType) {
+			throw new AppError('Validation Error', 'El rubro comercial (businessType) es obligatorio.', 400);
+		}
+		const businessType: TenantBusinessType = dto.businessType;
 
 		// 1. Crear documento Tenant en MasterDb
 		const tenant = await TenantModel.create({
@@ -124,7 +127,8 @@ export class MasterTenantService {
 		// 3. Crear configuración base de la tienda
 		await models.EcommerceConfig.create({
 			key: 'global_config',
-			name: dto.name.trim()
+			name: dto.name.trim(),
+			businessType: businessType
 		});
 
 		return {
@@ -197,6 +201,48 @@ export class MasterTenantService {
 
 		if (!tenant) {
 			throw new AppError('Tenant Not Found', 'Comercio no encontrado.', 404);
+		}
+
+		return tenant.toObject();
+	}
+
+	/**
+	 * Modificar el rubro comercial de un tenant (Acción exclusiva de SuperAdmin).
+	 * Actualiza tanto el registro en Master DB como la configuración local del comercio.
+	 */
+	static async updateTenantBusinessType(tenantId: string, newBusinessType: TenantBusinessType): Promise<ITenant> {
+		const masterDb = connectionManager.getMasterDb();
+		const TenantModel = masterDb.model<ITenant>('Tenant');
+
+		const validTypes: TenantBusinessType[] = ['kiosk_grocery', 'fashion', 'tech_electronics', 'butcher', 'bakery', 'gastronomy'];
+		if (!validTypes.includes(newBusinessType)) {
+			throw new AppError('Validation Error', `Rubro '${newBusinessType}' inválido. Válidos: ${validTypes.join(', ')}`, 400);
+		}
+
+		const tenant = await TenantModel.findByIdAndUpdate(
+			tenantId,
+			{ $set: { businessType: newBusinessType } },
+			{ new: true }
+		);
+
+		if (!tenant) {
+			throw new AppError('Tenant Not Found', 'Comercio no encontrado.', 404);
+		}
+
+		// Sincronizar en la base de datos local del tenant
+		try {
+			const tenantDb = connectionManager.getTenantDb(tenant.dbName);
+			const models = getModelsForConnection(tenantDb);
+			await models.EcommerceConfig.findOneAndUpdate(
+				{ key: 'global_config' },
+				{ $set: { businessType: newBusinessType } },
+				{ new: true, upsert: true }
+			);
+
+			const { CacheService } = await import('./cache.service');
+			CacheService.invalidatePrefix(tenant.slug, 'config');
+		} catch (err: any) {
+			console.error(`⚠️ Error sincronizando businessType en tenant DB [${tenant.dbName}]:`, err.message);
 		}
 
 		return tenant.toObject();

@@ -28,7 +28,7 @@ export class BentoService {
         ];
 
         config = await models.BentoConfig.create({
-          sectionTitle: 'Vura / Catálogo',
+          sectionTitle: 'Catálogo de Productos',
           sectionSubtitle: 'Explorá la Colección.',
           items: defaultItems
         }) as unknown as IBentoConfig;
@@ -135,7 +135,7 @@ export class BentoService {
       }));
 
       const configPayload = {
-        sectionTitle: data.sectionTitle || currentConfig?.sectionTitle || 'Vura / Catálogo',
+        sectionTitle: data.sectionTitle || currentConfig?.sectionTitle || 'Catálogo de Productos',
         sectionSubtitle: data.sectionSubtitle || currentConfig?.sectionSubtitle || 'Explorá la Colección.',
         items: normalizedItems
       };

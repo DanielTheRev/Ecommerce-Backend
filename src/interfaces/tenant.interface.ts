@@ -7,7 +7,7 @@ export enum TenantPlan {
 }
 
 export type TenantSubscriptionStatus = 'active' | 'past_due' | 'suspended' | 'trial';
-export type TenantBusinessType = 'fashion' | 'kiosk_grocery' | 'gastronomy' | 'tech_electronics' | 'general';
+export type TenantBusinessType = 'fashion' | 'kiosk_grocery' | 'gastronomy' | 'tech_electronics' | 'butcher' | 'bakery';
 
 export interface ITenant {
 	_id: string;

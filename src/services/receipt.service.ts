@@ -12,7 +12,7 @@ export class ReceiptService {
 		try {
 			// Obtener datos de la tienda para el membrete
 			const config = await EcommerceService.getConfig(models);
-			const storeName = config.name || 'NexoCommerce';
+			const storeName = config.name || 'Comercio';
 			const storeContact = config.contact || { address: '', phone: '', email: '' };
 
 			return new Promise((resolve, reject) => {

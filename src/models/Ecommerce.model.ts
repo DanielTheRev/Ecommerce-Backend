@@ -8,8 +8,8 @@ const EcommerceSchema = new Schema(
 		logo: { type: String, required: false, default: '' },
 		businessType: {
 			type: String,
-			enum: ['kiosk_grocery', 'fashion', 'tech_electronics', 'butcher', 'bakery', 'gastronomy', 'general'],
-			default: 'general'
+			enum: ['kiosk_grocery', 'fashion', 'tech_electronics', 'butcher', 'bakery', 'gastronomy'],
+			default: 'kiosk_grocery'
 		},
 		// Configuración de Ganancias
 		profit: {

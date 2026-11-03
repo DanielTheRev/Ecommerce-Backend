@@ -17,6 +17,12 @@ export interface IUserRewards {
 	instagramUsed?: boolean;
 }
 
+export interface IUserCurrentAccount {
+	balance: number;
+	creditLimit: number;
+	isCreditAllowed: boolean;
+}
+
 export interface ISecureUser {
 	_id: string;
 	name: string;
@@ -32,6 +38,7 @@ export interface ISecureUser {
 	position?: string;
 	hasPin?: boolean;
 	pushTokens?: string[];
+	currentAccount?: IUserCurrentAccount;
 	isActive: boolean;
 	createdAt: Date;
 	updatedAt: Date;
@@ -49,6 +56,7 @@ export interface IUser {
 	position?: string;
 	pinCode?: string;
 	pushTokens?: string[];
+	currentAccount?: IUserCurrentAccount;
 	googleID: string;
 	profilePhoto: string;
 	password?: string;

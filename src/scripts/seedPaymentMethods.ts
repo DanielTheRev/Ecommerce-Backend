@@ -7,7 +7,7 @@ dotenv.config();
 const initPaymentMethods = async () => {
 	try {
 		// Conectar a la base de datos
-		const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/vura_store_db';
+		const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/dev_store_db';
 		await mongoose.connect(mongoURI);
 
 		// Verificar si ya existen métodos de pago

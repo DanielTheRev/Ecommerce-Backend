@@ -1827,8 +1827,28 @@ export class OrderService {
 					(p.method as string) === 'BANK_TRANSFER'
 			);
 
+			const hasCurrentAccount = data.splitPayments.some(
+				p => (p.method as string) === PaymentType.CURRENT_ACCOUNT ||
+					(p.method as string)?.toUpperCase() === 'FIADO' ||
+					(p.method as string)?.toUpperCase() === 'CURRENT_ACCOUNT' ||
+					(p.method as string) === 'Cuenta Corriente'
+			);
+
+			if (hasCurrentAccount && !data.userId) {
+				throw new AppError('Cliente requerido', 'Para ventas fiadas o en cuenta corriente es obligatorio asociar un cliente registrado.', 400);
+			}
+
+			const currentAccountAmount = data.splitPayments
+				.filter(p => (p.method as string) === PaymentType.CURRENT_ACCOUNT ||
+					(p.method as string)?.toUpperCase() === 'FIADO' ||
+					(p.method as string)?.toUpperCase() === 'CURRENT_ACCOUNT' ||
+					(p.method as string) === 'Cuenta Corriente')
+				.reduce((acc, p) => acc + p.amount, 0);
+
 			let paymentStatus = PaymentStatus.APPROVED;
-			if (hasTransfer) {
+			if (hasCurrentAccount) {
+				paymentStatus = PaymentStatus.PENDING;
+			} else if (hasTransfer) {
 				const isStrictMode = config.posConfig?.transferValidationMode === 'strict_admin_approval';
 				if (isStrictMode || data.paymentReceipt) {
 					paymentStatus = PaymentStatus.WAITING_CONFIRMATION;
@@ -1869,6 +1889,19 @@ export class OrderService {
 						: 'Venta presencial en local'
 				}]
 			});
+
+			// Si hubo pago a cuenta corriente / fiado, asentar el cargo en el libro mayor
+			if (hasCurrentAccount && currentAccountAmount > 0 && data.userId) {
+				const { AccountMovementService } = await import('./accountMovement.service');
+				await AccountMovementService.recordCharge(
+					models,
+					data.userId,
+					currentAccountAmount,
+					newOrder._id.toString(),
+					data.sellerId || data.userId,
+					`Compra fiada en mostrador #${newOrder.orderNumber}`
+				);
+			}
 
 			// Reload the order from the database to enforce the select: false schema rules
 			const safeOrder = await models.Order.findById(newOrder._id).populate([

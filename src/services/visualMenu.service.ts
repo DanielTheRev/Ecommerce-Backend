@@ -41,7 +41,7 @@ export class VisualMenuService {
           }));
 
           config = await models.VisualMenu.create({
-            sectionTitle: legacyBento.sectionTitle || 'Vura / Catálogo',
+            sectionTitle: legacyBento.sectionTitle || 'Catálogo de Productos',
             sectionSubtitle: legacyBento.sectionSubtitle || 'Explorá Nuestras Categorías.',
             displayMode: 'grid',
             items: migratedItems,
@@ -122,7 +122,7 @@ export class VisualMenuService {
         ];
 
         config = await models.VisualMenu.create({
-          sectionTitle: 'Vura / Catálogo',
+          sectionTitle: 'Catálogo de Productos',
           sectionSubtitle: 'Explorá la Colección.',
           displayMode: 'grid',
           items: defaultItems,
@@ -230,7 +230,7 @@ export class VisualMenuService {
     });
 
     const updatePayload: any = {
-      sectionTitle: data.sectionTitle ?? currentConfig?.sectionTitle ?? 'Vura / Catálogo',
+      sectionTitle: data.sectionTitle ?? currentConfig?.sectionTitle ?? 'Catálogo de Productos',
       sectionSubtitle: data.sectionSubtitle ?? currentConfig?.sectionSubtitle ?? 'Explorá Nuestras Categorías.',
       description: data.description ?? currentConfig?.description ?? '',
       displayMode: data.displayMode ?? currentConfig?.displayMode ?? 'grid',

@@ -7,7 +7,7 @@ dotenv.config();
 
 const runSeed = async () => {
     try {
-        const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/vura_store_db';
+        const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/dev_store_db';
         await mongoose.connect(mongoURI);
         const models = getModelsForConnection(mongoose.connection);
         await HeroSeeder.seed(models);

@@ -117,7 +117,7 @@ export class ResendService {
 			<div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eeeeee; text-align: center; color: #757575; font-size: 12px;">
 				<p style="margin: 0 0 5px 0;">${footerText}</p>
 				${socialHtml}
-				<p style="margin: 15px 0 0 0; font-size: 11px; color: #999999;">© ${new Date().getFullYear()} ${storeName || 'NexoCommerce'}. Todos los derechos reservados.</p>
+				<p style="margin: 15px 0 0 0; font-size: 11px; color: #999999;">© ${new Date().getFullYear()} ${storeName || 'Comercio'}. Con tecnología Vexx.</p>
 			</div>
 		`;
 	}

@@ -1,8 +1,8 @@
 {
-	"name": "nexocommerce-backend",
+	"name": "vexx-backend",
 	"version": "2.7.0",
 	"packageManager": "pnpm@9.15.4",
-	"description": "NexoCommerce — Plataforma multi-tenant SaaS para ecommerce",
+	"description": "Vexx — Plataforma de Gestión Comercial, POS y Tienda Digital",
 	"main": "dist/index.js",
 	"scripts": {
 		"dev": "cross-env NODE_ENV=development nodemon src/index.ts",

@@ -4,7 +4,7 @@ import { BentoBlockSchema } from './schemas/bentoBlock,schema';
 
 const BentoConfigSchema = new Schema<IBentoConfigDocument>(
   {
-    sectionTitle: { type: String, required: false, default: 'Vura / Catálogo' },
+    sectionTitle: { type: String, required: false, default: 'Catálogo de Productos' },
     sectionSubtitle: { type: String, required: false, default: 'Explorá la Selección.' },
     items: [BentoBlockSchema],
     blocks: {

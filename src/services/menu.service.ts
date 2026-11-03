@@ -89,7 +89,7 @@ export class MenuService {
           link: '/products?category=Accesorios',
           order: 5,
           isActive: true,
-          image: { url: '/productsMock/categories/vura-sneakers-category.png', public_id: 'default-sneakers' },
+          image: { url: '/productsMock/categories/sneakers-category.png', public_id: 'default-sneakers' },
           children: [
             { label: 'Sneakers', link: '/products?category=sneakers', order: 1, isActive: true },
             { label: 'Gorras & Bags', link: '/products?category=accesorios', order: 2, isActive: true },

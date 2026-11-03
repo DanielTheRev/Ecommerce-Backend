@@ -19,7 +19,7 @@ export interface ICouponCartItem {
 }
 
 export interface ICoupon {
-	code: string; // Uppercase, unique code (e.g. PRIMERACOMPRA, VURA10)
+	code: string; // Uppercase, unique code (e.g. PRIMERACOMPRA, DESCUENTO10)
 	discountType: CouponDiscountType; // 'percentage' or 'fixed'
 	discountValue: number; // e.g. 10 for 10% or 1500 for $1500 ARS
 	minOrderAmount?: number; // Minimum order subtotal required

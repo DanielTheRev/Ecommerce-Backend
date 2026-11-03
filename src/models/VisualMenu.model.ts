@@ -42,7 +42,7 @@ const VisualMenuItemSchema = new Schema(
 
 const VisualMenuSchema = new Schema<IVisualMenuDocument>(
   {
-    sectionTitle: { type: String, required: false, default: 'Vura / Catálogo' },
+    sectionTitle: { type: String, required: false, default: 'Catálogo de Productos' },
     sectionSubtitle: { type: String, required: false, default: 'Explorá la Colección.' },
     description: { type: String, required: false, default: '' },
     displayMode: { type: String, enum: ['grid', 'masonry', 'carousel'], default: 'grid' },

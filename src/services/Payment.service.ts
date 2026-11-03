@@ -102,7 +102,7 @@ export class PaymentService {
 						? new URL((mpConfig as any).successUrl).origin
 						: config.callbackURLs?.success
 						? new URL(config.callbackURLs.success).origin
-						: (data.baseUrl?.includes('localhost') ? 'http://localhost:4200' : (data.baseUrl || 'https://vura.com.ar'));
+						: (data.baseUrl?.includes('localhost') ? 'http://localhost:4200' : (data.baseUrl || (process.env.PUBLIC_APP_URL || 'http://localhost:3000')));
 
 				const resolveBackUrl = (rawUrl?: string, defaultUrl?: string): string => {
 					let url = rawUrl?.trim();

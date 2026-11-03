@@ -11,13 +11,17 @@ function generateLink() {
 		process.exit(1);
 	}
 
-	// Obtener tenant de los argumentos CLI o default a 'vura'
+	// Obtener tenant de los argumentos CLI obligatorio
 	const args = process.argv.slice(2);
 	const tenantArg = args.find(a => a.startsWith('--tenant='));
 	const domainArg = args.find(a => a.startsWith('--domain='));
 
-	const tenantSlug = tenantArg ? tenantArg.split('=')[1] : 'vura';
-	const domain = domainArg ? domainArg.split('=')[1] : (process.env.PUBLIC_DOMAIN || 'https://vura.com.ar');
+	const tenantSlug = tenantArg ? tenantArg.split('=')[1] : null;
+	if (!tenantSlug) {
+		console.error('❌ Error: Debe especificar el tenant mediante --tenant=<slug>');
+		process.exit(1);
+	}
+	const domain = domainArg ? domainArg.split('=')[1] : (process.env.PUBLIC_DOMAIN || 'http://localhost:3000');
 	const localDomain = 'http://localhost:4000';
 
 	// Payload del token que expira en 5 minutos
