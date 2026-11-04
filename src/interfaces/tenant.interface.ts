@@ -6,8 +6,17 @@ export enum TenantPlan {
 	premium = 'premium'
 }
 
+export enum BusinessType {
+	KIOSK_GROCERY = 'kiosk_grocery',
+	FASHION = 'fashion',
+	TECH_ELECTRONICS = 'tech_electronics',
+	BUTCHER = 'butcher',
+	BAKERY = 'bakery',
+	GASTRONOMY = 'gastronomy'
+}
+
 export type TenantSubscriptionStatus = 'active' | 'past_due' | 'suspended' | 'trial';
-export type TenantBusinessType = 'fashion' | 'kiosk_grocery' | 'gastronomy' | 'tech_electronics' | 'butcher' | 'bakery';
+export type TenantBusinessType = BusinessType | 'fashion' | 'kiosk_grocery' | 'gastronomy' | 'tech_electronics' | 'butcher' | 'bakery';
 
 export interface ITenant {
 	_id: string;

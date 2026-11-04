@@ -4,6 +4,7 @@ import { ITenant, TenantBusinessType, TenantPlan, TenantSubscriptionStatus } fro
 import { Role } from '@/interfaces/user.interface';
 import { AppError } from '@/errors/app.error';
 import slugify from 'slugify';
+import crypto from 'crypto';
 
 export interface CreateTenantDTO {
 	name: string;
@@ -81,12 +82,15 @@ export class MasterTenantService {
 		}
 		const businessType: TenantBusinessType = dto.businessType;
 
+		const apiKey = `pk_live_${crypto.randomBytes(16).toString('hex')}`;
+
 		// 1. Crear documento Tenant en MasterDb
 		const tenant = await TenantModel.create({
 			name: dto.name.trim(),
 			slug: cleanSlug,
 			dbName,
 			businessType,
+			apiKey,
 			domain: dto.domain ? dto.domain.trim().toLowerCase() : undefined,
 			plan,
 			isActive: true,
