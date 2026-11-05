@@ -270,24 +270,16 @@ export class CategoryGroupService {
 			const cached = CacheService.get<ICategoryGroup[]>(tenantSlug, cacheKey);
 			if (cached) return cached;
 
-			let groups = (await models.CategoryGroup.find()
+			const groups = (await models.CategoryGroup.find()
 				.sort({ order: 1, createdAt: 1 })
 				.lean()) as unknown as ICategoryGroup[];
 
-			// Auto-seed si la colección está vacía
-			if (!groups || groups.length === 0) {
-				const defaults = this.getDefaultCategoryGroups();
-				await models.CategoryGroup.insertMany(defaults);
-				groups = (await models.CategoryGroup.find()
-					.sort({ order: 1, createdAt: 1 })
-					.lean()) as unknown as ICategoryGroup[];
-			}
-
-			CacheService.set(tenantSlug, cacheKey, groups, 15 * 60 * 1000);
-			return groups;
+			const safeGroups = groups || [];
+			CacheService.set(tenantSlug, cacheKey, safeGroups, 15 * 60 * 1000);
+			return safeGroups;
 		} catch (error) {
 			console.error('Error al obtener category groups:', error);
-			return this.getDefaultCategoryGroups() as unknown as ICategoryGroup[];
+			return [];
 		}
 	}
 

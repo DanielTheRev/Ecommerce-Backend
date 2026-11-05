@@ -93,7 +93,7 @@ export const VERTICAL_CAPABILITIES: Record<string, VerticalCapabilities> = {
 		hasTechSpecifications: false,
 		hasQuickPosCheckout: true,
 		hasBeautyAromas: false,
-		allowedProductTypes: [ProductType.GENERAL]
+		allowedProductTypes: [ProductType.KIOSK]
 	},
 	[BusinessType.TECH_ELECTRONICS]: {
 		businessType: BusinessType.TECH_ELECTRONICS,
@@ -107,7 +107,7 @@ export const VERTICAL_CAPABILITIES: Record<string, VerticalCapabilities> = {
 		hasTechSpecifications: true,
 		hasQuickPosCheckout: true,
 		hasBeautyAromas: false,
-		allowedProductTypes: [ProductType.TECH, ProductType.GENERAL]
+		allowedProductTypes: [ProductType.TECH, ProductType.KIOSK]
 	},
 	[BusinessType.BUTCHER]: {
 		businessType: BusinessType.BUTCHER,
@@ -121,7 +121,7 @@ export const VERTICAL_CAPABILITIES: Record<string, VerticalCapabilities> = {
 		hasTechSpecifications: false,
 		hasQuickPosCheckout: true,
 		hasBeautyAromas: false,
-		allowedProductTypes: [ProductType.GENERAL]
+		allowedProductTypes: [ProductType.KIOSK]
 	},
 	[BusinessType.BAKERY]: {
 		businessType: BusinessType.BAKERY,
@@ -135,7 +135,7 @@ export const VERTICAL_CAPABILITIES: Record<string, VerticalCapabilities> = {
 		hasTechSpecifications: false,
 		hasQuickPosCheckout: true,
 		hasBeautyAromas: false,
-		allowedProductTypes: [ProductType.GENERAL]
+		allowedProductTypes: [ProductType.KIOSK]
 	},
 	[BusinessType.GASTRONOMY]: {
 		businessType: BusinessType.GASTRONOMY,
@@ -149,17 +149,24 @@ export const VERTICAL_CAPABILITIES: Record<string, VerticalCapabilities> = {
 		hasTechSpecifications: false,
 		hasQuickPosCheckout: true,
 		hasBeautyAromas: false,
-		allowedProductTypes: [ProductType.GENERAL]
+		allowedProductTypes: [ProductType.KIOSK]
 	}
 };
 
 /**
  * Obtiene las capacidades del comercio según su rubro configurado.
- * Si el rubro no existe, utiliza 'kiosk_grocery' como rubro por defecto.
+ * Falla de forma explícita si el rubro no está definido o no es válido (cero fallbacks silenciosos).
  */
 export function getVerticalCapabilities(businessType?: string): VerticalCapabilities {
-	const normalized = (businessType || '').trim().toLowerCase();
-	return VERTICAL_CAPABILITIES[normalized] || VERTICAL_CAPABILITIES.kiosk_grocery;
+	if (!businessType || !businessType.trim()) {
+		throw new Error('El rubro comercial (businessType) es obligatorio para determinar las capacidades del comercio.');
+	}
+	const normalized = businessType.trim().toLowerCase();
+	const caps = VERTICAL_CAPABILITIES[normalized];
+	if (!caps) {
+		throw new Error(`Rubro comercial '${businessType}' no reconocido en el sistema. Rubros válidos: ${Object.keys(VERTICAL_CAPABILITIES).join(', ')}`);
+	}
+	return caps;
 }
 
 /**

@@ -20,7 +20,14 @@ export const requireFeature = (
 			}
 
 			const config = await EcommerceService.getConfig(req.models);
-			const businessType = config.businessType || req.tenant?.businessType || 'kiosk_grocery';
+			const businessType = config.businessType || req.tenant?.businessType;
+			if (!businessType) {
+				res.status(500).json({
+					success: false,
+					message: 'Error de integridad: El comercio no tiene un rubro comercial asignado en su configuración.'
+				});
+				return;
+			}
 
 			if (!isFeatureAllowed(businessType, feature)) {
 				const label = featureLabel || feature;

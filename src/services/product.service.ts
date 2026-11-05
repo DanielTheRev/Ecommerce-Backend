@@ -207,7 +207,7 @@ export class ProductService {
 				throw new AppError('Barcode is required', 'El código de barras es requerido', 400);
 			}
 
-			// Busca por barcode a nivel raíz (GeneralProduct) o en cualquier variante / SKU
+			// Busca por barcode a nivel raíz (KioskProduct) o en cualquier variante / SKU
 			const product = (await models.Product.findOne({
 				$or: [
 					{ barcode: barcode },
@@ -754,11 +754,14 @@ export class ProductService {
 				throw new AppError('Brand is required', 'La marca del producto es obligatoria', 400);
 			}
 			const slug = this.generateSlug(data.brand, data.model);
-			const businessType = (await EcommerceService.getConfig(models)).businessType || 'kiosk_grocery';
+			const config = await EcommerceService.getConfig(models);
+			const businessType = config.businessType;
+			if (!businessType) {
+				throw new AppError('Business type not configured', 'El comercio no tiene un rubro comercial configurado en su tienda', 500);
+			}
 			if (!isProductTypeAllowed(businessType, data.productType)) {
 				throw new AppError('Product type not allowed', `El tipo de producto '${data.productType}' no está permitido para el rubro comercial '${businessType}'. Tipos permitidos: ${getAllowedProductTypes(businessType).join(', ')}`, 400);
 			}
-			const config = await EcommerceService.getConfig(models);
 
 			const { venta } = await getDolar(config.dollarQuoteType || 'oficial', config.customDollarRate || 0);
 
@@ -796,12 +799,12 @@ export class ProductService {
 				images = await ImageService.UploadImages(rawImages, `${tenantSlug}/product-images`);
 			} else if (Array.isArray(data.images) && data.images.length > 0) {
 				images = data.images;
-			} else if (data.productType !== ProductType.GENERAL) {
+			} else if (data.productType !== ProductType.KIOSK) {
 				throw new AppError('No images provided', 'No se proporcionaron imágenes', 400);
 			}
 
-			// Para productos de tipo GENERAL: inicializar variante por defecto si no vino ninguna
-			if (data.productType === ProductType.GENERAL) {
+			// Para productos de tipo KIOSK: inicializar variante por defecto si no vino ninguna
+			if (data.productType === ProductType.KIOSK) {
 				const variantsArr = Array.isArray(data.variants) ? data.variants : [];
 				if (variantsArr.length === 0) {
 					data.variants = [{
@@ -942,8 +945,8 @@ export class ProductService {
 				if (data.applicationArea) baseData.applicationArea = data.applicationArea;
 			}
 
-			// Campos específicos de general (Kiosco / Almacén / Bazar)
-			if (data.productType === ProductType.GENERAL) {
+			// Campos específicos de mostrador (Kiosco / Almacén / Carnicería / Panadería)
+			if (data.productType === ProductType.KIOSK) {
 				if (data.barcode) baseData.barcode = data.barcode.trim();
 				if (data.isSoldByWeight !== undefined) baseData.isSoldByWeight = Boolean(data.isSoldByWeight);
 				if (data.unit) baseData.unit = data.unit;
@@ -1625,7 +1628,10 @@ export class ProductService {
 				}
 
 				const productType = item.productType;
-				const businessType = config.businessType || 'kiosk_grocery';
+				const businessType = config.businessType;
+				if (!businessType) {
+					throw new AppError('Business type not configured', 'El comercio no tiene un rubro comercial configurado en su tienda', 500);
+				}
 				if (!isProductTypeAllowed(businessType, productType)) {
 					throw new AppError('Product type not allowed', `El tipo de producto '${productType}' no está permitido para el rubro comercial '${businessType}'. Tipos permitidos: ${getAllowedProductTypes(businessType).join(', ')}`, 400);
 				}
@@ -2086,7 +2092,7 @@ export class ProductService {
 					};
 				}
 
-				// GeneralProduct Fields
+				// KioskProduct Fields
 				if (item.barcode !== undefined) pAny.barcode = String(item.barcode).trim();
 				if (item.weight !== undefined) pAny.weight = String(item.weight).trim();
 				if (item.unit !== undefined) pAny.unit = String(item.unit).trim();

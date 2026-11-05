@@ -134,9 +134,9 @@ const BaseProductFields = {
 };
 
 // 1. General Product Schema (Kioscos, Almacén, Bazar - Ultra Liviano)
-export const GeneralProductCreateSchema = z.object({
+export const KioskProductCreateSchema = z.object({
 	...BaseProductFields,
-	productType: z.literal(ProductType.GENERAL),
+	productType: z.literal(ProductType.KIOSK),
 	shortDescription: z.string().optional().default(''),
 	largeDescription: z.string().optional().default(''),
 	barcode: z.string().optional(),
@@ -147,6 +147,7 @@ export const GeneralProductCreateSchema = z.object({
 	specifications: optionalJsonString.pipe(z.array(SpecSchema).optional()).default([]),
 	variants: optionalJsonString.pipe(z.array(GeneralVariantZodSchema).optional()).default([]),
 });
+
 
 export const CombineWithItemZodSchema = z.union([
 	z.string(),
@@ -216,7 +217,7 @@ export const BeautyProductCreateSchema = z.object({
 });
 
 export const CreateProductBodySchema = z.discriminatedUnion('productType', [
-	GeneralProductCreateSchema,
+	KioskProductCreateSchema,
 	ClothingProductCreateSchema,
 	TechProductCreateSchema,
 	BeautyProductCreateSchema

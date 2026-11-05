@@ -94,12 +94,20 @@ export class EcommerceService {
 				isActive: true
 			}).lean();
 
+			if (!publicConfig.businessType) {
+				throw new AppError(
+					'Business type not configured',
+					'Configuración de ecommerce sin rubro comercial asignado',
+					500
+				);
+			}
+
 			const capabilities = getVerticalCapabilities(publicConfig.businessType);
 
 			const data: IEcommerceConfigPublic = {
 				name: publicConfig.name || 'Mi Tienda',
 				logo: publicConfig.logo || '',
-				businessType: publicConfig.businessType || 'kiosk_grocery',
+				businessType: publicConfig.businessType,
 				capabilities,
 				contact: publicConfig.contact || { email: '', phone: '', address: '', whatsapp: '' },
 				social: publicConfig.social || { instagram: '', facebook: '', twitter: '', tiktok: '' },

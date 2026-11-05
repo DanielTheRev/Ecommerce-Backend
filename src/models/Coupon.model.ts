@@ -56,7 +56,7 @@ export const CouponSchema = new Schema<ICouponDocument>(
 		},
 		applicableProductTypes: [{
 			type: String,
-			enum: ['TechProduct', 'ClothingProduct', 'BeautyProduct', 'GeneralProduct']
+			enum: ['TechProduct', 'ClothingProduct', 'BeautyProduct', 'KioskProduct']
 		}],
 		applicableCategories: [{
 			type: String,

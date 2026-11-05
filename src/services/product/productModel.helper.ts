@@ -12,8 +12,8 @@ export function getProductModel(models: TenantModels, type?: string): any {
 			return models.ClothingProduct;
 		case ProductType.BEAUTY:
 			return models.BeautyProduct;
-		case ProductType.GENERAL:
-			return models.GeneralProduct;
+		case ProductType.KIOSK:
+			return models.KioskProduct;
 		default:
 			return models.Product;
 	}

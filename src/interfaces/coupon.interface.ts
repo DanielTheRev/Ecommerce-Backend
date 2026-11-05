@@ -28,7 +28,7 @@ export interface ICoupon {
 	usedBy: ICouponUsedBy[];
 	isFirstPurchaseOnly?: boolean; // True if coupon is strictly for 1st-time buyers
 	paymentMethodRestriction?: CouponPaymentMethodRestriction; // 'ALL' | 'TRANSFER' | 'CARD'
-	applicableProductTypes?: string[]; // 'TechProduct' | 'ClothingProduct' | 'BeautyProduct' | 'GeneralProduct'
+	applicableProductTypes?: string[]; // 'TechProduct' | 'ClothingProduct' | 'BeautyProduct' | 'KioskProduct'
 	applicableCategories?: string[]; // Category names or IDs
 	applicableProducts?: string[]; // Product IDs
 	assignedUserEmail?: string; // Optional: Link coupon exclusively to specific buyer email

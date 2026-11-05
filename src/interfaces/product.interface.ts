@@ -9,7 +9,7 @@ export enum ProductType {
 	TECH = 'TechProduct',
 	CLOTHING = 'ClothingProduct',
 	BEAUTY = 'BeautyProduct',
-	GENERAL = 'GeneralProduct'
+	KIOSK = 'KioskProduct'
 }
 
 export enum ClothingGender {
@@ -159,14 +159,15 @@ export interface IBeautyProduct extends IProduct {
 	variants: IVariant[];
 }
 
-export interface IGeneralProduct extends IProduct {
-	productType: ProductType.GENERAL;
+export interface IKioskProduct extends IProduct {
+	productType: ProductType.KIOSK;
 	barcode?: string;
 	isSoldByWeight?: boolean;
 	unit?: string;
 	weight?: string;
 	variants: IVariant[];
 }
+
 
 // ============ SIZE GUIDE ============
 
