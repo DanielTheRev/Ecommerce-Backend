@@ -7,23 +7,29 @@ const fitValues = Object.values(ClothingFit) as [string, ...string[]];
 const sizeTypeValues = Object.values(ClothingSizeType) as [string, ...string[]];
 
 // Helper for parsing JSON strings from multipart/form-data
-const jsonString = z.string().transform((str, ctx) => {
-	try {
-		return JSON.parse(str);
-	} catch (e) {
-		ctx.addIssue({ code: 'custom', message: 'Invalid JSON string' });
-		return z.NEVER;
+const jsonString = z.unknown().transform((val, ctx) => {
+	if (typeof val === 'string') {
+		try {
+			return JSON.parse(val);
+		} catch (e) {
+			ctx.addIssue({ code: 'custom', message: 'Invalid JSON string' });
+			return z.NEVER;
+		}
 	}
+	return val;
 });
 
-const optionalJsonString = z.string().optional().transform((str, ctx) => {
-	if (!str || str.trim() === '') return undefined;
-	try {
-		return JSON.parse(str);
-	} catch (e) {
-		ctx.addIssue({ code: 'custom', message: 'Invalid JSON string' });
-		return z.NEVER;
+const optionalJsonString = z.unknown().optional().transform((val, ctx) => {
+	if (val === undefined || val === null || val === '') return undefined;
+	if (typeof val === 'string') {
+		try {
+			return JSON.parse(val);
+		} catch (e) {
+			ctx.addIssue({ code: 'custom', message: 'Invalid JSON string' });
+			return z.NEVER;
+		}
 	}
+	return val;
 });
 
 // Size Guide Schemas

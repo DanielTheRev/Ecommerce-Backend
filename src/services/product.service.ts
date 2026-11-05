@@ -799,8 +799,6 @@ export class ProductService {
 				images = await ImageService.UploadImages(rawImages, `${tenantSlug}/product-images`);
 			} else if (Array.isArray(data.images) && data.images.length > 0) {
 				images = data.images;
-			} else if (data.productType !== ProductType.KIOSK) {
-				throw new AppError('No images provided', 'No se proporcionaron imágenes', 400);
 			}
 
 			// Para productos de tipo KIOSK: inicializar variante por defecto si no vino ninguna
