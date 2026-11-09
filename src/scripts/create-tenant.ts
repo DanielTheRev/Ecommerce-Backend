@@ -22,7 +22,7 @@ import { connectionManager } from '../config/multitenancy';
 import { getModelsForConnection } from '../config/modelRegistry';
 import { ITenant, TenantBusinessType, TenantPlan } from '../interfaces/tenant.interface';
 import { Role } from '../interfaces/user.interface';
-import { BUSINESS_VERTICAL_OPTIONS } from '../config/verticalCapabilities';
+import { BUSINESS_VERTICAL_OPTIONS } from '../config/planCapabilities';
 
 // ────────────────────────────── Helpers ──────────────────────────────
 

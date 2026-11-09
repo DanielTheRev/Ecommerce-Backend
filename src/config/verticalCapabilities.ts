@@ -1,3 +1,14 @@
+/**
+ * ============================================================================
+ * ARCHIVO EN MODO SOLO LECTURA / REFERENCIA HISTÓRICA PARA IDEACIÓN
+ * ============================================================================
+ * NOTA: Este archivo NO es utilizado en runtime por ningún módulo activo.
+ * Toda la lógica de capacidades efectivas y validaciones fue migrada y
+ * unificada de forma tipada en: src/config/planCapabilities.ts
+ * Se conserva vivo a pedido del usuario para consulta de ideas de producto.
+ * ============================================================================
+ */
+
 import { ProductType } from '@/interfaces/product.interface';
 import { BusinessType } from '@/interfaces/tenant.interface';
 

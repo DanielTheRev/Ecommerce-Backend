@@ -23,6 +23,7 @@ import {
 	approveTransferPayment
 } from '../controllers/order.controller';
 import { adminOnly, optionalAuth, protect } from '../middleware/auth';
+import { requirePlanCapability } from '@/middleware/planGuard';
 import { validateSchema } from '@/middleware/validator.middleware';
 import { CreateOrderSchema, PayOrderSchema, UpdatePaymentStatusSchema, UpdateShippingStatusSchema, TrackOrderSchema } from '@/schemas/order.schema';
 
@@ -34,12 +35,12 @@ router.post('/mercadopago-notification/:tenantSlug', mercadopagoWebhook); // Nue
 router.post('/ualabis-notification', ualaWebhook);
 router.get('/ualabis-failedNotifications', protect, adminOnly, getNotificationsUala);
 
-// Rutas para usuarios autenticados
-router.post('/', optionalAuth, validateSchema(CreateOrderSchema), createOrder); // Crear nueva orden
-router.post('/:id/pay', optionalAuth, validateSchema(PayOrderSchema), payOrder); // Intentar pagar una orden existente (reintentable)
-router.post('/:id/receipt', optionalAuth, upload.single('receipt'), uploadPaymentReceipt); // Cargar comprobante de pago por parte del cliente
+// Rutas para usuarios autenticados / tienda online (Requieren pedidos online - Point y Pro)
+router.post('/', requirePlanCapability('hasOnlineOrders', 'Pedidos Online'), optionalAuth, validateSchema(CreateOrderSchema), createOrder); // Crear nueva orden
+router.post('/:id/pay', requirePlanCapability('hasOnlineOrders', 'Pago de Pedidos Online'), optionalAuth, validateSchema(PayOrderSchema), payOrder); // Intentar pagar una orden existente (reintentable)
+router.post('/:id/receipt', requirePlanCapability('hasOnlineOrders', 'Comprobantes de Pago Online'), optionalAuth, upload.single('receipt'), uploadPaymentReceipt); // Cargar comprobante de pago por parte del cliente
 router.get('/my-orders', protect, getUserOrders); // Obtener órdenes del usuario
-router.get('/track', validateSchema(TrackOrderSchema), trackOrder); // Rastreo de orden para invitados
+router.get('/track', requirePlanCapability('hasOnlineOrders', 'Rastreo de Pedidos Online'), validateSchema(TrackOrderSchema), trackOrder); // Rastreo de orden para invitados
 router.get('/:id', protect, getOrderById); // Obtener orden por ID
 router.put('/:id/cancel', protect, cancelOrder); // Cancelar orden
 

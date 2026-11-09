@@ -33,6 +33,8 @@ import { CategoryGroupSchema } from '@/models/CategoryGroup.model';
 import { invoiceSchema, IInvoiceDocument } from '@/models/Invoice.model';
 import { accountMovementSchema } from '@/models/AccountMovement.model';
 import { IAccountMovementDocument } from '@/interfaces/accountMovement.interface';
+import { roleProfileSchema } from '@/models/RoleProfile.model';
+import { IRoleProfileDocument } from '@/interfaces/permission.interface';
 
 // Interfaces
 import { ICashRegisterDocument, ICashRegisterModel } from '@/interfaces/cash-register.interface';
@@ -85,6 +87,7 @@ export interface TenantModels {
 	CategoryGroup: Model<ICategoryGroupDocument>;
 	Invoice: Model<IInvoiceDocument>;
 	AccountMovement: Model<IAccountMovementDocument>;
+	RoleProfile: Model<IRoleProfileDocument>;
 }
 
 export function getModelsForConnection(db: Connection): TenantModels {
@@ -226,6 +229,11 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		? (db.model('AccountMovement') as Model<IAccountMovementDocument>)
 		: db.model<IAccountMovementDocument>('AccountMovement', accountMovementSchema);
 
+	// RoleProfile (Perfiles de permisos dinámicos)
+	const RoleProfileModel = db.models.RoleProfile
+		? (db.model('RoleProfile') as Model<IRoleProfileDocument>)
+		: db.model<IRoleProfileDocument>('RoleProfile', roleProfileSchema);
+
 	return {
 		Product: ProductModel,
 		TechProduct: TechProductModel,
@@ -254,6 +262,7 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		Menu: MenuModel,
 		CategoryGroup: CategoryGroupModel,
 		Invoice: InvoiceModel,
-		AccountMovement: AccountMovementModel
+		AccountMovement: AccountMovementModel,
+		RoleProfile: RoleProfileModel
 	};
 }

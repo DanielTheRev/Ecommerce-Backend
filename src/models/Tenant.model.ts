@@ -56,6 +56,16 @@ export const TenantSchema = new Schema<ITenant>(
 			enum: Object.values(TenantPlan),
 			default: TenantPlan.basic
 		},
+		planTier: {
+			type: String,
+			enum: ['local', 'point', 'pro'],
+			required: [true, 'El plan de suscripción (planTier) es obligatorio']
+		},
+		extraEmployeesPurchased: {
+			type: Number,
+			default: 0,
+			min: 0
+		},
 		commission: {
 			percentage: {
 				type: Number,

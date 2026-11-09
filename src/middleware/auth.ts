@@ -1,8 +1,10 @@
 import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { IUser } from '@/interfaces/user.interface';
+import { IUser, Role } from '@/interfaces/user.interface';
+import { EmployeePermission } from '@/interfaces/permission.interface';
 import { AppError } from '@/errors/app.error';
 import { TenantRequest } from './tenant';
+import { validateTenantSubscriptionIntegrity } from './planGuard';
 
 export interface AuthRequest extends TenantRequest {
 	user?: IUser;
@@ -62,9 +64,11 @@ export const protect = async (
 		const user = await req.models.User.findById(decoded.userID).lean() as IUser;
 		if (!user) throw new AppError('User not found', 'Usuario no encontrado', 401);
 		if (user.isActive === false) throw new AppError('User suspended', 'Tu cuenta se encuentra suspendida o revocada por el administrador', 403);
+		validateTenantSubscriptionIntegrity(req.tenant);
 
 		// add user to every request
 		req.user = user;
+		
 
 		next();
 	} catch (error) {
@@ -104,6 +108,43 @@ export const adminOnly = authorize('admin');
  * Middleware para personal operativo de tienda (admin o empleado / cajero)
  */
 export const staffOnly = authorize('admin', 'employee');
+
+/**
+ * Middleware para validar permisos granulares en staff.
+ * - Administradores (Role.admin): tienen bypass automático total.
+ * - Empleados (Role.employee): deben tener al menos uno de los permisos requeridos.
+ */
+export const requirePermission = (...requiredPermissions: EmployeePermission[]) => {
+	return (req: AuthRequest, res: Response, next: NextFunction) => {
+		if (!req.user) {
+			return res.status(401).json({
+				success: false,
+				message: 'Usuario no autenticado'
+			});
+		}
+
+		// Administrador tiene acceso irrestricto
+		if (req.user.role === Role.admin || (req.user.role as string) === 'admin') {
+			return next();
+		}
+
+		// Si es empleado, comprobar si tiene los permisos asignados
+		if (req.user.role === Role.employee || (req.user.role as string) === 'employee') {
+			const userPermissions = (req.user.permissions as EmployeePermission[]) || [];
+			const hasAccess = requiredPermissions.some(perm => userPermissions.includes(perm));
+
+			if (hasAccess) {
+				return next();
+			}
+		}
+
+		return res.status(403).json({
+			success: false,
+			message: 'No posees los permisos requeridos para realizar esta operación',
+			requiredPermissions
+		});
+	};
+};
 
 /**
  * Middleware para verificar si el usuario es propietario del recurso o admin
@@ -173,6 +214,7 @@ export const optionalAuth = async (req: AuthRequest, res: Response, next: NextFu
 
 			if (user && user.isActive) {
 				req.user = user;
+		
 			}
 		} catch (error) {
 			// Si hay error con el token, continuar sin usuario

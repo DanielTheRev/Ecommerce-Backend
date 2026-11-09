@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import { FavoritesController } from '@/controllers/favorites.controller';
 import { protect, adminOnly } from '@/middleware/auth';
+import { requirePlanCapability } from '@/middleware/planGuard';
 
 const router: Router = Router();
 
-// Todas las rutas de favoritos requieren estar autenticado
+// Todas las rutas de favoritos requieren estar autenticado y plan con Tienda Web (Pro)
 router.use(protect);
+router.use(requirePlanCapability('hasFullWebStore', 'Favoritos de Tienda Web'));
 
 // ==================== RUTAS DE ADMIN ====================
 // Van primero para que /admin/* no matchee con /:productId

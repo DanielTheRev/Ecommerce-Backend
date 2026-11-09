@@ -1,8 +1,12 @@
 import { Router } from 'express';
 import { ArcaController } from '../controllers/arca.controller';
 import { protect, staffOnly } from '../middleware/auth';
+import { requirePlanCapability } from '@/middleware/planGuard';
 
 const router: Router = Router();
+
+// Exigir capacidad de Facturación Electrónica ARCA en el plan
+router.use(requirePlanCapability('hasArcaBilling', 'Facturación Electrónica ARCA'));
 
 // Estado de servidores ARCA / AFIP (homologación o producción)
 router.get('/status', protect, staffOnly, ArcaController.checkStatus);

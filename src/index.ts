@@ -38,6 +38,8 @@ import accountMovementRoutes from './routes/accountMovement.routes';
 import masterRoutes from './routes/master.routes';
 import masterCatalogRoutes from './routes/masterCatalog.routes';
 import feedRoutes from './routes/feed.routes';
+import roleProfileRoutes from './routes/roleProfile.routes';
+import tenantBootstrapRoutes from './routes/tenantBootstrap.routes';
 import { MasterCatalogService } from './services/masterCatalog.service';
 
 // Cargar variables de entorno según el entorno (development vs production)
@@ -138,6 +140,8 @@ const registerRoutes = (prefix: string) => {
 	app.use(`${prefix}/arca`, resolveTenant, arcaRoutes);
 	app.use(`${prefix}/master-catalog`, masterCatalogRoutes);
 	app.use(`${prefix}/feeds`, feedRoutes);
+	app.use(`${prefix}/role-profiles`, resolveTenant, roleProfileRoutes);
+	app.use(`${prefix}/tenant`, resolveTenant, tenantBootstrapRoutes);
 };
 
 // Soportar tanto /api/... como /... (compatibilidad directa con subdominios api.*)

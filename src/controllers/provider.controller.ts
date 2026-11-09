@@ -21,6 +21,9 @@ export class ProviderController {
   */
   static async getProviders(req: AuthRequest, res: Response, next: NextFunction): Promise<void | Response<IProvider[]>> {
     try {
+      if (req.user?.role === 'employee' && !req.user.permissions?.includes('suppliers:manage')) {
+        return res.json([]);
+      }
       const providers = await ProviderService.getProviders(req.models!);
       return res.json(providers);
     } catch (error) {

@@ -163,6 +163,16 @@ export class EcommerceConfigController {
 	static async getPublicConfig(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
 			const configObj = await EcommerceService.getPublicConfig(req.models!, req.tenant?.slug);
+			if (req.user && req.user.role === 'employee') {
+				const sanitized = (configObj as any)?.toObject ? (configObj as any).toObject() : { ...configObj };
+				if (sanitized?.integrations) {
+					delete sanitized.integrations.arca;
+					delete sanitized.integrations.resend;
+					delete sanitized.integrations.metaPixel;
+				}
+				res.status(200).json(sanitized);
+				return;
+			}
 			res.status(200).json(configObj);
 		} catch (error) {
 			next(error);
@@ -173,6 +183,16 @@ export class EcommerceConfigController {
 	static async getConfig(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
 			const configObj = await EcommerceService.getConfig(req.models!);
+			if (req.user && req.user.role === 'employee') {
+				const sanitized = (configObj as any)?.toObject ? (configObj as any).toObject() : { ...configObj };
+				if (sanitized?.integrations) {
+					delete sanitized.integrations.arca;
+					delete sanitized.integrations.resend;
+					delete sanitized.integrations.metaPixel;
+				}
+				res.status(200).json(sanitized);
+				return;
+			}
 			res.status(200).json(configObj);
 		} catch (error) {
 			next(error);

@@ -48,8 +48,16 @@ const userSchema = new Schema<IUser>(
 		},
 		position: {
 			type: String,
-			trim: true,
-			default: 'Cajero'
+			trim: true
+		},
+		permissions: {
+			type: [String],
+			default: []
+		},
+		roleProfileId: {
+			type: Schema.Types.ObjectId,
+			ref: 'RoleProfile',
+			default: null
 		},
 		pinCode: {
 			type: String,

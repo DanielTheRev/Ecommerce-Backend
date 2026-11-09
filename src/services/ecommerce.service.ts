@@ -5,7 +5,8 @@ import { decrypt, encrypt, safeDecryptString, safeEncryptString } from '@/utils/
 import { flattenObject } from '@/utils/object.util';
 import { MercadoPagoService } from './mercadopago.service';
 import { ProductService } from './product.service';
-import { getVerticalCapabilities } from '@/config/verticalCapabilities';
+import { getEffectivePlanCapabilities } from '@/config/planCapabilities';
+import { BusinessType } from '@/interfaces/tenant.interface';
 
 export class EcommerceService {
 	private static readonly SENSITIVE_FIELDS_SELECT =
@@ -45,7 +46,7 @@ export class EcommerceService {
 				);
 
 			const decryptConfig = this.decryptEcommerceConfig(config as IEcommerceConfig);
-			decryptConfig.capabilities = getVerticalCapabilities(decryptConfig.businessType);
+			decryptConfig.capabilities = getEffectivePlanCapabilities((decryptConfig as any).planTier, decryptConfig.businessType);
 			return decryptConfig;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
@@ -102,7 +103,7 @@ export class EcommerceService {
 				);
 			}
 
-			const capabilities = getVerticalCapabilities(publicConfig.businessType);
+			const capabilities = getEffectivePlanCapabilities((publicConfig as any).planTier || 'local', publicConfig.businessType);
 
 			const data: IEcommerceConfigPublic = {
 				name: publicConfig.name || 'Mi Tienda',
@@ -113,7 +114,7 @@ export class EcommerceService {
 				social: publicConfig.social || { instagram: '', facebook: '', twitter: '', tiktok: '' },
 				brands: publicConfig.brands || [],
 				categories: publicConfig.categories || [],
-				clothingFits: capabilities.hasClothingSizesAndFits ? publicConfig.clothingFits : [],
+				clothingFits: publicConfig.businessType === BusinessType.FASHION ? publicConfig.clothingFits : [],
 				shippingConfig: publicConfig.shippingConfig,
 				workingHours: publicConfig.workingHours || {
 					weekdayStart: '10:00',
@@ -268,7 +269,7 @@ export class EcommerceService {
 			if (!updatedConfig) throw new AppError('Failed to update config', 'Error al actualizar configuración', 500);
 
 			const finalConfig = this.decryptEcommerceConfig(updatedConfig);
-			finalConfig.capabilities = getVerticalCapabilities(finalConfig.businessType);
+			finalConfig.capabilities = getEffectivePlanCapabilities((finalConfig as any).planTier || 'local', finalConfig.businessType);
 
 			// Invalidar caché instantáneamente (Purge on Mutation)
 			if (tenantSlug) {

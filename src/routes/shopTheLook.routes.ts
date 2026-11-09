@@ -1,15 +1,15 @@
 import { Router } from 'express';
 import { ShopTheLookController } from '@/controllers/shopTheLook.controller';
 import { protect, adminOnly } from '@/middleware/auth';
-import { requireFeature } from '@/middleware/verticalGuard';
+import { requirePlanCapability } from '@/middleware/planGuard';
 import { imageUpload } from '@/config/multer';
 
 const upload = imageUpload;
 
 const router: Router = Router();
 
-// Exigir que el comercio tenga habilitada la funcionalidad de moda ShopTheLook
-router.use(requireFeature('hasShopTheLook', 'ShopTheLook'));
+// Exigir capacidad efectiva de Shop The Look (Requiere Plan Pro y Rubro Moda)
+router.use(requirePlanCapability('hasShopTheLook', 'Shop The Look'));
 
 // Rutas públicas
 router.get('/', ShopTheLookController.getActiveLooks);

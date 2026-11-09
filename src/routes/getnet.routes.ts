@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { GetnetController } from '../controllers/getnet.controller';
 import { optionalAuth } from '@/middleware/auth';
+import { requirePlanCapability } from '@/middleware/planGuard';
 
 const router: Router = Router();
 
-// Endpoint para crear sesión de pago (Web Checkout)
-router.post('/checkout-session', optionalAuth, (req: any, res: any, next: any) => {
+// Endpoint para crear sesión de pago (Web Checkout - Exclusivo Pro)
+router.post('/checkout-session', requirePlanCapability('hasOnlinePaymentGateways', 'Pasarelas de Pago Online'), optionalAuth, (req: any, res: any, next: any) => {
 	GetnetController.createCheckoutSession(req, res).catch(next);
 });
 

@@ -1,5 +1,5 @@
 import { ICostConcept } from './product.interface';
-import { VerticalCapabilities } from '@/config/verticalCapabilities';
+import { PlanCapabilities } from './plan.interface';
 
 export type BusinessType =
 	| 'kiosk_grocery'
@@ -167,7 +167,7 @@ export interface IEcommerceConfig {
 	name?: string;
 	logo?: string;
 	businessType?: BusinessType;
-	capabilities?: VerticalCapabilities;
+	capabilities?: PlanCapabilities;
 	/** @deprecated Usar profit1Pay / profitInstallments. Se mantiene como fallback. */
 	profit: number;
 	/** Margen global para contado / transferencia / débito / 1 pago */
@@ -328,7 +328,7 @@ export interface IEcommerceConfigPublic {
 	name?: string;
 	logo?: string;
 	businessType?: BusinessType;
-	capabilities?: VerticalCapabilities;
+	capabilities?: PlanCapabilities;
 	contact: {
 		email: string;
 		phone: string;

@@ -1,4 +1,5 @@
 import { Document } from 'mongoose';
+import { EmployeePermission } from './permission.interface';
 
 /* User roles */
 export enum Role {
@@ -36,6 +37,8 @@ export interface ISecureUser {
 	isEmailVerified?: boolean;
 	rewards?: IUserRewards;
 	position?: string;
+	permissions?: EmployeePermission[];
+	roleProfileId?: string;
 	hasPin?: boolean;
 	pushTokens?: string[];
 	currentAccount?: IUserCurrentAccount;
@@ -54,6 +57,8 @@ export interface IUser {
 	email: string;
 	role: Role;
 	position?: string;
+	permissions?: EmployeePermission[];
+	roleProfileId?: string;
 	pinCode?: string;
 	pushTokens?: string[];
 	currentAccount?: IUserCurrentAccount;

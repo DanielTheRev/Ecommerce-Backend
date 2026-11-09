@@ -2,6 +2,8 @@ import { AppError } from '@/errors/app.error';
 import { escapeRegex } from '@/utils/regex.util';
 import { IUser, Role } from '@/interfaces/user.interface';
 import { TenantModels } from '@/config/modelRegistry';
+import { getEffectiveMaxEmployees } from '@/config/planCapabilities';
+import { EmployeePermission } from '@/interfaces/permission.interface';
 
 const defaultRewards = {
 	firstPurchaseEligible: true,
@@ -297,7 +299,10 @@ export class UserService {
 			role?: Role;
 			position?: string;
 			pinCode?: string;
-		}
+			permissions?: EmployeePermission[];
+			roleProfileId?: string;
+		},
+		tenantInfo?: { planTier?: string; extraEmployeesPurchased?: number }
 	) {
 		try {
 			const cleanEmail = data.email.toLowerCase().trim();
@@ -308,6 +313,20 @@ export class UserService {
 					'Ya existe un usuario registrado con este correo electrónico',
 					400
 				);
+			}
+
+			// Validar límite de empleados permitidos (Base 10 + Cupos extra comprados)
+			const targetRole = data.role === Role.admin ? Role.admin : Role.employee;
+			if (targetRole === Role.employee) {
+				const activeStaffCount = await models.User.countDocuments({ role: Role.employee, isActive: true });
+				const maxAllowed = getEffectiveMaxEmployees(tenantInfo?.planTier, tenantInfo?.extraEmployeesPurchased);
+				if (activeStaffCount >= maxAllowed) {
+					throw new AppError(
+						'Staff limit reached',
+						`Has alcanzado el límite máximo de ${maxAllowed} empleados permitidos en tu suscripción. Podés contratar cupos adicionales desde el panel.`,
+						402
+					);
+				}
 			}
 
 			if (!data.password || data.password.length < 6) {
@@ -326,8 +345,35 @@ export class UserService {
 				);
 			}
 
-			const role = data.role === Role.admin ? Role.admin : Role.employee;
-			const position = data.position?.trim() || (role === Role.admin ? 'Administrador' : 'Cajero');
+			const role = targetRole;
+			let position = data.position?.trim();
+			let finalPermissions: EmployeePermission[] = Array.isArray(data.permissions) ? data.permissions : [];
+
+			// Si se seleccionó un perfil de puesto y no se enviaron permisos sueltos, resolver permisos del perfil
+			if (data.roleProfileId && finalPermissions.length === 0) {
+				const profile = await models.RoleProfile.findById(data.roleProfileId).lean();
+				if (!profile) {
+					throw new AppError(
+						'Role profile not found',
+						'El perfil de rol seleccionado no existe en la tienda',
+						404
+					);
+				}
+				position = profile.name;
+				finalPermissions = profile.permissions || [];
+			}
+
+			if (!position) {
+				if (role === Role.admin) {
+					position = 'Administrador';
+				} else {
+					throw new AppError(
+						'Staff position required',
+						'Debes indicar el puesto del empleado o seleccionar un perfil de rol asignado (ej: Cajero, Repositor).',
+						400
+					);
+				}
+			}
 
 			const newStaff = new models.User({
 				name: data.name.trim(),
@@ -338,6 +384,8 @@ export class UserService {
 				password: data.password,
 				role,
 				position,
+				permissions: finalPermissions,
+				roleProfileId: data.roleProfileId || undefined,
 				pinCode: data.pinCode || null,
 				isActive: true,
 				rewards: { ...defaultRewards }
@@ -354,6 +402,8 @@ export class UserService {
 				email: newStaff.email,
 				role: newStaff.role,
 				position: newStaff.position,
+				permissions: newStaff.permissions,
+				roleProfileId: newStaff.roleProfileId,
 				isActive: newStaff.isActive,
 				hasPin: Boolean(data.pinCode),
 				createdAt: newStaff.createdAt,
@@ -379,6 +429,8 @@ export class UserService {
 			position?: string;
 			pinCode?: string;
 			isActive?: boolean;
+			permissions?: EmployeePermission[];
+			roleProfileId?: string;
 		},
 		currentUserId?: string
 	) {
@@ -435,6 +487,18 @@ export class UserService {
 			if (data.phone !== undefined) staff.phone = data.phone.trim();
 			if (data.position !== undefined) staff.position = data.position.trim();
 			if (data.isActive !== undefined) staff.isActive = data.isActive;
+			if (Array.isArray(data.permissions)) staff.permissions = data.permissions;
+			if (data.roleProfileId !== undefined) {
+				staff.roleProfileId = data.roleProfileId || undefined;
+				// Si asignó un perfil y no envió permisos específicos, sincronizar con el perfil
+				if (data.roleProfileId && (!data.permissions || data.permissions.length === 0)) {
+					const profile = await models.RoleProfile.findById(data.roleProfileId).lean();
+					if (profile) {
+						staff.position = profile.name;
+						staff.permissions = profile.permissions || [];
+					}
+				}
+			}
 
 			if (data.role && (data.role === Role.admin || data.role === Role.employee)) {
 				staff.role = data.role;
@@ -477,6 +541,8 @@ export class UserService {
 				email: staff.email,
 				role: staff.role,
 				position: staff.position,
+				permissions: staff.permissions,
+				roleProfileId: staff.roleProfileId,
 				isActive: staff.isActive,
 				hasPin: Boolean(staff.pinCode),
 				createdAt: staff.createdAt,

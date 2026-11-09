@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { EcommerceConfigController } from '@/controllers/EcommerceConfig.controller';
-import { protect, adminOnly } from '@/middleware/auth';
+import { protect, adminOnly, staffOnly } from '@/middleware/auth';
+import { requirePlanCapability } from '@/middleware/planGuard';
 import { imageUpload } from '@/config/multer';
 
 const upload = imageUpload;
@@ -13,28 +14,33 @@ router.get(
 // Ruta pública para obtener la configuración (sin claves sensibles)
 router.get('/public', EcommerceConfigController.getPublicConfig);
 
-// Todas las rutas de configuración requieren autenticación de administrador
-router.use(protect, adminOnly);
+// A partir de aquí todas las rutas requieren sesión autenticada
+router.use(protect);
 
-router.get('/dolares', EcommerceConfigController.getDolares);
-router.get('/mercadopago/auth-url', EcommerceConfigController.getMercadoPagoAuthUrl);
-router.get('/mercadopago-methods', EcommerceConfigController.getMercadoPagoMethods);
-router.get('/recommendations', EcommerceConfigController.getRecommendationsConfig);
-router.put('/recommendations', EcommerceConfigController.updateRecommendationsConfig);
-router.get('/catalog-ranking', EcommerceConfigController.getCatalogRankingConfig);
-router.put('/catalog-ranking', EcommerceConfigController.updateCatalogRankingConfig);
-router.post('/catalog-ranking/recalculate', EcommerceConfigController.recalculateRankingScores);
-router.post('/catalog-ranking/reset-base', EcommerceConfigController.resetRankingBaseScores);
-router.get('/connection', EcommerceConfigController.getConnectionSettings);
-router.post('/connection/regenerate-key', EcommerceConfigController.regenerateApiKey);
-router.put('/connection/allowed-origins', EcommerceConfigController.updateAllowedOrigins);
-router.get('/', EcommerceConfigController.getConfig);
-router.post('/', EcommerceConfigController.createConfig);
-router.put('/', EcommerceConfigController.updateConfig);
-router.patch('/logo', upload.single('logo'), EcommerceConfigController.updateLogo);
-router.post('/recalculate-preview', EcommerceConfigController.previewRecalculation);
-router.post('/recalculate-prices', EcommerceConfigController.triggerRecalculation);
-router.post('/test-email', EcommerceConfigController.sendTestEmail);
-router.delete('/', EcommerceConfigController.deleteConfig);
+// Rutas de lectura accesibles por el personal (Admin y Empleados)
+router.get('/', staffOnly, EcommerceConfigController.getConfig);
+router.get('/dolares', staffOnly, EcommerceConfigController.getDolares);
+router.get('/recommendations', staffOnly, EcommerceConfigController.getRecommendationsConfig);
+router.get('/catalog-ranking', staffOnly, EcommerceConfigController.getCatalogRankingConfig);
+
+// Rutas sensibles de configuración y conexión (Solo Administrador)
+router.get('/mercadopago/auth-url', adminOnly, EcommerceConfigController.getMercadoPagoAuthUrl);
+router.get('/mercadopago-methods', adminOnly, EcommerceConfigController.getMercadoPagoMethods);
+router.get('/connection', adminOnly, EcommerceConfigController.getConnectionSettings);
+router.post('/connection/regenerate-key', adminOnly, EcommerceConfigController.regenerateApiKey);
+router.put('/connection/allowed-origins', adminOnly, EcommerceConfigController.updateAllowedOrigins);
+
+// Mutaciones de configuración (Solo Administrador)
+router.put('/recommendations', adminOnly, EcommerceConfigController.updateRecommendationsConfig);
+router.put('/catalog-ranking', adminOnly, requirePlanCapability('hasFullWebStore', 'Ranking ELO'), EcommerceConfigController.updateCatalogRankingConfig);
+router.post('/catalog-ranking/recalculate', adminOnly, requirePlanCapability('hasFullWebStore', 'Ranking ELO'), EcommerceConfigController.recalculateRankingScores);
+router.post('/catalog-ranking/reset-base', adminOnly, requirePlanCapability('hasFullWebStore', 'Ranking ELO'), EcommerceConfigController.resetRankingBaseScores);
+router.post('/', adminOnly, EcommerceConfigController.createConfig);
+router.put('/', adminOnly, EcommerceConfigController.updateConfig);
+router.patch('/logo', adminOnly, upload.single('logo'), EcommerceConfigController.updateLogo);
+router.post('/recalculate-preview', adminOnly, EcommerceConfigController.previewRecalculation);
+router.post('/recalculate-prices', adminOnly, EcommerceConfigController.triggerRecalculation);
+router.post('/test-email', adminOnly, requirePlanCapability('hasFullWebStore', 'Emails Transaccionales'), EcommerceConfigController.sendTestEmail);
+router.delete('/', adminOnly, EcommerceConfigController.deleteConfig);
 
 export default router;

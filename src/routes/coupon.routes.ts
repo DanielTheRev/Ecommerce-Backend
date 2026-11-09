@@ -1,8 +1,12 @@
 import { Router } from 'express';
 import { CouponController } from '../controllers/coupon.controller';
 import { optionalAuth, protect, adminOnly } from '../middleware/auth';
+import { requirePlanCapability } from '@/middleware/planGuard';
 
 const router: Router = Router();
+
+// Exigir capacidad de Cupones de Descuento (Point y Pro)
+router.use(requirePlanCapability('hasCoupons', 'Cupones de Descuento'));
 
 // Endpoints públicos / cliente
 router.post('/validate', optionalAuth, CouponController.validateCoupon);

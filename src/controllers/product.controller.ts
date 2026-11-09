@@ -15,6 +15,23 @@ import { extractVisitorInfo } from '@/utils/deviceDetector';
 
 export class ProductController {
 	// GET /api/products/list - Productos con precios completos (admin) - paginado
+	static sanitizeStaffResult(result: any, user?: any) {
+		if (user?.role === 'employee' && !user.permissions?.includes('products:view_costs')) {
+			if (Array.isArray(result?.data)) {
+				result.data = result.data.map((p: any) => {
+					const sanitized = typeof p?.toObject === 'function' ? p.toObject() : { ...p };
+					delete sanitized.costPrice;
+					delete sanitized.profitMargin;
+					delete sanitized.provider;
+					delete sanitized.providerId;
+					delete sanitized.additionalCosts;
+					return sanitized;
+				});
+			}
+		}
+		return result;
+	}
+
 	static async getProducts(req: AuthRequest, res: Response, next: NextFunction) {
 		try {
 			const page = parseInt(req.query.page as string) || 1;
@@ -46,7 +63,7 @@ export class ProductController {
 				isFeatured,
 				sortBy
 			);
-			res.status(200).json(result);
+			res.status(200).json(ProductController.sanitizeStaffResult(result, req.user));
 		} catch (error) {
 			next(error);
 		}
@@ -56,7 +73,7 @@ export class ProductController {
 	static async getQualityAudit(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
 			const result = await ProductService.getQualityAudit(req.models!);
-			res.status(200).json(result);
+			res.status(200).json(ProductController.sanitizeStaffResult(result, req.user));
 		} catch (error) {
 			next(error);
 		}
@@ -114,7 +131,7 @@ export class ProductController {
 				category
 			);
 
-			res.status(200).json(result);
+			res.status(200).json(ProductController.sanitizeStaffResult(result, req.user));
 		} catch (error) {
 			next(error);
 		}
@@ -459,7 +476,7 @@ export class ProductController {
 				CacheService.invalidatePrefix(req.tenant.slug, 'products');
 			}
 
-			res.status(200).json(result);
+			res.status(200).json(ProductController.sanitizeStaffResult(result, req.user));
 		} catch (error) {
 			next(error);
 		}
@@ -666,7 +683,7 @@ export class ProductController {
 				pricingMethodChoice,
 			});
 
-			res.status(200).json(result);
+			res.status(200).json(ProductController.sanitizeStaffResult(result, req.user));
 		} catch (error) {
 			next(error);
 		}
@@ -721,7 +738,7 @@ export class ProductController {
 			}
 
 			const result = await ProductService.checkDuplicateBySupplierUrl(req.models!, url, excludeId);
-			res.status(200).json(result);
+			res.status(200).json(ProductController.sanitizeStaffResult(result, req.user));
 		} catch (error) {
 			next(error);
 		}
@@ -821,7 +838,7 @@ export class ProductController {
 			}
 
 			const result = await ProductService.approveManualViewPoint(req.models!, targetId, viewedAt);
-			res.status(200).json(result);
+			res.status(200).json(ProductController.sanitizeStaffResult(result, req.user));
 		} catch (error) {
 			next(error);
 		}
@@ -842,7 +859,7 @@ export class ProductController {
 				newProfitMargin,
 				exactMatch: !!exactMatch
 			});
-			res.status(200).json(result);
+			res.status(200).json(ProductController.sanitizeStaffResult(result, req.user));
 		} catch (error) {
 			next(error);
 		}
@@ -869,7 +886,7 @@ export class ProductController {
 				});
 				return;
 			}
-			res.status(200).json(result);
+			res.status(200).json(ProductController.sanitizeStaffResult(result, req.user));
 		} catch (error) {
 			next(error);
 		}
@@ -891,7 +908,7 @@ export class ProductController {
 				CacheService.invalidatePrefix(req.tenant.slug, 'home');
 				CacheService.invalidatePrefix(req.tenant.slug, 'products');
 			}
-			res.status(200).json(result);
+			res.status(200).json(ProductController.sanitizeStaffResult(result, req.user));
 		} catch (error) {
 			next(error);
 		}

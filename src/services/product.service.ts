@@ -18,7 +18,7 @@ import { CategoryGroupService } from './categoryGroup.service';
 import { ICategoryGroup } from '@/interfaces/categoryGroup.interface';
 import { PushNotificationService } from './pushNotification.service';
 import { IVisitorInfo } from '@/utils/deviceDetector';
-import { isProductTypeAllowed, getAllowedProductTypes } from '@/config/verticalCapabilities';
+import { isProductTypeAllowed, getAllowedProductTypes } from '@/config/planCapabilities';
 import { getProductModel } from './product/productModel.helper';
 import { ProductDisplayService } from './product/productDisplay.service';
 import { ProductRankingService } from './product/productRanking.service';

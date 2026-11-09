@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { ProductController } from '../controllers/product.controller';
-import { protect, adminOnly } from '../middleware/auth';
+import { protect, adminOnly, staffOnly } from '../middleware/auth';
+import { requirePlanCapability } from '@/middleware/planGuard';
 import { imageUpload } from '@/config/multer';
 
 import { validateSchema } from '@/middleware/validator.middleware';
@@ -19,18 +20,18 @@ router.get('/admin/quality-audit', protect, adminOnly, ProductController.getQual
 router.get('/admin/check-supplier-link', protect, adminOnly, ProductController.checkSupplierLink); // Verificación de duplicados por link de proveedor
 router.post('/admin/bulk-additional-cost/preview', protect, adminOnly, ProductController.previewBulkAdditionalCostRemoval); // Previsualizar quita masiva de costo adicional
 router.post('/admin/bulk-additional-cost/apply', protect, adminOnly, ProductController.applyBulkAdditionalCostRemoval); // Aplicar quita masiva de costo adicional confirmada
-router.get('/admin/list', protect, adminOnly, ProductController.getProducts); // products con precios completos
+router.get('/admin/list', protect, staffOnly, ProductController.getProducts); // products con precios completos (sanitizados si es empleado)
 router.post('/calculate-prices', protect, adminOnly, validateSchema(PriceCalculatorSchema), ProductController.calculatePrice); // Calculadora de precios
 router.get('/complete/:id', protect, adminOnly, ProductController.getProductWCompletePrices); // product con precios completos
 router.post('/', protect, adminOnly, multerConfig, validateSchema(CreateProductSchema), ProductController.createProduct); // Crear producto
-router.get('/by-barcode/:barcode', protect, adminOnly, ProductController.getProductByBarcode); // Búsqueda rápida por código de barras
+router.get('/by-barcode/:barcode', protect, staffOnly, ProductController.getProductByBarcode); // Búsqueda rápida por código de barras (POS mostrador)
 router.post('/bulk-create', protect, adminOnly, ProductController.bulkCreateProducts); // Creación masiva (IA / Excel)
 router.patch('/bulk-update', protect, adminOnly, ProductController.bulkUpdateProducts); // Actualización masiva (IA)
 router.patch('/bulk-status', protect, adminOnly, ProductController.bulkUpdateStatus); // Actualización masiva de estado
-router.patch('/:id/ranking-score', protect, adminOnly, ProductController.updateRankingScore); // Actualizar score de ranking ELO
-router.post('/:id/ranking-score/reset', protect, adminOnly, ProductController.resetRankingScore); // Reiniciar score de ranking ELO a base
-router.get('/:id/views', protect, adminOnly, ProductController.getProductViews); // Auditoría de vistas, dispositivos y bots
-router.post('/:id/views/approve', protect, adminOnly, ProductController.approveViewPoint); // Forzar aprobación manual de punto de vista
+router.patch('/:id/ranking-score', protect, adminOnly, requirePlanCapability('hasFullWebStore', 'Ranking ELO'), ProductController.updateRankingScore); // Actualizar score de ranking ELO
+router.post('/:id/ranking-score/reset', protect, adminOnly, requirePlanCapability('hasFullWebStore', 'Ranking ELO'), ProductController.resetRankingScore); // Reiniciar score de ranking ELO a base
+router.get('/:id/views', protect, adminOnly, requirePlanCapability('hasFullWebStore', 'Vistas y Métricas Web'), ProductController.getProductViews); // Auditoría de vistas, dispositivos y bots
+router.post('/:id/views/approve', protect, adminOnly, requirePlanCapability('hasFullWebStore', 'Vistas y Métricas Web'), ProductController.approveViewPoint); // Forzar aprobación manual de punto de vista
 router.patch('/:id/quick-pricing', protect, adminOnly, ProductController.updateQuickPricing); // Calibración quirúrgica rápida de precios
 router.patch('/:id', protect, adminOnly, multerConfig, validateSchema(UpdateProductSchema), ProductController.patchProduct); // Actualización parcial
 router.delete('/:id', protect, adminOnly, ProductController.deleteProduct); // Eliminar producto

@@ -6,6 +6,7 @@ import { UserService } from '@/services/user.service';
 import { AuthProvider, ILoginUserWithGoogle } from '@/interfaces/auth.interface';
 import { AppError } from '@/errors/app.error';
 import { AuthRequest } from '@/middleware/auth';
+import { validateTenantSubscriptionIntegrity } from '@/middleware/planGuard';
 
 /* Function to send response with token */
 const sendTokenResponse = (statusCode: number, res: Response, user: ISecureUser, tenantSlug?: string) => {
@@ -32,6 +33,8 @@ export const loginUser = async (req: AuthRequest, res: Response, next: NextFunct
 	const { provider, token: googleToken, email, password } = req.body as ILoginUserWithGoogle;
 
 	try {
+		validateTenantSubscriptionIntegrity(req.tenant);
+
 		const user = await AuthService.loginUserWith(req.models!, provider, googleToken, {
 			email,
 			password
@@ -47,6 +50,8 @@ export const LoginAdmin = async (req: AuthRequest, res: Response, next: NextFunc
 	const { email, password } = data;
 
 	try {
+		validateTenantSubscriptionIntegrity(req.tenant);
+
 		const user = await AuthService.loginUserWith(req.models!, AuthProvider.Email, '', {
 			email,
 			password

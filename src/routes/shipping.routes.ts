@@ -1,10 +1,14 @@
 import { Router } from 'express';
 import { ShippingController } from '../controllers/shipping.controller';
 import { protect, adminOnly } from '../middleware/auth';
+import { requirePlanCapability } from '@/middleware/planGuard';
 import { validateSchema } from '@/middleware/validator.middleware';
 import { CreateShippingOptionSchema, UpdateShippingOptionSchema } from '@/schemas/shipping.schema';
 
 const router: Router = Router();
+
+// Exigir al menos capacidad de Delivery Propio / Envíos (Point y Pro)
+router.use(requirePlanCapability('hasLocalDeliveryAndTakeaway', 'Delivery y Envíos'));
 
 // Rutas públicas
 router.get('/', ShippingController.getAllShippingOptions);

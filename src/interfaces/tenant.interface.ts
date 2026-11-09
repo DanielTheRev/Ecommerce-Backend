@@ -1,4 +1,5 @@
 import { Document } from 'mongoose';
+import { VexxPlanTier } from './plan.interface';
 
 export enum TenantPlan {
 	free = 'free',
@@ -34,6 +35,8 @@ export interface ITenant {
 	subscriptionStatus?: TenantSubscriptionStatus;
 	isActive: boolean;
 	plan: TenantPlan;
+	planTier?: VexxPlanTier;
+	extraEmployeesPurchased?: number;
 	commission: {
 		percentage: number;
 		fixedFee: number;

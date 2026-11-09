@@ -137,19 +137,28 @@ export class UserController {
 	// POST /api/users/staff - Dar de alta a un empleado (admin)
 	static async createStaff(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
-			const { name, lastName, dni, phone, email, password, role, position, pinCode } = req.body;
+			const { name, lastName, dni, phone, email, password, role, position, pinCode, permissions, roleProfileId } = req.body;
 
-			const newStaff = await UserService.createStaffMember(req.models!, {
-				name,
-				lastName,
-				dni,
-				phone,
-				email,
-				password,
-				role,
-				position,
-				pinCode
-			});
+			const newStaff = await UserService.createStaffMember(
+				req.models!,
+				{
+					name,
+					lastName,
+					dni,
+					phone,
+					email,
+					password,
+					role,
+					position,
+					pinCode,
+					permissions,
+					roleProfileId
+				},
+				{
+					planTier: req.tenant?.planTier,
+					extraEmployeesPurchased: req.tenant?.extraEmployeesPurchased
+				}
+			);
 
 			res.status(201).json({
 				success: true,
@@ -165,7 +174,7 @@ export class UserController {
 	static async updateStaff(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
 			const { id } = req.params;
-			const { name, lastName, dni, phone, email, password, role, position, pinCode, isActive } = req.body;
+			const { name, lastName, dni, phone, email, password, role, position, pinCode, isActive, permissions, roleProfileId } = req.body;
 
 			const updatedStaff = await UserService.updateStaffMember(
 				req.models!,
@@ -180,7 +189,9 @@ export class UserController {
 					role,
 					position,
 					pinCode,
-					isActive
+					isActive,
+					permissions,
+					roleProfileId
 				},
 				req.user?._id ? String(req.user._id) : undefined
 			);
