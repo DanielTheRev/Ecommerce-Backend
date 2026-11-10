@@ -14,7 +14,9 @@ export const defaultOrigins = [
 	'http://localhost:5173',
 	'https://panel.vexx.com.ar',
 	'https://www.panel.vexx.com.ar',
-	'https://control-panel-50s.pages.dev'
+	'https://control-panel-50s.pages.dev',
+	'https://vura.com.ar',
+	'https://www.vura.com.ar',
 ];
 
 // Cache de origins por tenant para no consultar la DB en cada request
