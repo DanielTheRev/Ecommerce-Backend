@@ -1149,6 +1149,13 @@ export class ProductService {
 	static previewRecalculatePrices = ProductPricingService.previewRecalculatePrices;
 	static recalculateAllProductsPrices = ProductPricingService.recalculateAllProductsPrices;
 
+	private static parseJsonField<T>(value: unknown): T {
+		if (typeof value === 'string') {
+			return JSON.parse(value) as T;
+		}
+		return value as T;
+	}
+
 	static async updateProductById(
 		models: TenantModels,
 		id: string,
@@ -1349,13 +1356,13 @@ export class ProductService {
 				delete updateData.additionalCosts;
 				delete updateData.discountPercentageTransfer;
 			};
-			if (updateData.specifications) updateData.specifications = JSON.parse(updateData.specifications as string);
-			if (updateData.storage) updateData.storage = JSON.parse(updateData.storage as string);
-			if (updateData.features) updateData.features = JSON.parse(updateData.features as string);
+			if (updateData.specifications) updateData.specifications = this.parseJsonField(updateData.specifications);
+			if (updateData.storage) updateData.storage = this.parseJsonField(updateData.storage);
+			if (updateData.features) updateData.features = this.parseJsonField(updateData.features);
 			if (updateData.provider) updateData.provider = updateData.provider;
 			if (updateData.linkProductProvider !== undefined) updateData.linkProductProvider = updateData.linkProductProvider;
 			if (updateData.variants) {
-				const parsedVariants = JSON.parse(updateData.variants as string);
+				const parsedVariants = this.parseJsonField<any[]>(updateData.variants);
 				let processedVariants = parsedVariants.map((v: any) => {
 					// Si el front nos mandó un imageIndex y tenemos fotos en el array final...
 					if (v.imageIndex !== undefined && v.imageIndex !== null && updateData.images && updateData.images[v.imageIndex]) {
@@ -1377,7 +1384,7 @@ export class ProductService {
 				});
 
 				/* Sizes Guide */
-				if(updateData.sizeGuide) updateData.sizeGuide = JSON.parse(updateData.sizeGuide as string) as ISizeGuide;
+				if (updateData.sizeGuide) updateData.sizeGuide = this.parseJsonField<ISizeGuide>(updateData.sizeGuide);
 
 				const dbVariants = (product.variants || []) as any[];
 
@@ -1491,10 +1498,10 @@ export class ProductService {
 					updateData.variants as any[]
 				) as any;
 			}
-			if (updateData.tags) updateData.tags = JSON.parse(updateData.tags as string);
-			if (updateData.careInstructions) updateData.careInstructions = JSON.parse(updateData.careInstructions as string);
-			if (updateData.composition) updateData.composition = JSON.parse(updateData.composition as string);
-			if (updateData.sizeGuide) updateData.sizeGuide = typeof updateData.sizeGuide === 'string' ? JSON.parse(updateData.sizeGuide) : updateData.sizeGuide;
+			if (updateData.tags) updateData.tags = this.parseJsonField(updateData.tags);
+			if (updateData.careInstructions) updateData.careInstructions = this.parseJsonField(updateData.careInstructions);
+			if (updateData.composition) updateData.composition = this.parseJsonField(updateData.composition);
+			if (updateData.sizeGuide) updateData.sizeGuide = this.parseJsonField(updateData.sizeGuide);
 			if (updateData.season) updateData.season = updateData.season as string;
 			if ((updateData as any).combineWith !== undefined) {
 				try {
@@ -1517,7 +1524,7 @@ export class ProductService {
 				}
 			}
 			// Parsear SEO si viene como JSON string
-			if (updateData.seo) updateData.seo = JSON.parse(updateData.seo as unknown as string);
+			if (updateData.seo) updateData.seo = this.parseJsonField(updateData.seo);
 
 			// Actualizar rankingScore base y recalcular effectiveScore
 			if (updateData.rankingScore !== undefined && updateData.rankingScore !== null) {
