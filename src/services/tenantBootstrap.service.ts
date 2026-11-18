@@ -171,6 +171,18 @@ export class TenantBootstrapService {
 		]);
 
 		const acceptsInstallments = Boolean(storeConfig.pricingStrategy?.absorbInstallments);
+		const gateways = storeConfig?.paymentGateways || {};
+		const hasCardGateway = Boolean(gateways.mercadopago?.active || gateways.getnet?.active || gateways.uala?.active);
+		const hasQr = hasCardGateway;
+		const hasTransfer = Boolean(gateways.transfer?.active || gateways.transfer?.alias || gateways.transfer?.cbuCvu);
+		const maxInstallmentsToAbsorb =
+			acceptsInstallments && hasCardGateway
+				? Number(storeConfig?.pricingStrategy?.maxInstallmentsToAbsorb || 1)
+				: 1;
+		const enabledChannels: string[] = ['cash'];
+		if (hasTransfer) enabledChannels.push('transfer');
+		if (hasQr) enabledChannels.push('qr');
+		if (hasCardGateway) enabledChannels.push('debit', 'credit1Pay', 'list');
 		const formConfig = resolveProductFormConfig(businessType, planTier, acceptsInstallments, explicitAddons, effectiveCustomLabels, presetOverride);
 		if (formConfig.sizeGuideConfig.addonEnabled && Array.isArray(storeConfig?.sizeGuideTemplates)) {
 			formConfig.sizeGuideConfig.templates = storeConfig.sizeGuideTemplates;
@@ -288,6 +300,14 @@ export class TenantBootstrapService {
 				},
 				pricingStrategy: {
 					priceRoundingMode: storeConfig?.pricingStrategy?.priceRoundingMode || '100'
+				},
+				paymentCapabilities: {
+					hasCardGateway,
+					hasQr,
+					hasTransfer,
+					acceptsInstallments: acceptsInstallments && hasCardGateway,
+					maxInstallmentsToAbsorb,
+					enabledChannels
 				},
 				customLists: storeConfig?.customLists || {}
 			},
