@@ -21,10 +21,6 @@ const ELECTROMIX_TENANT = {
 	domain: 'electromix.com.ar',
 	isActive: true,
 	plan: TenantPlan.premium,
-	commission: {
-		percentage: 0,  // Es tu propia tienda, sin comisión
-		fixedFee: 0
-	},
 	settings: {
 		logo: '',
 		primaryColor: '#3B82F6',

@@ -80,6 +80,18 @@ const EcommerceSchema = new Schema(
 			card1PayDiscount: {
 				type: Boolean,
 				default: false
+			},
+			debitCommission: {
+				type: Number,
+				default: 0
+			},
+			priceRoundingMode: {
+				type: String,
+				enum: ['exact', '10', '50', '100', '500', 'auto'],
+				default: '100'
+			},
+			defaultChannelPricing: {
+				type: Schema.Types.Mixed
 			}
 		},
 		// Configuración de Punto de Venta (POS)
@@ -163,7 +175,20 @@ const EcommerceSchema = new Schema(
 			default: 0
 		},
 		// Pasarelas de Pago
+		defaultEnabledChannels: {
+			type: [String],
+			enum: ['cash', 'transfer', 'qr', 'debit', 'credit1Pay', 'list'],
+			default: ['cash', 'transfer', 'qr', 'debit', 'credit1Pay', 'list']
+		},
 		paymentGateways: {
+			defaultGateway: {
+				type: String,
+				enum: ['mercadopago', 'getnet', 'uala']
+			},
+			defaultWebGateway: {
+				type: String,
+				enum: ['mercadopago', 'getnet', 'uala']
+			},
 			uala: {
 				active: { type: Boolean, default: false },
 				credentials: {
@@ -172,6 +197,8 @@ const EcommerceSchema = new Schema(
 					clientSecret: { type: String, select: false }
 				},
 				baseCommission: { type: Number, required: false, default: 0.049 },
+				qrCommission: { type: Number, required: false, default: 0 },
+				debitCommission: { type: Number, required: false, default: 0 },
 				cft3cuotas: { type: Number, required: false, default: 12 },
 				cft6Cuotas: { type: Number, required: false, default: 18.9 },
 				cft12cuotas: { type: Number, required: false, default: 0 },
@@ -186,7 +213,72 @@ const EcommerceSchema = new Schema(
 				environment: { type: String, enum: ['sandbox', 'production'], default: 'production' },
 				checkoutMode: { type: String, enum: ['transparent', 'redirect', 'modal', 'bricks', 'pro', 'api', 'hybrid'], default: 'hybrid' },
 				webhookSecret: { type: String, default: 'no asignado', select: false },
+				oauth: {
+					connected: { type: Boolean, default: false },
+					mpUserId: { type: String, default: null },
+					refreshToken: { type: String, default: '', select: false },
+					tokenExpiresAt: { type: Date, default: null }
+				},
+				credentials: {
+					production: {
+						credentialSource: { type: String, enum: ['oauth', 'manual'], default: 'manual' },
+						publicKey: { type: String, default: '' },
+						accessToken: { type: String, default: '', select: false },
+						webhookSecret: { type: String, default: '', select: false }
+					},
+					sandbox: {
+						publicKey: { type: String, default: '' },
+						accessToken: { type: String, default: '', select: false },
+						webhookSecret: { type: String, default: '', select: false }
+					}
+				},
+				storefrontChannels: {
+					minimalCatalog: {
+						environment: { type: String, enum: ['sandbox', 'production'], default: 'production' },
+						checkoutMode: { type: String, enum: ['pro', 'bricks', 'hybrid'], default: 'pro' },
+						sandboxToken: { type: String, default: '' }
+					},
+					webTemplate: {
+						environment: { type: String, enum: ['sandbox', 'production'], default: 'production' },
+						checkoutMode: { type: String, enum: ['pro', 'bricks', 'hybrid'], default: 'bricks' },
+						sandboxToken: { type: String, default: '' }
+					},
+					customWeb: {
+						environment: { type: String, enum: ['sandbox', 'production'], default: 'sandbox' },
+						liveApiKey: { type: String, default: '' },
+						testApiKey: { type: String, default: '' }
+					}
+				},
+				customRatesOverride: { type: Boolean, default: false },
+				webCheckout: {
+					settlementTerm: { type: String, enum: ['instant', '10d', '18d', '35d'], default: 'instant' },
+					baseCommission: { type: Number, default: 6.60 },
+					cft2cuotas: { type: Number, default: 7.79 },
+					cft3cuotas: { type: Number, default: 10.49 },
+					cft6Cuotas: { type: Number, default: 18.69 },
+					cft9cuotas: { type: Number, default: 26.49 },
+					cft12cuotas: { type: Number, default: 32.29 },
+					cft18cuotas: { type: Number, default: 41.59 },
+					minAmountForInstallments: { type: Number, default: 0 }
+				},
+				qr: {
+					allowCardsInQr: { type: Boolean, default: false },
+					accountMoneyCommission: { type: Number, default: 0.80 },
+					debitTerm: { type: String, enum: ['instant', '2d'], default: 'instant' },
+					debitCommission: { type: Number, default: 1.41 },
+					creditTerm: { type: String, enum: ['instant', '10d'], default: 'instant' },
+					creditCommission: { type: Number, default: 6.29 },
+					prepaidCommission: { type: Number, default: 3.93 }
+				},
+				posPoint: {
+					debitCommission: { type: Number, default: 3.14 },
+					creditCommission: { type: Number, default: 6.29 },
+					prepaidCommission: { type: Number, default: 3.93 },
+					pixCommission: { type: Number, default: 3.40 }
+				},
 				baseCommission: { type: Number, default: 0.06 },
+				qrCommission: { type: Number, default: 0 },
+				debitCommission: { type: Number, default: 0 },
 				cft3cuotas: { type: Number, default: 12 },
 				cft6Cuotas: { type: Number, default: 18.9 },
 				cft12cuotas: { type: Number, default: 0 },
@@ -203,6 +295,8 @@ const EcommerceSchema = new Schema(
 				clientSecret: { type: String, default: '', select: false },
 				environment: { type: String, enum: ['sandbox', 'production'], default: 'sandbox' },
 				baseCommission: { type: Number, default: 0.035 },
+				qrCommission: { type: Number, default: 0 },
+				debitCommission: { type: Number, default: 0 },
 				cft3cuotas: { type: Number, default: 0 },
 				cft6Cuotas: { type: Number, default: 10 },
 				cft12cuotas: { type: Number, default: 0 },
@@ -258,6 +352,24 @@ const EcommerceSchema = new Schema(
 			required: false,
 			default: ['Regular', 'Slim', 'Oversized', 'Relaxed', 'Boxy', 'Straight', 'Tapered', 'Baggy']
 		}],
+		customLists: {
+			type: Schema.Types.Mixed,
+			default: {}
+		},
+		sizeGuideTemplates: {
+			type: [
+				{
+					_id: false,
+					id: { type: String, required: true, trim: true },
+					name: { type: String, required: true, trim: true },
+					headers: { type: [String], required: true },
+					defaultRows: { type: [String], required: true },
+					tolerance: { type: String, trim: true },
+					isDefault: { type: Boolean, default: false }
+				}
+			],
+			default: undefined
+		},
 		shippingConfig: {
 			freeShippingThreshold: { type: Number, default: 80000 },
 			defaultItemSubsidy: { type: Number, default: 4000 },

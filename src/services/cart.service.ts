@@ -12,7 +12,7 @@ export class CartService {
 		const sanitizedItems: any[] = [];
 
 		for (const item of rawItems) {
-			if (!item.productId || !item.sku) continue;
+			if (!item.productId) continue;
 
 			try {
 				const product = await models.Product.findOne({
@@ -22,23 +22,40 @@ export class CartService {
 
 				if (!product) continue;
 
-				const variant = product.variants?.find(
-					(v: any) => v.sku === item.sku && v.isActive !== false
-				);
+				const hasVariants = Array.isArray(product.variants) && product.variants.length > 0;
+				let matchedSku = item.sku;
+				let stock = 999;
+				let imageUrl = product.images?.[0]?.url || item.image;
+				let size = item.size;
+				let color = item.color;
 
-				if (!variant) continue;
+				if (hasVariants) {
+					const variant = product.variants?.find(
+						(v: any) => v.sku === item.sku && v.isActive !== false
+					);
+					if (!variant) continue;
+					matchedSku = variant.sku;
+					stock = variant.stock != null ? variant.stock : 999;
+					imageUrl = variant.imageReference?.url || imageUrl;
+					size = variant.size || item.size;
+					color = variant.color || item.color;
+				} else {
+					matchedSku = item.sku || product.barcode || 'SIMPLE';
+					stock = product.netStock != null ? product.netStock : 999;
+				}
 
-				const imageUrl = variant.imageReference?.url || product.images?.[0]?.url || item.image;
-				const stock = variant.stock != null ? variant.stock : 999;
-				const maxQty = Math.max(1, Math.min(item.quantity || 1, Math.max(1, stock)));
+				const maxQty = product.isSoldByWeight
+					? Math.min(item.quantity || 1, Math.max(0.001, stock))
+					: Math.max(1, Math.min(item.quantity || 1, Math.max(1, stock)));
 
 				sanitizedItems.push({
 					productId: product._id,
-					sku: variant.sku,
+					name: product.name || `${product.brand} ${product.model}`,
+					sku: matchedSku,
 					brand: product.brand,
 					model: product.model,
-					size: variant.size || item.size,
-					color: variant.color || item.color,
+					size,
+					color,
 					image: imageUrl,
 					priceEfectivo: product.price?.cashTransferPrice ?? item.priceEfectivo ?? 0,
 					priceCreditoDebito: product.price?.listPrice ?? item.priceCreditoDebito ?? 0,

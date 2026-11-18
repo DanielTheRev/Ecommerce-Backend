@@ -1,20 +1,9 @@
 import { TenantModels } from '@/config/modelRegistry';
-import { ProductType } from '@/interfaces/product.interface';
 
 /**
- * Obtiene el modelo de Mongoose correspondiente según el discriminador productType.
+ * Obtiene el modelo de Mongoose unificado (Product).
+ * Con la unificación de Schemas, todas las operaciones operan sobre models.Product.
  */
-export function getProductModel(models: TenantModels, type?: string): any {
-	switch (type) {
-		case ProductType.TECH:
-			return models.TechProduct;
-		case ProductType.CLOTHING:
-			return models.ClothingProduct;
-		case ProductType.BEAUTY:
-			return models.BeautyProduct;
-		case ProductType.KIOSK:
-			return models.KioskProduct;
-		default:
-			return models.Product;
-	}
+export function getProductModel(models: TenantModels, _type?: string): any {
+	return models.Product;
 }

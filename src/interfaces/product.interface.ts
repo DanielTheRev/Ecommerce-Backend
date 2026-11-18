@@ -1,5 +1,5 @@
 import { Document, Types } from 'mongoose';
-import { IClothingVariant, ITechVariant, IVariant } from './variant.interface';
+import { IClothingVariant, ITechVariant, IVariant, IVariantColor, IVariantAttribute } from './variant.interface';
 import { IProvider } from './provider.interface';
 import { PricingMethod } from './ecommerce.interface';
 
@@ -46,6 +46,17 @@ export enum ProductStatusEnum {
 	ARCHIVED = 'archived'
 }
 
+export type WeighableUnit = 'kg' | 'g' | 'docena' | 'un' | 'l' | 'ml';
+export type ImageAspectRatio = 'original' | '1:1' | '9:16' | '4:5' | '16:9';
+
+// ============ SUB-INTERFACES ============
+
+export interface IProductDescriptions {
+	subtitle?: string;
+	shortDescription?: string;
+	largeDescription?: string;
+}
+
 export interface IProductViewEvent {
 	viewedAt: Date;
 	device: 'mobile' | 'desktop' | 'tablet' | 'bot';
@@ -76,100 +87,44 @@ export interface IProductMetrics {
 	lastViewedAt?: Date;
 }
 
-export interface IProduct {
-	_id: string;
-	productType: ProductType;
-	provider: IProvider;
-	slug: string;
-	category: string;
-	shortDescription: string;
-	largeDescription: string;
-	brand: string;
-	model: string;
-	subtitle?: string;
-	barcode?: string;
-	isSoldByWeight?: boolean;
-	unit?: string;
-	price: IProductPrices;
-	finance: IProductFinance;
-	discount: number;
-	rating: number | null;
-	reviews: number | null;
-	images: IProductImage[];
-	features: string[];
-	specifications: IProductSpec[];
-	variants: IVariant[]; // tipo mínimo en base — cada discriminador tiene el tipo exacto
-	tags?: string[];
-	lowStockThreshold?: number;
-	status: ProductStatus;
-	isFeatured: boolean;
-	rankingScore?: number;
-	metrics?: IProductMetrics;
-	effectiveScore?: number;
-	linkProductProvider?: string;
-	seo: IProductSeo;
-	recommendationsMode?: 'auto' | 'manual';
-	manualRecommendations?: string[] | IProduct[];
+export interface IProductImageCrop {
+	aspectRatio: ImageAspectRatio;
+	url: string;
+	public_id?: string;
+	storageKey?: string;
+	width?: number;
+	height?: number;
+	bytes?: number;
+	format?: string;
 }
 
-// ============ TYPE-SPECIFIC PRODUCTS ============
-
-export interface ITechProduct extends IProduct {
-	productType: ProductType.TECH;
-	storage: string[];
-	ram?: string;
-	processor?: string;
-	screenSize?: string;
-	os?: string;
-	connectivity?: string[];
-	variants: ITechVariant[];
+export interface IProductImage {
+	/** Identificador lógico estable de Vexx (agnóstico de Cloudinary/storage) */
+	id?: string;
+	url: string;
+	public_id: string;
+	storageProvider?: string;
+	storageKey?: string;
+	width?: number;
+	height?: number;
+	bytes?: number;
+	format?: string;
+	/** SKUs de variantes vinculadas a esta foto (modo Tusty multi-foto) */
+	variantSkus?: string[];
+	/** Recortes multi-aspecto generados por Media Studio */
+	crops?: IProductImageCrop[];
+	// [REMOVE-BEFORE-PROD]: legacy singular tagging fields
+	variantSku?: string;
+	colorName?: string;
+	isMain?: boolean;
+	aspectRatio?: ImageAspectRatio;
 }
 
-export interface ICombineWithItem {
-	product: string | IProduct;
-	color?: string | null;
+export interface IProductSpec {
+	key: string;
+	value: string;
+	isFeatured?: boolean;
 }
-
-export interface IClothingProduct extends IProduct {
-	productType: ProductType.CLOTHING;
-	gender: ClothingGender;
-	fit?: string;
-	material: string;
-	composition?: { material: string; percentage: number }[];
-	sizeType: ClothingSizeType;
-	sizeGuide?: ISizeGuide;
-	careInstructions?: string[];
-	season?: string;
-	variants: IClothingVariant[];
-	combineWith?: (string | IProduct | ICombineWithItem)[];
-}
-
-export interface IBeautyProduct extends IProduct {
-	productType: ProductType.BEAUTY;
-	volume?: string;
-	concentration?: string;
-	fragranceFamily?: string;
-	gender?: string;
-	scentNotes?: {
-		top?: string;
-		heart?: string;
-		base?: string;
-	};
-	applicationArea?: string;
-	variants: IVariant[];
-}
-
-export interface IKioskProduct extends IProduct {
-	productType: ProductType.KIOSK;
-	barcode?: string;
-	isSoldByWeight?: boolean;
-	unit?: string;
-	weight?: string;
-	variants: IVariant[];
-}
-
-
-// ============ SIZE GUIDE ============
 
 export interface ISizeGuideRow {
 	size: string;
@@ -182,88 +137,76 @@ export interface ISizeGuide {
 	tolerance?: string;
 }
 
-// ============ SUB-INTERFACES ============
-
-export interface IProductImage {
-	url: string;
-	public_id: string;
-	width?: number;
-	height?: number;
-	bytes?: number;
-	format?: string;
+export interface ICombineWithItem {
+	product: string | IProduct;
+	variantSku?: string | null;
+	color?: string | null;
 }
-
-export interface IProductSpec {
-	key: string;
-	value: string;
-}
-
-// export interface IProductPrices {
-// 	// ── Campos sensibles — select:false en schema (solo admins) ──────────
-// 	costPrice: {
-// 		inUSD: number;
-// 		inARS: number;
-// 	};
-// 	dolarPrice: number;
-// 	profitMargin: number;
-// 	profitMargin1Pay: number;
-// 	profitMarginInstallments: number;
-// 	baseCommission: number;
-// 	cft6Cuotas: number;
-// 	/** Override del método de cálculo por producto ('markup' | 'margin'). Si undefined, usa el global. */
-// 	customPricingMethod?: PricingMethod;
-// 	earnings: {
-// 		cash_transfer: number;
-// 		card_1_installments: number;
-// 		card_3_installments: number;
-// 		card_6_installments: number;
-// 		ticket: number;
-// 	};
-// 	// ── Campos públicos — siempre presentes ───────────────────────────────
-// 	efectivo_transferencia: number;
-// 	tarjeta_credito_debito: number;
-// 	cuotas: {
-// 		cuotas_3_si: number;
-// 		cuotas_6_si: number;
-// 	};
-// }
 
 export interface ICostConcept {
 	concept: string;
 	value: number;
-	/**
-	 * 'fixed': Monto fijo en ARS (Ej: $1.500 de packaging)
-	 * 'percent_over_provider': Porcentaje sobre el costo del proveedor (Ej: 10% flete)
-	 * 'percent_over_price': Porcentaje sobre el precio de venta (Ej: 3.5% IIBB, 1.2% Ley Cheque)
-	 */
 	type: 'fixed' | 'percent_over_provider' | 'percent_over_price';
-	/**
-	 * 'expense': Gasto operativo (packaging, etiquetas)
-	 * 'tax': Impuesto o retención fiscal (IIBB, etc.)
-	 * 'shipping': Colchón o subsidio de envío por unidad
-	 */
 	category?: 'expense' | 'tax' | 'shipping';
 }
 
+export type PricingChannelKey = 'cash' | 'transfer' | 'qr' | 'debit' | 'credit1Pay' | 'list';
+export type ChannelPriceMode = 'auto' | 'linked' | 'discount_from_list' | 'fixed';
+
+export interface IChannelPricingRule {
+	enabled?: boolean;
+	mode: ChannelPriceMode;
+	linkedTo?: PricingChannelKey;
+	discountPercent?: number;
+	fixedPrice?: number;
+	inheritCosts?: boolean;
+	excludedCostConcepts?: string[];
+	extraCosts?: ICostConcept[];
+}
+
+export type IChannelPricingConfig = Partial<Record<PricingChannelKey, IChannelPricingRule>>;
+
+export interface IPricingInsight {
+	type: 'info' | 'warning' | 'success';
+	code: string;
+	message: string;
+}
+
+export interface IChannelPriceSnapshot {
+	enabled?: boolean;
+	price: number;
+	mode: ChannelPriceMode;
+	linkedTo?: PricingChannelKey;
+	discountPercent?: number;
+	netProfit: number;
+	netMarginPercent: number;
+	feeLabel?: string;
+	costBaseARS?: number;
+	isWarningLoss: boolean;
+	isBelowTargetMargin?: boolean;
+}
+
 export interface IProductFinance {
-	exchangeRateSnapshot: number; // El valor del dólar al momento de cotizar
+	exchangeRateSnapshot: number;
 	mpCommissionSnapshot: {
-		base: number; // Tu baseCommission
-		cft3Cuotas: number; // El costo financiero total con IVA 3
-		cft6Cuotas: number; // El costo financiero total con IVA 6
+		base: number;
+		cft3Cuotas: number;
+		cft6Cuotas: number;
 	};
 	providerCost: {
 		inUSD: number;
 		inARS: number;
 	};
 	additionalCosts: ICostConcept[];
-	/** Override del método de cálculo por producto ('markup' | 'margin'). Si undefined, usa el global. */
 	pricingStrategy: {
 		method: PricingMethod;
 		targetProfit: number;
 	};
 	calculatedProfits: {
+		cash?: number;
 		transfer: number;
+		qr?: number;
+		debit?: number;
 		card_ticket1Pay: number;
 		card3Installments: number;
 		card6Installments: number;
@@ -272,16 +215,27 @@ export interface IProductFinance {
 }
 
 export interface IProductPrices {
-	listPrice: number; // El precio máster en el peor escenario (según maxInstallments configurado)
-	card_ticket1PayPrice: number; // 🚀 Agregado: Precio para Débito / Crédito 1 pago
-	cashTransferPrice: number; // El precio final con descuento por transferencia
+	listPrice: number;
+	card_ticket1PayPrice: number;
+	cashTransferPrice: number;
+	cashPrice?: number;
+	transferPrice?: number;
+	qrPrice?: number;
+	debitPrice?: number;
 	discountPercentageTransfer: number;
+	channels?: Partial<Record<PricingChannelKey, IChannelPriceSnapshot>>;
+	displaySummary?: Array<{
+		label: string;
+		price: number;
+		channels: PricingChannelKey[];
+		surface?: 'all' | 'web' | 'pos';
+	}>;
 	updatedAt?: Date;
-	shippingSubsidy?: number; // 🚚 Subsidio logístico individual de esta prenda
+	shippingSubsidy?: number;
 	installments: {
 		threePaymentsAmount: number;
 		sixPaymentsAmount: number;
-		hasThreeInstallmentsSeamless: boolean; // 🚀 Agregado: Control para 3 cuotas
+		hasThreeInstallmentsSeamless: boolean;
 		hasSixInstallmentsSeamless: boolean;
 	};
 }
@@ -295,41 +249,145 @@ export interface IProductSeo {
 	};
 }
 
+// ============ INTERFAZ PRINCIPAL DE PRODUCTO ============
+
+export interface IProduct {
+	_id: string;
+	name: string;
+	brand?: string;
+	model?: string;
+	slug: string;
+	category: string;
+	shortDescription: string;
+	largeDescription: string;
+	subtitle?: string;
+	descriptions?: IProductDescriptions;
+	price: IProductPrices;
+	finance: IProductFinance;
+	discount: number;
+	netStock: number;
+	lowStockThreshold?: number;
+	status: ProductStatus;
+	isFeatured: boolean;
+	images: IProductImage[];
+	specifications?: IProductSpec[];
+	variants: IVariant[];
+	tags?: string[];
+	features?: string[];
+	barcode?: string;
+	isSoldByWeight?: boolean;
+	unit?: WeighableUnit;
+	weight?: string;
+	rankingScore?: number;
+	effectiveScore?: number;
+	metrics?: IProductMetrics;
+	provider?: IProvider | string;
+	linkProductProvider?: string;
+	seo?: IProductSeo;
+	channelPricing?: IChannelPricingConfig;
+	paymentRestrictions?: {
+		allowCardPayment: boolean;
+		allowInterestFreeInstallments: boolean;
+		maxInstallments?: number;
+	};
+	recommendationsMode?: 'auto' | 'manual';
+	manualRecommendations?: (string | IProduct)[];
+	productType?: ProductType;
+	rating?: number | null;
+	reviews?: number | null;
+
+	// Extensiones Modulares por Rubro (Directas en la entidad unificada)
+	// Moda & Calzado:
+	gender?: ClothingGender;
+	fit?: string;
+	material?: string;
+	composition?: { material: string; percentage: number }[];
+	sizeType?: ClothingSizeType;
+	sizeGuide?: ISizeGuide;
+	careInstructions?: string[];
+	season?: string;
+	combineWith?: (string | IProduct | ICombineWithItem)[];
+
+	// Tecnología:
+	storage?: string[];
+	ram?: string;
+	processor?: string;
+	screenSize?: string;
+	os?: string;
+	connectivity?: string[];
+
+	// Perfumería & Belleza:
+	volume?: string;
+	concentration?: string;
+	fragranceFamily?: string;
+	scentNotes?: {
+		top?: string;
+		heart?: string;
+		base?: string;
+	};
+	applicationArea?: string;
+}
+
+// Alias de retrocompatibilidad de tipos para código legado existente
+export type IClothingProduct = IProduct;
+export type ITechProduct = IProduct;
+export type IBeautyProduct = IProduct;
+export type IKioskProduct = IProduct;
+
 // ============ DTOs ============
 
 export interface IProductCreateDTO {
-	productType: ProductType;
-	provider: string;
+	name?: string;
+	productType?: ProductType;
+	provider?: string;
 	brand: string;
 	model: string;
-	shortDescription: string;
-	largeDescription: string;
+	shortDescription?: string;
+	largeDescription?: string;
+	subtitle?: string;
+	descriptions?: IProductDescriptions;
 	price?: number;
 	providerCost?: number;
 	useCustomProfit?: boolean;
 	customProfitMargin?: number;
 	pricingMethodChoice?: PricingMethod;
+	channelPricing?: IChannelPricingConfig | string;
+	paymentRestrictions?: {
+		allowCardPayment: boolean;
+		allowInterestFreeInstallments: boolean;
+		maxInstallments?: number;
+	} | string;
 	additionalCosts?: ICostConcept[] | string;
 	discountPercentageTransfer?: number;
 	category: string;
-	features: string | string[];
-	specifications: string | IProductSpec[];
-	variants: string | IClothingVariant[] | ITechVariant[] | IVariant[];
+	features?: string | string[];
+	specifications?: string | IProductSpec[];
+	variants?: string | IClothingVariant[] | ITechVariant[] | IVariant[];
 	images?: IProductImage[];
+	masterImageUrl?: string;
 	linkProductProvider?: string;
 	status?: ProductStatus | string;
 	isFeatured?: boolean | string;
 	rankingScore?: number;
 	tags?: string | string[];
+	netStock?: number;
+	lowStockThreshold?: number;
 
-	// Tech-specific (opcionales a nivel DTO, Mongoose valida por discriminator)
+	// Balanza y Mostrador
+	barcode?: string;
+	isSoldByWeight?: boolean;
+	unit?: WeighableUnit;
+	weight?: string;
+
+	// Tech
 	storage?: string | string[];
 	ram?: string;
 	processor?: string;
 	screenSize?: string;
 	os?: string;
+	connectivity?: string | string[];
 
-	// Clothing-specific (opcionales a nivel DTO, Mongoose valida por discriminator)
+	// Moda
 	gender?: string;
 	fit?: string;
 	material?: string;
@@ -340,24 +398,18 @@ export interface IProductCreateDTO {
 	season?: string;
 	combineWith?: (string | ICombineWithItem)[] | string;
 
-	// Beauty-specific (opcionales a nivel DTO)
+	// Belleza
 	volume?: string;
 	concentration?: string;
 	fragranceFamily?: string;
 	scentNotes?: string | { top?: string; heart?: string; base?: string };
 	applicationArea?: string;
 
-	// General-specific (opcionales a nivel DTO)
-	barcode?: string;
-	isSoldByWeight?: boolean;
-	unit?: string;
-	weight?: string;
-
 	seo?: Partial<IProductSeo>;
 }
 
 export interface IProductUpdateDTO extends Partial<IProductCreateDTO> {
-	_id: string;
+	_id?: string;
 	deletedImages?: string[];
 	deletedSeoOgImage?: string;
 	images?: IProductImage[];
@@ -370,6 +422,7 @@ export interface IProductUpdateDTO extends Partial<IProductCreateDTO> {
 
 // ============ DOCUMENT ============
 
-export interface IProductDocument extends Document, Omit<IProduct, 'model' | '_id'> {
+export interface IProductDocument extends Omit<Document, 'model'>, Omit<IProduct, 'model' | '_id'> {
 	_id: Types.ObjectId;
+	model?: string;
 }

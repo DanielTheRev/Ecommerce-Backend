@@ -9,6 +9,10 @@ import { VexxPlanTier, PlanCapabilities, PlanLimits } from '@/interfaces/plan.in
 import { BusinessType } from '@/interfaces/tenant.interface';
 import { ProductType } from '@/interfaces/product.interface';
 import { AppError } from '@/errors/app.error';
+import { buildCapabilitiesFromAddons, getSuggestedAddonsForPlan } from '@/addons/registry';
+import { SubscriptionPlanService } from '@/services/subscriptionPlan.service';
+
+export { getSuggestedAddonsForPlan };
 
 
 // ============================================================================
@@ -34,6 +38,11 @@ abstract class BaseVexxCapabilities implements PlanCapabilities {
 	hasTeamManagement = false;
 	hasArcaBilling = false;
 	hasInStorePaymentConfig = false;
+	hasSalesHistory = false;
+	hasDailySummary = false;
+	hasFiscalAudit = false;
+	hasCategoryManager = false;
+	hasStoreIdentity = false;
 
 	// Catálogo Digital & Pedidos (Capa 2)
 	hasWebCatalog = false;
@@ -44,15 +53,22 @@ abstract class BaseVexxCapabilities implements PlanCapabilities {
 	hasFeaturedProducts = false;
 	hasStoreHoursAndStatus = false;
 	hasSocialLinks = false;
+	hasProductBundles = false;
+	hasDataSets = false;
+	hasHomeLayoutBuilder = false;
+	hasCustomerAuthConfig = false;
 
 	// Omnicanal & Tienda Web Completa (Capa 3)
 	hasFullWebStore = false;
 	hasCustomDomain = false;
 	hasMarketingBanners = false;
-	hasShopTheLook = false;
 	hasOnlinePaymentGateways = false;
 	hasAutomatedShippingCouriers = false;
 	hasProductFeeds = false;
+	hasMetricDataSets = false;
+	hasNewsletter = false;
+	hasHeadlessApiKey = false;
+	hasExternalIntegrations = false;
 }
 
 /**
@@ -79,6 +95,11 @@ class VexxLocalCapabilities extends BaseVexxCapabilities {
 		this.hasTeamManagement = true;
 		this.hasArcaBilling = true;
 		this.hasInStorePaymentConfig = true;
+		this.hasSalesHistory = true;
+		this.hasDailySummary = true;
+		this.hasFiscalAudit = true;
+		this.hasCategoryManager = true;
+		this.hasStoreIdentity = true;
 		this.hasCoupons = true;
 	}
 
@@ -110,6 +131,10 @@ class VexxPointCapabilities extends VexxLocalCapabilities {
 		this.hasFeaturedProducts = true;
 		this.hasStoreHoursAndStatus = true;
 		this.hasSocialLinks = true;
+		this.hasProductBundles = true;
+		this.hasDataSets = true;
+		this.hasHomeLayoutBuilder = true;
+		this.hasCustomerAuthConfig = true;
 	}
 
 	public static getInstance(): Readonly<VexxPointCapabilities> {
@@ -139,10 +164,13 @@ class VexxProCapabilities extends VexxPointCapabilities {
 		this.hasFullWebStore = true;
 		this.hasCustomDomain = true;
 		this.hasMarketingBanners = true;
-		this.hasShopTheLook = true;
 		this.hasOnlinePaymentGateways = true;
 		this.hasAutomatedShippingCouriers = true;
 		this.hasProductFeeds = true;
+		this.hasMetricDataSets = true;
+		this.hasNewsletter = true;
+		this.hasHeadlessApiKey = true;
+		this.hasExternalIntegrations = true;
 	}
 
 	public static getInstance(): Readonly<VexxProCapabilities> {
@@ -169,7 +197,14 @@ export function getPlanCapabilities(planTier?: string): PlanCapabilities {
 			500
 		);
 	}
-	const normalized = planTier.trim().toLowerCase() as VexxPlanTier;
+	const rawCode = planTier.trim().toLowerCase();
+	const customPlan = SubscriptionPlanService.getCachedPlanOrFallback(rawCode);
+	const normalized = (
+		Object.values(VexxPlanTier).includes(rawCode as VexxPlanTier)
+			? rawCode
+			: customPlan?.baseTier
+	) as VexxPlanTier | undefined;
+
 	switch (normalized) {
 		case VexxPlanTier.LOCAL:
 			return VexxLocalCapabilities.getInstance();
@@ -187,7 +222,7 @@ export function getPlanCapabilities(planTier?: string): PlanCapabilities {
 }
 
 /**
- * Obtiene los límites oficiales del plan consultando directamente a su Singleton.
+ * Obtiene los límites oficiales del plan consultando directamente a su Singleton (o al plan personalizado en DB).
  * Lanza un AppError explícito si el plan no es válido (Fail Fast).
  */
 export function getPlanLimits(planTier?: string): PlanLimits {
@@ -198,20 +233,28 @@ export function getPlanLimits(planTier?: string): PlanLimits {
 			500
 		);
 	}
-	const normalized = planTier.trim().toLowerCase() as VexxPlanTier;
-	switch (normalized) {
+	const rawCode = planTier.trim().toLowerCase();
+	switch (rawCode) {
 		case VexxPlanTier.LOCAL:
 			return VexxLocalCapabilities.getInstance().limits;
 		case VexxPlanTier.POINT:
 			return VexxPointCapabilities.getInstance().limits;
 		case VexxPlanTier.PRO:
 			return VexxProCapabilities.getInstance().limits;
-		default:
+		default: {
+			const customPlan = SubscriptionPlanService.getCachedPlanOrFallback(rawCode);
+			if (customPlan?.limits) {
+				return Object.freeze({
+					baseEmployees: customPlan.limits.baseEmployees,
+					maxProducts: customPlan.limits.maxProducts
+				});
+			}
 			throw new AppError(
 				'Invalid plan tier',
 				`El plan '${planTier}' no es válido para determinar límites de empleados. Planes válidos: ${Object.values(VexxPlanTier).join(', ')}`,
 				500
 			);
+		}
 	}
 }
 
@@ -272,13 +315,15 @@ export const BUSINESS_VERTICAL_OPTIONS: BusinessVerticalOption[] = [
 ];
 
 export const BUSINESS_VERTICAL_PRODUCT_TYPES: Record<BusinessType, ProductType[]> = {
-	[BusinessType.FASHION]: [ProductType.CLOTHING],
-	[BusinessType.KIOSK_GROCERY]: [ProductType.KIOSK],
-	[BusinessType.TECH_ELECTRONICS]: [ProductType.TECH, ProductType.KIOSK],
-	[BusinessType.BUTCHER]: [ProductType.KIOSK],
-	[BusinessType.BAKERY]: [ProductType.KIOSK],
-	[BusinessType.GASTRONOMY]: [ProductType.KIOSK]
+	[BusinessType.FASHION]: Object.values(ProductType),
+	[BusinessType.KIOSK_GROCERY]: Object.values(ProductType),
+	[BusinessType.TECH_ELECTRONICS]: Object.values(ProductType),
+	[BusinessType.BUTCHER]: Object.values(ProductType),
+	[BusinessType.BAKERY]: Object.values(ProductType),
+	[BusinessType.GASTRONOMY]: Object.values(ProductType)
 };
+
+const DYNAMIC_VERTICAL_KEY_REGEX = /^[a-z0-9_]+$/;
 
 export function isProductTypeAllowed(businessType: string | undefined, productType: string): boolean {
 	if (!businessType || !businessType.trim()) {
@@ -286,10 +331,13 @@ export function isProductTypeAllowed(businessType: string | undefined, productTy
 	}
 	const normalized = businessType.trim().toLowerCase() as BusinessType;
 	const allowed = BUSINESS_VERTICAL_PRODUCT_TYPES[normalized];
-	if (!allowed) {
+	if (allowed) {
+		return allowed.includes(productType as ProductType);
+	}
+	if (!DYNAMIC_VERTICAL_KEY_REGEX.test(normalized)) {
 		throw new AppError('Invalid business type', `El rubro '${businessType}' no es válido para productos.`, 400);
 	}
-	return allowed.includes(productType as ProductType);
+	return Object.values(ProductType).includes(productType as ProductType);
 }
 
 export function getAllowedProductTypes(businessType?: string): ProductType[] {
@@ -298,10 +346,13 @@ export function getAllowedProductTypes(businessType?: string): ProductType[] {
 	}
 	const normalized = businessType.trim().toLowerCase() as BusinessType;
 	const allowed = BUSINESS_VERTICAL_PRODUCT_TYPES[normalized];
-	if (!allowed) {
+	if (allowed) {
+		return allowed;
+	}
+	if (!DYNAMIC_VERTICAL_KEY_REGEX.test(normalized)) {
 		throw new AppError('Invalid business type', `El rubro '${businessType}' no es válido.`, 400);
 	}
-	return allowed;
+	return Object.values(ProductType);
 }
 
 /**
@@ -317,7 +368,8 @@ export function getAllowedProductTypes(businessType?: string): ProductType[] {
  */
 export function getEffectivePlanCapabilities(
 	planTier?: string,
-	businessType?: string
+	businessType?: string,
+	activeAddons?: string[]
 ): PlanCapabilities {
 	if (!planTier || !planTier.trim()) {
 		throw new AppError('Plan tier required', 'El plan de suscripción (planTier) es obligatorio para evaluar capacidades.', 500);
@@ -326,8 +378,15 @@ export function getEffectivePlanCapabilities(
 		throw new AppError('Business type required', 'El rubro comercial (businessType) es obligatorio para evaluar capacidades.', 400);
 	}
 
-	const normalizedTier = planTier.trim().toLowerCase() as VexxPlanTier;
-	if (!Object.values(VexxPlanTier).includes(normalizedTier)) {
+	const rawTier = planTier.trim().toLowerCase();
+	const customPlan = SubscriptionPlanService.getCachedPlanOrFallback(rawTier);
+	const normalizedTier = (
+		Object.values(VexxPlanTier).includes(rawTier as VexxPlanTier)
+			? rawTier
+			: customPlan?.baseTier
+	) as VexxPlanTier | undefined;
+
+	if (!normalizedTier || !Object.values(VexxPlanTier).includes(normalizedTier)) {
 		throw new AppError(
 			'Invalid plan tier',
 			`El plan '${planTier}' no es reconocido. Planes válidos: ${Object.values(VexxPlanTier).join(', ')}`,
@@ -336,27 +395,31 @@ export function getEffectivePlanCapabilities(
 	}
 
 	const normalizedBusinessType = businessType.trim().toLowerCase() as BusinessType;
-	if (!Object.values(BusinessType).includes(normalizedBusinessType)) {
+	if (!DYNAMIC_VERTICAL_KEY_REGEX.test(normalizedBusinessType)) {
 		throw new AppError(
 			'Invalid business type',
-			`El rubro comercial '${businessType}' no es reconocido. Rubros válidos: ${Object.values(BusinessType).join(', ')}`,
+			`El rubro comercial '${businessType}' no tiene un formato válido.`,
 			400
 		);
 	}
 
-	// 1. Clonar las capacidades base del plan contratado
-	const effective: PlanCapabilities = { ...getPlanCapabilities(normalizedTier) };
-
-	// -------------------------------------------------------------------------
-	// [EXTENSION-POINT]: Intersecciones de Negocio (Plan x Rubro)
-	// -------------------------------------------------------------------------
-
-	// Regla A: Shop The Look solo existe si el plan lo incluye Y el rubro es Moda / Indumentaria
-	if (normalizedBusinessType !== BusinessType.FASHION) {
-		effective.hasShopTheLook = false;
+	// Si el comercio tiene una lista explícita de complementos (ej: armada desde SuperAdmin),
+	// ese contrato MANDA 100% por sobre cualquier preset del plan (permite apagar POS/Caja, etc.).
+	if (activeAddons !== undefined) {
+		return buildCapabilitiesFromAddons(activeAddons);
 	}
 
-	// Regla B: Balanza / Pesables solo existe si el rubro realmente fracciona por peso
+	if (!Object.values(BusinessType).includes(normalizedBusinessType)) {
+		throw new AppError(
+			'Invalid business type',
+			`El rubro comercial '${businessType}' requiere activeAddons explícitos o pertenecer al catálogo base.`,
+			400
+		);
+	}
+
+	// Preset teórico del plan (cuando no se pasan complementos explícitos)
+	const effective: PlanCapabilities = { ...getPlanCapabilities(normalizedTier) };
+
 	const weighableRubros: BusinessType[] = [
 		BusinessType.KIOSK_GROCERY,
 		BusinessType.BUTCHER,

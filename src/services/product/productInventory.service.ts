@@ -6,7 +6,7 @@ import { PushNotificationService } from '../pushNotification.service';
 export class ProductInventoryService {
 	static async verifyVariantStock(
 		models: TenantModels,
-		items: { _id: string; sku: string; quantity: number }[]
+		items: { _id: string; sku?: string; quantity: number }[]
 	): Promise<boolean> {
 		try {
 			for (const item of items) {
@@ -16,13 +16,13 @@ export class ProductInventoryService {
 				const hasVariants = Array.isArray(product.variants) && product.variants.length > 0;
 				if (hasVariants) {
 					const variant =
-						product.variants.find((v: any) => v.sku === item.sku && v.isActive) ||
+						product.variants.find((v: any) => v.sku === item.sku && v.isActive !== false) ||
 						(item.sku ? null : product.variants[0]);
 
 					if (!variant) {
 						throw new AppError(
-							`Variant ${item.sku} not found`,
-							`Variante ${item.sku || 'predeterminada'} no encontrada o inactiva en "${product.model}"`,
+							`Variant ${item.sku || 'default'} not found`,
+							`Variante ${item.sku || 'predeterminada'} no encontrada o inactiva en "${product.name || product.model}"`,
 							404
 						);
 					}
@@ -31,21 +31,22 @@ export class ProductInventoryService {
 					if (availableStock < item.quantity) {
 						throw new AppError(
 							`Insufficient stock for variant ${item.sku}`,
-							`Stock insuficiente para "${product.model}" (disponible: ${availableStock})`,
+							`Stock insuficiente para "${product.name || product.model}" (disponible: ${availableStock})`,
 							400
 						);
 					}
 				} else {
-					// Producto simple o al peso sin variantes
-					if (typeof product.stock === 'number') {
-						const availableStock = product.stock - (product.reservedStock || 0);
-						if (availableStock < item.quantity) {
-							throw new AppError(
-								`Insufficient stock for product ${product.model}`,
-								`Stock insuficiente para "${product.model}" (disponible: ${availableStock})`,
-								400
-							);
-						}
+					// Producto simple o al peso sin variantes (Carnicería, Kiosco, Panadería, etc.)
+					const currentStock = typeof product.netStock === 'number'
+						? product.netStock
+						: (typeof product.stock === 'number' ? product.stock : 0);
+					const availableStock = currentStock - (product.reservedStock || 0);
+					if (availableStock < item.quantity) {
+						throw new AppError(
+							`Insufficient stock for product ${product.name || product.model}`,
+							`Stock insuficiente para "${product.name || product.model}" (disponible: ${availableStock})`,
+							400
+						);
 					}
 				}
 			}
@@ -62,7 +63,7 @@ export class ProductInventoryService {
 
 	static async reduceVariantStock(
 		models: TenantModels,
-		items: { _id: string; sku: string; quantity: number }[]
+		items: { _id: string; sku?: string; quantity: number }[]
 	): Promise<boolean> {
 		try {
 			const productIds = items.map((i) => new Types.ObjectId(i._id));
@@ -88,24 +89,24 @@ export class ProductInventoryService {
 							},
 							update: {
 								$inc: {
-									'variants.$[elem].stock': -item.quantity
+									'variants.$[elem].stock': -item.quantity,
+									netStock: -item.quantity
 								}
 							},
 							arrayFilters: [{ 'elem.sku': matchedVariant.sku }]
 						}
 					};
 				} else {
+					// Producto simple o pesable/fraccionado directo en netStock
 					return {
 						updateOne: {
 							filter: {
 								_id: new Types.ObjectId(item._id),
-								...(typeof product?.stock === 'number'
-									? { stock: { $gte: item.quantity } }
-									: {})
+								netStock: { $gte: item.quantity }
 							},
 							update: {
 								$inc: {
-									stock: -item.quantity
+									netStock: -item.quantity
 								}
 							}
 						}
@@ -128,31 +129,57 @@ export class ProductInventoryService {
 				try {
 					const prodIds = [...new Set(items.map((i) => new Types.ObjectId(i._id)))];
 					const updatedProducts = await models.Product.find({ _id: { $in: prodIds } })
-						.select('brand model variants lowStockThreshold')
+						.select('name brand model netStock variants lowStockThreshold')
 						.lean();
 
 					for (const prod of updatedProducts) {
 						const threshold = (prod as any).lowStockThreshold ?? 3;
-						for (const v of (prod as any).variants || []) {
-							const matched = items.find(
-								(it) => String(it._id) === String((prod as any)._id) && it.sku === v.sku
-							);
-							if (matched && v.stock !== undefined && v.stock <= threshold) {
-								const isOutOfStock = v.stock <= 0;
-								const variantLabel = v.sku || v.size || v.color || '';
+						const prodLabel = (prod as any).name || (prod as any).model;
+
+						// Si tiene variantes
+						if (Array.isArray((prod as any).variants) && (prod as any).variants.length > 0) {
+							for (const v of (prod as any).variants) {
+								const matched = items.find(
+									(it) => String(it._id) === String((prod as any)._id) && it.sku === v.sku
+								);
+								if (matched && v.stock !== undefined && v.stock <= threshold) {
+									const isOutOfStock = v.stock <= 0;
+									const variantLabel = v.sku || v.size || v.color || '';
+									PushNotificationService.sendAdminPushNotification({
+										models,
+										title: isOutOfStock
+											? `❌ Sin Stock: ${prodLabel}`
+											: `⚠️ Stock Crítico: ${prodLabel}`,
+										body: isOutOfStock
+											? `La variante ${variantLabel} se quedó sin stock (0 unidades).`
+											: `Quedan solo ${v.stock} unidad(es) disponible(s) de ${variantLabel}.`,
+										channelId: 'store_alerts',
+										data: {
+											productId: String((prod as any)._id),
+											sku: v.sku,
+											currentStock: v.stock,
+											type: 'low_stock'
+										}
+									});
+								}
+							}
+						} else {
+							// Producto simple o al peso
+							const netStock = (prod as any).netStock ?? 0;
+							if (netStock <= threshold) {
+								const isOutOfStock = netStock <= 0;
 								PushNotificationService.sendAdminPushNotification({
 									models,
 									title: isOutOfStock
-										? `❌ Sin Stock: ${(prod as any).model}`
-										: `⚠️ Stock Crítico: ${(prod as any).model}`,
+										? `❌ Sin Stock: ${prodLabel}`
+										: `⚠️ Stock Crítico: ${prodLabel}`,
 									body: isOutOfStock
-										? `La variante ${variantLabel} se quedó sin stock (0 unidades).`
-										: `Quedan solo ${v.stock} unidad(es) disponible(s) de ${variantLabel}.`,
+										? `El producto "${prodLabel}" se quedó sin stock.`
+										: `Quedan solo ${netStock} unidad(es)/medida(s) disponible(s) de "${prodLabel}".`,
 									channelId: 'store_alerts',
 									data: {
 										productId: String((prod as any)._id),
-										sku: v.sku,
-										currentStock: v.stock,
+										currentStock: netStock,
 										type: 'low_stock'
 									}
 								});
@@ -170,7 +197,7 @@ export class ProductInventoryService {
 			if (error instanceof AppError) throw error;
 			throw new AppError(
 				'Failed to reduce variant stock',
-				'Error al reducir el stock de la variante',
+				'Error al reducir el stock del producto',
 				500
 			);
 		}
@@ -178,24 +205,36 @@ export class ProductInventoryService {
 
 	static async restoreVariantStock(
 		models: TenantModels,
-		items: { product: any; variantSku: string; quantity: number }[]
+		items: { product: any; variantSku?: string; quantity: number }[]
 	) {
 		for (const item of items) {
 			try {
-				// Usamos .collection para bypassear el Strict Mode del Schema Base
-				await models.Product.collection.findOneAndUpdate(
-					{
-						_id: new Types.ObjectId(item.product.toString()),
-						'variants.sku': item.variantSku
-					},
-					{ $inc: { 'variants.$[elem].stock': item.quantity } },
-					{ arrayFilters: [{ 'elem.sku': item.variantSku }] }
-				);
+				const prodId = new Types.ObjectId(item.product.toString());
+				if (item.variantSku) {
+					await models.Product.collection.findOneAndUpdate(
+						{
+							_id: prodId,
+							'variants.sku': item.variantSku
+						},
+						{
+							$inc: {
+								'variants.$[elem].stock': item.quantity,
+								netStock: item.quantity
+							}
+						},
+						{ arrayFilters: [{ 'elem.sku': item.variantSku }] }
+					);
+				} else {
+					await models.Product.collection.findOneAndUpdate(
+						{ _id: prodId },
+						{ $inc: { netStock: item.quantity } }
+					);
+				}
 			} catch (error) {
 				if (error instanceof AppError) throw error;
 				throw new AppError(
 					'Failed to restore variant stock',
-					'Error al restaurar el stock de la variante',
+					'Error al restaurar el stock del producto',
 					500
 				);
 			}

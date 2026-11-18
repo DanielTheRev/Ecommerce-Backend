@@ -1,6 +1,138 @@
 import { IProduct } from '@/interfaces/product.interface';
 
+export interface IVariantAxisOption {
+	value: string;
+	hex?: string;
+	available: boolean;
+	imageIds?: string[];
+}
+
+export interface IVariantAxis {
+	key: string;
+	label: string;
+	type: 'swatch' | 'pill';
+	options: IVariantAxisOption[];
+}
+
 export class ProductDisplayService {
+	/**
+	 * Construye los ejes universales de variantes (Color, Talle, Presentación, y atributos dinámicos)
+	 * para que el Storefront o cualquier cliente renderice selectores sin asumir que todas las variantes tienen color.
+	 */
+	public static buildVariantAxes(product: Pick<IProduct, 'variants' | 'images'>): IVariantAxis[] {
+		const activeVariants = (product.variants || []).filter((v: any) => v && v.isActive !== false) as any[];
+		if (activeVariants.length === 0) return [];
+
+		const images = Array.isArray(product.images) ? product.images : [];
+		const axes: IVariantAxis[] = [];
+
+		const collectImageIdsForSkus = (skus: string[]): string[] => {
+			if (skus.length === 0 || images.length === 0) return [];
+			const skuSet = new Set(skus);
+			return images
+				.filter((img: any) => Array.isArray(img.variantSkus) && img.variantSkus.some((s: string) => skuSet.has(s)))
+				.map((img: any) => img.id || img.public_id)
+				.filter(Boolean);
+		};
+
+		const buildAxisFromExtractor = (
+			key: string,
+			label: string,
+			type: 'swatch' | 'pill',
+			extractValue: (v: any) => { value: string; hex?: string } | null
+		) => {
+			const map = new Map<string, { value: string; hex?: string; available: boolean; skus: string[] }>();
+			for (const v of activeVariants) {
+				const extracted = extractValue(v);
+				if (!extracted || !extracted.value) continue;
+				const valKey = extracted.value.trim();
+				const existing = map.get(valKey);
+				const avail = (Number(v.stock || 0) - Number(v.reservedStock || 0)) > 0;
+				const sku = typeof v.sku === 'string' ? v.sku : '';
+				if (!existing) {
+					map.set(valKey, {
+						value: valKey,
+						hex: extracted.hex,
+						available: avail,
+						skus: sku ? [sku] : [],
+					});
+				} else {
+					existing.available = existing.available || avail;
+					if (!existing.hex && extracted.hex) existing.hex = extracted.hex;
+					if (sku) existing.skus.push(sku);
+				}
+			}
+
+			if (map.size > 0) {
+				axes.push({
+					key,
+					label,
+					type,
+					options: Array.from(map.values()).map((opt) => {
+						const imageIds = collectImageIdsForSkus(opt.skus);
+						return {
+							value: opt.value,
+							...(opt.hex ? { hex: opt.hex } : {}),
+							available: opt.available,
+							...(imageIds.length > 0 ? { imageIds } : {}),
+						};
+					}),
+				});
+			}
+		};
+
+		buildAxisFromExtractor('color', 'Color', 'swatch', (v) =>
+			v.color?.name ? { value: String(v.color.name), hex: v.color.hex } : null
+		);
+		buildAxisFromExtractor('size', 'Talle', 'pill', (v) =>
+			v.size ? { value: String(v.size) } : null
+		);
+		buildAxisFromExtractor('volume', 'Presentación', 'pill', (v) =>
+			v.volume ? { value: String(v.volume) } : null
+		);
+
+		const attrNames: string[] = [];
+		for (const v of activeVariants) {
+			if (Array.isArray(v.attributes)) {
+				for (const attr of v.attributes) {
+					if (attr?.name && !attrNames.includes(String(attr.name).trim())) {
+						attrNames.push(String(attr.name).trim());
+					}
+				}
+			}
+		}
+
+		for (const attrName of attrNames) {
+			const normalizedKey = attrName.toLowerCase();
+			buildAxisFromExtractor(normalizedKey, attrName, 'pill', (v) => {
+				if (!Array.isArray(v.attributes)) return null;
+				const match = v.attributes.find((a: any) => String(a?.name || '').trim() === attrName);
+				return match?.value ? { value: String(match.value) } : null;
+			});
+		}
+
+		return axes;
+	}
+
+	/**
+	 * Proyecta un producto público adjuntando `variantAxes` y asegurando `crops[]` / `variantSkus[]` en imágenes.
+	 */
+	public static projectPublicProduct<T extends IProduct>(product: T): T & { variantAxes: IVariantAxis[] } {
+		const variantAxes = this.buildVariantAxes(product);
+		const normalizedImages = Array.isArray(product.images)
+			? product.images.map((img: any) => ({
+				...img,
+				id: img.id || img.public_id,
+				crops: Array.isArray(img.crops) ? img.crops : [],
+				variantSkus: Array.isArray(img.variantSkus) ? img.variantSkus : [],
+			}))
+			: [];
+		return {
+			...product,
+			images: normalizedImages,
+			variantAxes,
+		};
+	}
 	/**
 	 * Clasifica automáticamente la categoría de un producto en una zona corporal macro para indumentaria,
 	 * o retorna la categoría directa normalizada para otros rubros (Tech, Beauty, General).

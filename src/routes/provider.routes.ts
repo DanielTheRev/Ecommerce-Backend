@@ -1,9 +1,11 @@
 import { Router } from "express";
 import { ProviderController } from "@/controllers/provider.controller";
 import { protect, adminOnly, staffOnly } from "@/middleware/auth";
-
+import { requirePlanCapability } from "@/middleware/planGuard";
 
 const router: Router = Router();
+
+router.use(requirePlanCapability('hasSupplierPurchases', 'Proveedores & Compras'));
 
 router.get('/', protect, staffOnly, ProviderController.getProviders);
 router.get('/:id', protect, adminOnly, ProviderController.getProviderByIdWithProducts);

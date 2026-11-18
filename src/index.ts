@@ -20,6 +20,8 @@ import paymentMethodRoutes from './routes/paymentMethod.routes';
 import productRoutes from './routes/product.routes';
 import shippingRoutes from './routes/shipping.routes';
 import shopTheLookRoutes from './routes/shopTheLook.routes';
+import dataSetRoutes from './routes/dataSet.routes';
+import productBundleRoutes from './routes/productBundle.routes';
 import { socketManager } from './sockets/socketManager';
 import providerRoutes from './routes/provider.routes';
 import addressRoutes from './routes/address.routes';
@@ -40,6 +42,8 @@ import masterCatalogRoutes from './routes/masterCatalog.routes';
 import feedRoutes from './routes/feed.routes';
 import roleProfileRoutes from './routes/roleProfile.routes';
 import tenantBootstrapRoutes from './routes/tenantBootstrap.routes';
+import addonRoutes from './routes/addon.routes';
+import { StorefrontTemplateController } from './controllers/storefrontTemplate.controller';
 import { MasterCatalogService } from './services/masterCatalog.service';
 
 // Cargar variables de entorno según el entorno (development vs production)
@@ -103,11 +107,18 @@ app.get('/health', (req: Request, res: Response) => {
 
 // Rutas maestras de plataforma (SuperAdmin VEX — NO requieren resolveTenant)
 app.use('/api/master', masterRoutes);
+app.use('/api/master/master', masterRoutes); // Alias defensivo cuando environment.apiUrl ya incluye /api/master
 app.use('/master', masterRoutes);
 
 // Catálogo Global Maestro de Kioscos y Productos Masivos (Global / Cross-Tenant)
 app.use('/api/master-catalog', masterCatalogRoutes);
 app.use('/master-catalog', masterCatalogRoutes);
+
+// Resolución pública de Storefront por Hostname (*.vexx.com.ar o Dominio Propio, sin requerir x-api-key previo)
+app.get('/api/storefront/resolve-host', StorefrontTemplateController.resolveHostPublic.bind(StorefrontTemplateController));
+app.get('/storefront/resolve-host', StorefrontTemplateController.resolveHostPublic.bind(StorefrontTemplateController));
+app.get('/api/ecommerce/resolve-host', StorefrontTemplateController.resolveHostPublic.bind(StorefrontTemplateController));
+app.get('/ecommerce/resolve-host', StorefrontTemplateController.resolveHostPublic.bind(StorefrontTemplateController));
 
 const registerRoutes = (prefix: string) => {
 	app.use(`${prefix}/products`, resolveTenant, productRoutes);
@@ -126,7 +137,10 @@ const registerRoutes = (prefix: string) => {
 	app.use(`${prefix}/cash-register`, resolveTenant, cashRegisterRoutes);
 	app.use(`${prefix}/pos`, resolveTenant, posRoutes);
 	app.use(`${prefix}/account-movements`, resolveTenant, accountMovementRoutes);
-	app.use(`${prefix}/shop-the-look`, resolveTenant, shopTheLookRoutes);
+	app.use(`${prefix}/shop-the-look`, resolveTenant, shopTheLookRoutes); // Archivado en caja / Solo lectura
+	app.use(`${prefix}/data-sets`, resolveTenant, dataSetRoutes);
+	app.use(`${prefix}/product-bundles`, resolveTenant, productBundleRoutes);
+	app.use(`${prefix}/bundles`, resolveTenant, productBundleRoutes);
 	app.use(`${prefix}/provider`, resolveTenant, providerRoutes);
 	app.use(`${prefix}/addresses`, resolveTenant, addressRoutes);
 	app.use(`${prefix}/favorites`, resolveTenant, favoritesRoutes);
@@ -142,6 +156,7 @@ const registerRoutes = (prefix: string) => {
 	app.use(`${prefix}/feeds`, feedRoutes);
 	app.use(`${prefix}/role-profiles`, resolveTenant, roleProfileRoutes);
 	app.use(`${prefix}/tenant`, resolveTenant, tenantBootstrapRoutes);
+	app.use(`${prefix}/addons`, resolveTenant, addonRoutes);
 };
 
 // Soportar tanto /api/... como /... (compatibilidad directa con subdominios api.*)

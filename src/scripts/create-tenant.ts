@@ -21,6 +21,7 @@ import slugify from 'slugify';
 import { connectionManager } from '../config/multitenancy';
 import { getModelsForConnection } from '../config/modelRegistry';
 import { ITenant, TenantBusinessType, TenantPlan } from '../interfaces/tenant.interface';
+import { VexxPlanTier } from '../interfaces/plan.interface';
 import { Role } from '../interfaces/user.interface';
 import { BUSINESS_VERTICAL_OPTIONS } from '../config/planCapabilities';
 
@@ -96,30 +97,34 @@ async function createTenant() {
 			0 // Por defecto: Kiosco / Maxikiosco / Almacén
 		);
 
-		// 3️⃣ Selección interactiva del Plan de Vexx
-		const plan = await select<TenantPlan>(
-			'📦 Seleccioná el Plan Comercial de Vexx:',
+		// 3️⃣ Selección interactiva del Plan Modular de Vexx
+		const planTier = await select<VexxPlanTier>(
+			'📦 Seleccioná el Plan Modular de Vexx:',
 			[
 				{
-					label: 'Plan Básico — Solo Mostrador / POS de Barrio',
-					value: TenantPlan.basic,
+					label: 'Plan Local ($30.000) — Mostrador, Caja, POS, Fiado & 10 empleados',
+					value: VexxPlanTier.LOCAL,
 					desc: 'Terminal de cobro rápido, control de stock y arqueo de caja registradora'
 				},
 				{
-					label: 'Plan Premium — Mostrador + Tienda Online + Facturación AFIP',
-					value: TenantPlan.premium,
-					desc: 'POS + eCommerce web completo + Pasarelas de pago + Facturación electrónica ARCA'
+					label: 'Plan Point ($48.000) — Local + Catálogo Web, Pedidos Online & Combos',
+					value: VexxPlanTier.POINT,
+					desc: 'Mostrador + Catálogo interactivo para clientes + Pedidos por WhatsApp/Web'
+				},
+				{
+					label: 'Plan Pro ($85.000) — Omnicanal Full, Tienda Web, Dominio Propio & 25 empleados',
+					value: VexxPlanTier.PRO,
+					desc: 'Suite completa: POS + Tienda eCommerce propia + Pasarelas + Facturación ARCA'
 				}
 			],
-			0 // Por defecto: Básico
+			0 // Por defecto: Local
 		);
+
+		const plan = planTier === VexxPlanTier.PRO ? TenantPlan.premium : TenantPlan.basic;
 
 		const domain = await ask('🌐 Dominio propio (opcional, ej: micomercios.com.ar)', '');
 		const logo = await ask('🖼️  Logo URL (opcional)', '');
 		const primaryColor = await ask('🎨 Color primario hex', '#059669');
-
-		const commissionStr = await ask('💰 Comisión % de Vexx por venta (0 si es negocio propio o abono fijo)', '0');
-		const commission = parseFloat(commissionStr) || 0;
 
 		// 4️⃣ Datos del usuario admin
 		console.log('\n👤 Datos del Administrador / Dueño del negocio:');
@@ -150,7 +155,6 @@ async function createTenant() {
 		console.log(`   Slug:           ${slug}`);
 		console.log(`   Rubro:          ${businessType}`);
 		console.log(`   Plan Vexx:      ${plan.toUpperCase()}`);
-		console.log(`   Comisión Vexx:  ${commission}%`);
 		console.log(`   Base de Datos:  ${dbName}`);
 		console.log(`   Storefront Key: ${apiKey}`);
 		console.log(`   Dominio:        ${domain || '(sin dominio propio)'}`);
@@ -188,10 +192,9 @@ async function createTenant() {
 			domain: domain || undefined,
 			isActive: true,
 			plan,
-			commission: {
-				percentage: commission,
-				fixedFee: 0
-			},
+			planTier,
+			activeAddons: [],
+			customLabels: {},
 			settings: {
 				logo,
 				primaryColor,

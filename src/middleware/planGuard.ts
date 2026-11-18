@@ -4,6 +4,7 @@ import { PlanCapabilities, VexxPlanTier } from '@/interfaces/plan.interface';
 import { getEffectivePlanCapabilities } from '@/config/planCapabilities';
 import { AppError } from '@/errors/app.error';
 import { ITenant } from '@/interfaces/tenant.interface';
+import { SubscriptionPlanService } from '@/services/subscriptionPlan.service';
 
 /**
  * Validador estricto de suscripción y rubro para un tenant.
@@ -30,7 +31,8 @@ export const validateTenantSubscriptionIntegrity = (tenant?: ITenant): void => {
 	}
 
 	const normalizedTier = tenant.planTier.trim().toLowerCase() as VexxPlanTier;
-	if (!Object.values(VexxPlanTier).includes(normalizedTier)) {
+	const customPlan = SubscriptionPlanService.getCachedPlanOrFallback(normalizedTier);
+	if (!Object.values(VexxPlanTier).includes(normalizedTier) && !customPlan) {
 		throw new AppError(
 			'Invalid plan tier',
 			`Acceso denegado: El plan '${tenant.planTier}' del comercio '${tenant.slug}' no es válido. Planes soportados: ${Object.values(VexxPlanTier).join(', ')}.`,
@@ -60,7 +62,11 @@ export const requirePlanCapability = (
 	return (req: TenantRequest, res: Response, next: NextFunction): void => {
 		validateTenantSubscriptionIntegrity(req.tenant);
 
-		const planCaps = getEffectivePlanCapabilities(req.tenant!.planTier, req.tenant!.businessType);
+		const planCaps = getEffectivePlanCapabilities(
+			req.tenant!.planTier,
+			req.tenant!.businessType,
+			req.tenant!.activeAddons
+		);
 		if (!planCaps[capability]) {
 			const label = featureLabel || String(capability);
 			const planName = req.tenant!.planTier!.toUpperCase();

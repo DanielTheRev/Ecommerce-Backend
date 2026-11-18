@@ -5,7 +5,7 @@ import { requirePlanCapability } from '@/middleware/planGuard';
 import { imageUpload } from '@/config/multer';
 
 import { validateSchema } from '@/middleware/validator.middleware';
-import { CreateProductSchema, UpdateProductSchema, PriceCalculatorSchema } from '@/schemas/product.schema';
+import { CreateProductSchema, UpdateProductSchema, PriceCalculatorSchema } from '@/validators/product.schema';
 
 const router: Router = Router();
 

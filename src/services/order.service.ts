@@ -47,6 +47,34 @@ import { getDolar } from './dolar.service';
 export const ADMIN_PRICE_SELECT = '+finance.baseCost +finance.earnings +finance.earningsOppositeCurrency +items.productSnapshot.providerSnapshot +items.productSnapshot.finance';
 
 export class OrderService {
+	private static resolveEffectivePriceStruct(product: any, variant?: any) {
+		if (variant && variant.inheritPrice === false && variant.prices) {
+			return variant.prices;
+		}
+		return product?.price;
+	}
+
+	private static resolveUnitPriceForPayment(
+		priceStruct: any,
+		paymentType: PaymentType,
+		installments?: number
+	): number {
+		switch (paymentType) {
+			case PaymentType.CARD:
+				if (installments !== undefined && installments === 1) {
+					return priceStruct?.card_ticket1PayPrice || priceStruct?.listPrice || 0;
+				}
+				return priceStruct?.listPrice || 0;
+			case PaymentType.TICKET:
+				return priceStruct?.card_ticket1PayPrice || priceStruct?.listPrice || 0;
+			case PaymentType.CASH:
+			case PaymentType.BANK_TRANSFER:
+			case PaymentType.ALIAS_TRANSFER:
+			default:
+				return priceStruct?.cashTransferPrice || 0;
+		}
+	}
+
 	private static generateOrderNumber(): string {
 		const shortId = Math.random().toString(36).substring(2, 10).toUpperCase();
 		return `REV-${shortId}`;
@@ -229,29 +257,50 @@ export class OrderService {
 				installments = data.mercadopagoData.installments;
 			}
 
+			// Intersección de restricciones de pago por producto en el carrito
+			const allowCardPayment = processedOrderItems.every(
+				(item) => item.data.paymentRestrictions?.allowCardPayment !== false
+			);
+			const allowInterestFreeInstallments = processedOrderItems.every(
+				(item) => item.data.paymentRestrictions?.allowInterestFreeInstallments !== false
+			);
+
+			if (paymentMethod.type === PaymentType.CARD && !allowCardPayment) {
+				throw new AppError(
+					'Card payment restricted for cart item',
+					'Uno o más productos del carrito solo admiten pago en Efectivo / Transferencia / QR (sin tarjeta).',
+					400
+				);
+			}
+			if (paymentMethod.type === PaymentType.CARD && (installments ?? 1) > 1 && !allowInterestFreeInstallments) {
+				throw new AppError(
+					'Interest-free installments restricted for cart item',
+					'Uno o más productos del carrito no participan en cuotas sin interés (solo 1 pago o contado).',
+					400
+				);
+			}
+
+			// Intersección de tope máximo de cuotas sin interés por producto en el carrito
+			const productInstallmentCaps = processedOrderItems
+				.map((item) => item.data.paymentRestrictions?.maxInstallments)
+				.filter((cap): cap is number => typeof cap === 'number' && cap >= 1);
+			if (paymentMethod.type === PaymentType.CARD && productInstallmentCaps.length > 0) {
+				const maxAllowedByCart = Math.min(...productInstallmentCaps);
+				if ((installments ?? 1) > maxAllowedByCart) {
+					throw new AppError(
+						'Installment cap exceeded for cart item',
+						`Uno o más productos del carrito admiten hasta ${maxAllowedByCart} cuota(s) sin interés.`,
+						400
+					);
+				}
+			}
+
 			/* calculate dynamic shipping logic */
 			const config = await EcommerceService.getConfig(models);
 			const threshold = config.shippingConfig?.freeShippingThreshold ?? 80000;
 			const subtotalBase = processedOrderItems.reduce((acc, item) => {
-				let unitPrice = item.data.price?.cashTransferPrice || 0;
-				switch (paymentMethod.type) {
-					case PaymentType.CARD:
-						if (installments !== undefined && installments === 1) {
-							unitPrice = item.data.price?.card_ticket1PayPrice || item.data.price?.listPrice || 0;
-						} else {
-							unitPrice = item.data.price?.listPrice || 0;
-						}
-						break;
-					case PaymentType.TICKET:
-						unitPrice = item.data.price?.card_ticket1PayPrice || item.data.price?.listPrice || 0;
-						break;
-					case PaymentType.CASH:
-					case PaymentType.BANK_TRANSFER:
-					case PaymentType.ALIAS_TRANSFER:
-					default:
-						unitPrice = item.data.price?.cashTransferPrice || 0;
-						break;
-				}
+				const priceStruct = this.resolveEffectivePriceStruct(item.data, item.variantSnapshot);
+				const unitPrice = this.resolveUnitPriceForPayment(priceStruct, paymentMethod.type, installments);
 				return acc + (unitPrice * item.quantity);
 			}, 0);
 			const totalItems = processedOrderItems.reduce((acc, item) => acc + item.quantity, 0);
@@ -328,25 +377,8 @@ export class OrderService {
 			const status = OrderStatus.PENDING_PAYMENT;
 
 			const orderItems = processedOrderItems.map((item) => {
-				let unitPrice = item.data.price?.cashTransferPrice || 0;
-				switch (paymentMethod.type) {
-					case PaymentType.CARD:
-						if (installments !== undefined && installments === 1) {
-							unitPrice = item.data.price?.card_ticket1PayPrice || 0;
-						} else {
-							unitPrice = item.data.price?.listPrice || 0;
-						}
-						break;
-					case PaymentType.TICKET:
-						unitPrice = item.data.price?.card_ticket1PayPrice || 0;
-						break;
-					case PaymentType.CASH:
-					case PaymentType.BANK_TRANSFER:
-					case PaymentType.ALIAS_TRANSFER:
-					default:
-						unitPrice = item.data.price?.cashTransferPrice || 0;
-						break;
-				}
+				const priceStruct = this.resolveEffectivePriceStruct(item.data, item.variantSnapshot);
+				const unitPrice = this.resolveUnitPriceForPayment(priceStruct, paymentMethod.type, installments);
 				return {
 					productSnapshot: item.productSnapshot as IProductSnapshot,
 					variantSnapshot: item.variantSnapshot as IVariant,
@@ -1374,13 +1406,17 @@ export class OrderService {
 
 			const orderItems = itemsData.map(item => {
 				const variant = item.data.variants?.find((v: any) => v.sku === item.variantSku) as any;
+				const priceStruct = this.resolveEffectivePriceStruct(item.data, variant);
 
 				// precio base (efectivo/transferencia es lo más común para mostrador)
-				const price = item.data.price?.cashTransferPrice || 0;
+				const price = priceStruct?.cashTransferPrice || 0;
 				// costo del producto para calcular la ganancia
-				const costPrice = isARS 
-					? (item.data.finance?.providerCost?.inARS || 0) 
-					: (item.data.finance?.providerCost?.inUSD || 0);
+				const hasVariantCost = variant?.inheritPrice === false && typeof variant?.providerCost === 'number';
+				const costPrice = hasVariantCost
+					? variant.providerCost
+					: (isARS
+						? (item.data.finance?.providerCost?.inARS || 0)
+						: (item.data.finance?.providerCost?.inUSD || 0));
 
 				totalCost += Math.round(price * item.quantity);
 				totalEarnings += Math.round((price - costPrice) * item.quantity);
@@ -1394,19 +1430,23 @@ export class OrderService {
 						slug: item.data.slug || '',
 						isSoldByWeight: Boolean((item.data as any).isSoldByWeight),
 						unit: (item.data as any).unit || 'Unidad',
-						price: item.data.price
+						price: priceStruct
 					},
 					variantSnapshot: {
 						sku: variant?.sku || item.variantSku || 'DEFAULT',
+						label: variant?.label,
 						size: variant?.size,
+						volume: variant?.volume,
 						attributes: variant?.attributes,
-						color: variant?.color
+						color: variant?.color,
+						inheritPrice: variant?.inheritPrice,
+						prices: variant?.prices
 					},
 					quantity: item.quantity,
 					price,
 					costPriceSnapshot: {
-						inUSD: item.data.finance?.providerCost?.inUSD || 0,
-						inARS: item.data.finance?.providerCost?.inARS || 0
+						inUSD: hasVariantCost && !isARS ? variant.providerCost : (item.data.finance?.providerCost?.inUSD || 0),
+						inARS: hasVariantCost && isARS ? variant.providerCost : (item.data.finance?.providerCost?.inARS || 0)
 					}
 				};
 			});

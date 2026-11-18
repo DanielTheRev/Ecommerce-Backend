@@ -162,7 +162,7 @@ export class EcommerceConfigController {
 	// GET /api/Ecommerce/config/public - Obtener la configuración pública
 	static async getPublicConfig(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
-			const configObj = await EcommerceService.getPublicConfig(req.models!, req.tenant?.slug);
+			const configObj = await EcommerceService.getPublicConfig(req.models!, req.tenant?.slug, req.tenant);
 			if (req.user && req.user.role === 'employee') {
 				const sanitized = (configObj as any)?.toObject ? (configObj as any).toObject() : { ...configObj };
 				if (sanitized?.integrations) {
@@ -182,7 +182,7 @@ export class EcommerceConfigController {
 	// GET /api/Ecommerce/config - Obtener la configuración global
 	static async getConfig(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
-			const configObj = await EcommerceService.getConfig(req.models!);
+			const configObj = await EcommerceService.getConfig(req.models!, req.tenant);
 			if (req.user && req.user.role === 'employee') {
 				const sanitized = (configObj as any)?.toObject ? (configObj as any).toObject() : { ...configObj };
 				if (sanitized?.integrations) {
@@ -227,7 +227,7 @@ export class EcommerceConfigController {
 			delete data.capabilities;
 			const userId = req.user ? (req.user._id as string).toString() : undefined;
 
-			const { config: updatedConfig, shouldRecalculate } = await EcommerceService.updateConfig(req.models!, data, userId, req.tenant?.slug);
+			const { config: updatedConfig, shouldRecalculate } = await EcommerceService.updateConfig(req.models!, data, userId, req.tenant?.slug, req.tenant);
 
 			res.status(200).json({
 				success: true,
@@ -453,6 +453,17 @@ export class EcommerceConfigController {
 	// POST /api/config/connection/regenerate-key - Regenerar Storefront API Key
 	static async regenerateApiKey(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
+			if (req.models?.AddonInstallation) {
+				const inst = await req.models.AddonInstallation.findOne({ addonId: 'storefront_connection' }).lean();
+				if (inst?.settings && inst.settings.allowMerchantRegenerateApiKey === false) {
+					throw new AppError(
+						'Action restricted',
+						'La regeneración de API Key está deshabilitada para este comercio. Contactá a soporte de Vexx.',
+						403
+					);
+				}
+			}
+
 			const { connectionManager } = await import('@/config/multitenancy');
 			const masterDb = connectionManager.getMasterDb();
 			const TenantModel = masterDb.model<any>('Tenant');
@@ -493,7 +504,37 @@ export class EcommerceConfigController {
 				throw new AppError('Invalid format', 'allowedOrigins debe ser un array de strings', 400);
 			}
 
+			let maxAllowedOrigins = 10;
+			if (req.models?.AddonInstallation) {
+				const inst = await req.models.AddonInstallation.findOne({ addonId: 'storefront_connection' }).lean();
+				if (inst?.settings) {
+					if (inst.settings.allowMerchantEditAllowedOrigins === false) {
+						throw new AppError(
+							'Action restricted',
+							'La edición de dominios CORS permitidos está restringida para este comercio.',
+							403
+						);
+					}
+					if (typeof inst.settings.maxAllowedOrigins === 'number' && inst.settings.maxAllowedOrigins > 0) {
+						maxAllowedOrigins = inst.settings.maxAllowedOrigins;
+					}
+				}
+			}
+
+			const cleanList = allowedOrigins
+				.map((d: string) => String(d).trim().replace(/\/+$/, ''))
+				.filter(Boolean);
+
+			if (cleanList.length > maxAllowedOrigins) {
+				throw new AppError(
+					'Max origins exceeded',
+					`Podés autorizar hasta un máximo de ${maxAllowedOrigins} orígenes CORS.`,
+					400
+				);
+			}
+
 			const { connectionManager } = await import('@/config/multitenancy');
+			const { loadAllTenantOrigins } = await import('@/config/cors');
 			const masterDb = connectionManager.getMasterDb();
 			const TenantModel = masterDb.model<any>('Tenant');
 			const tenant = await TenantModel.findById(req.tenant?._id);
@@ -506,13 +547,11 @@ export class EcommerceConfigController {
 				tenant.settings = { allowedOrigins: [] };
 			}
 
-			// Limpieza de dominios (trim y sin trailing slash)
-			tenant.settings.allowedOrigins = allowedOrigins
-				.map((d: string) => String(d).trim().replace(/\/+$/, ''))
-				.filter(Boolean);
+			tenant.settings.allowedOrigins = cleanList;
 
 			await tenant.save();
 			connectionManager.invalidateTenantCache(tenant.slug);
+			await loadAllTenantOrigins();
 
 			res.status(200).json({
 				success: true,

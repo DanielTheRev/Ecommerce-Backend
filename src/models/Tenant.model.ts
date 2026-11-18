@@ -23,13 +23,34 @@ export const TenantSchema = new Schema<ITenant>(
 		},
 		businessType: {
 			type: String,
-			enum: ['fashion', 'kiosk_grocery', 'gastronomy', 'tech_electronics', 'butcher', 'bakery'],
+			trim: true,
+			lowercase: true,
+			match: [/^[a-z0-9_]+$/, 'El rubro comercial debe tener formato slug válido (minúsculas, números y _)'],
 			required: [true, 'El rubro comercial es obligatorio']
 		},
 		domain: {
 			type: String,
 			trim: true,
+			lowercase: true,
 			sparse: true
+		},
+		domainMode: {
+			type: String,
+			enum: ['vexx_subdomain', 'custom_domain'],
+			default: 'vexx_subdomain'
+		},
+		activeTemplateKey: {
+			type: String,
+			trim: true,
+			lowercase: true
+		},
+		unlockedTemplates: {
+			type: [String],
+			default: []
+		},
+		templateSettings: {
+			type: Schema.Types.Mixed,
+			default: {}
 		},
 		apiKey: {
 			type: String,
@@ -58,26 +79,28 @@ export const TenantSchema = new Schema<ITenant>(
 		},
 		planTier: {
 			type: String,
-			enum: ['local', 'point', 'pro'],
+			trim: true,
+			lowercase: true,
+			match: [/^[a-z0-9_-]+$/, 'El código de plan (planTier) debe tener formato slug válido'],
 			required: [true, 'El plan de suscripción (planTier) es obligatorio']
+		},
+		activeAddons: {
+			type: [String],
+			default: []
+		},
+		customLabels: {
+			type: Map,
+			of: String,
+			default: {}
+		},
+		addonLabels: {
+			type: Schema.Types.Mixed,
+			default: {}
 		},
 		extraEmployeesPurchased: {
 			type: Number,
 			default: 0,
 			min: 0
-		},
-		commission: {
-			percentage: {
-				type: Number,
-				default: 10,
-				min: 0,
-				max: 100
-			},
-			fixedFee: {
-				type: Number,
-				default: 0,
-				min: 0
-			}
 		},
 		settings: {
 			logo: { type: String },

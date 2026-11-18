@@ -14,6 +14,8 @@ export const defaultOrigins = [
 	'http://localhost:5173',
 	'https://panel.vexx.com.ar',
 	'https://www.panel.vexx.com.ar',
+	'https://console.vexx.com.ar',
+	'https://www.console.vexx.com.ar',
 	'https://control-panel-50s.pages.dev',
 	'https://vura.com.ar',
 	'https://www.vura.com.ar',
@@ -31,10 +33,24 @@ export async function loadAllTenantOrigins(): Promise<void> {
 		const TenantModel = masterDb.model<ITenant>('Tenant');
 		const tenants = await TenantModel.find({ isActive: true }).lean();
 		for (const tenant of tenants) {
+			const cleanOrigins = new Set<string>();
 			if (tenant.settings?.allowedOrigins && Array.isArray(tenant.settings.allowedOrigins)) {
-				// Normalizar quitando trailing slashes si existieran
-				const cleanOrigins = tenant.settings.allowedOrigins.map(o => o.trim().replace(/\/+$/, ''));
-				tenantOriginsCache.set(tenant.slug, cleanOrigins);
+				for (const o of tenant.settings.allowedOrigins) {
+					const trimmed = o.trim().replace(/\/+$/, '');
+					if (trimmed) cleanOrigins.add(trimmed);
+				}
+			}
+			if (tenant.domain && typeof tenant.domain === 'string') {
+				const bare = tenant.domain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+				if (bare) {
+					cleanOrigins.add(`https://${bare}`);
+					if (!bare.startsWith('www.')) {
+						cleanOrigins.add(`https://www.${bare}`);
+					}
+				}
+			}
+			if (cleanOrigins.size > 0) {
+				tenantOriginsCache.set(tenant.slug, Array.from(cleanOrigins));
 			}
 		}
 		console.log(`🔒 CORS: ${tenantOriginsCache.size} tenants cargados`);

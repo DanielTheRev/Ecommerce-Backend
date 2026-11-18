@@ -1,5 +1,7 @@
-import { ICostConcept } from './product.interface';
+import { IChannelPricingConfig, ICostConcept } from './product.interface';
 import { PlanCapabilities } from './plan.interface';
+import { ChannelKey, IMercadoPagoSurfaceConfig } from '@/addons/price_builder/priceBuilder.types';
+import { ITenantStorefrontSummary } from './storefrontTemplate.interface';
 
 export type BusinessType =
 	| 'kiosk_grocery'
@@ -133,6 +135,8 @@ export interface IEcommerceIntegrations {
 	arca?: IArcaIntegrationConfig;
 }
 
+export type PriceRoundingMode = 'exact' | '10' | '50' | '100' | '500' | 'auto';
+
 export interface IPricingStrategy {
 	/** 'markup' = sobre el costo (default), 'margin' = sobre el precio de venta */
 	method: PricingMethod;
@@ -148,6 +152,10 @@ export interface IPricingStrategy {
 	cashDiscountPercentage?: number;
 	/** Si true, el cliente que paga en 1 pago con tarjeta o débito paga el precio de oferta/transferencia. Si false (recomendado), paga el precio de lista. */
 	card1PayDiscount?: boolean;
+	debitCommission?: number;
+	/** Regla de redondeo ("embellecimiento") aplicada por PriceBuilderEngine */
+	priceRoundingMode?: PriceRoundingMode;
+	defaultChannelPricing?: IChannelPricingConfig;
 }
 
 export interface IRecommendationConfig {
@@ -160,6 +168,15 @@ export interface IPOSConfig {
 	transferValidationMode: 'fast_receipt' | 'strict_admin_approval';
 	allowManualDiscount?: boolean;
 	autoPrintReceipt?: boolean;
+}
+
+export interface ISizeGuideTemplate {
+	id: string;
+	name: string;
+	headers: string[];
+	defaultRows: string[];
+	tolerance?: string;
+	isDefault?: boolean;
 }
 
 export interface IEcommerceConfig {
@@ -185,6 +202,7 @@ export interface IEcommerceConfig {
 		percentage: number;
 	};
 	pricingStrategy: IPricingStrategy;
+	defaultEnabledChannels?: ChannelKey[];
 	fiscalProfile?: IFiscalProfile;
 	defaultAdditionalCosts?: ICostConcept[];
 	posConfig?: IPOSConfig;
@@ -211,12 +229,15 @@ export interface IEcommerceConfig {
 	brands: string[],
 	categories: string[],
 	clothingFits?: string[],
+	customLists?: Record<string, string[]>;
+	sizeGuideTemplates?: ISizeGuideTemplate[];
 	shippingConfig?: IShippingConfig;
 	workingHours?: IWorkingHoursConfig;
 	recommendationConfig?: IRecommendationConfig;
 	catalogRanking?: ICatalogRankingConfig;
 	emailTemplates?: IEmailTemplatesConfig;
 	homeLayout?: IHomeLayoutConfig;
+	storefront?: ITenantStorefrontSummary;
 }
 
 export interface ICatalogRankingConfig {
@@ -245,9 +266,13 @@ export interface IShippingConfig {
 	};
 }
 
+export type PricingGatewayKey = 'mercadopago' | 'getnet' | 'uala';
+
 export interface IEcommercePaymentGateway {
+	defaultGateway?: PricingGatewayKey;
+	defaultWebGateway?: PricingGatewayKey;
 	uala?: IEcommerceUalaPaymentGateway;
-	mercadopago: IEcommerceMercadoPagoPaymentGateway;
+	mercadopago: IEcommerceMercadoPagoPaymentGateway & Partial<IMercadoPagoSurfaceConfig>;
 	getnet?: IEcommerceGetnetPaymentGateway;
 	transfer?: IEcommerceTransferPaymentGateway;
 }
@@ -258,6 +283,8 @@ export interface IEcommerceGetnetPaymentGateway {
 	clientSecret: string;
 	environment: 'sandbox' | 'production';
 	baseCommission: number;
+	qrCommission?: number;
+	debitCommission?: number;
 	cft3cuotas: number;
 	cft6Cuotas: number;
 	cft12cuotas?: number;
@@ -269,6 +296,8 @@ export interface IEcommerceUalaPaymentGateway {
 	active: boolean;
 	credentials: IEcommerceUalaCredentials;
 	baseCommission: number;
+	qrCommission?: number;
+	debitCommission?: number;
 	cft3cuotas: number;
 	cft6Cuotas: number;
 	cft12cuotas?: number;
@@ -289,6 +318,8 @@ export interface IEcommerceMercadoPagoPaymentGateway {
 	environment?: 'sandbox' | 'production';
 	checkoutMode?: 'transparent' | 'redirect' | 'modal' | 'bricks' | 'pro' | 'api' | 'hybrid';
 	baseCommission: number;
+	qrCommission?: number;
+	debitCommission?: number;
 	cft3cuotas: number;
 	cft6Cuotas: number;
 	cft12cuotas?: number;
@@ -344,6 +375,8 @@ export interface IEcommerceConfigPublic {
 	brands: string[];
 	categories: string[];
 	clothingFits?: string[];
+	customLists?: Record<string, string[]>;
+	sizeGuideTemplates?: ISizeGuideTemplate[];
 	shippingConfig?: {
 		freeShippingThreshold: number;
 	};
@@ -355,6 +388,7 @@ export interface IEcommerceConfigPublic {
 		maxInstallmentsToAbsorb?: number;
 		transferDiscountPercentage?: number;
 		cashDiscountPercentage?: number;
+		priceRoundingMode?: PriceRoundingMode;
 	};
 	authConfig?: IAuthConfig;
 	integrations?: {
@@ -378,6 +412,16 @@ export interface IEcommerceConfigPublic {
 		};
 	};
 	paymentGateways: {
+		defaultGateway?: PricingGatewayKey;
+	defaultWebGateway?: PricingGatewayKey;
+		getnet?: {
+			active: boolean;
+			maxInstallments: number;
+			checkoutMode?: 'redirect' | 'modal' | 'iframe';
+		};
+		uala?: {
+			active: boolean;
+		};
 		mercadopago: {
 			active: boolean;
 			publicKey: string;
@@ -394,4 +438,5 @@ export interface IEcommerceConfigPublic {
 		};
 	};
 	homeLayout?: IHomeLayoutConfig;
+	storefront?: ITenantStorefrontSummary;
 }

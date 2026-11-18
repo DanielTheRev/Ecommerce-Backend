@@ -25,7 +25,7 @@ import {
 import { adminOnly, optionalAuth, protect } from '../middleware/auth';
 import { requirePlanCapability } from '@/middleware/planGuard';
 import { validateSchema } from '@/middleware/validator.middleware';
-import { CreateOrderSchema, PayOrderSchema, UpdatePaymentStatusSchema, UpdateShippingStatusSchema, TrackOrderSchema } from '@/schemas/order.schema';
+import { CreateOrderSchema, PayOrderSchema, UpdatePaymentStatusSchema, UpdateShippingStatusSchema, TrackOrderSchema } from '@/validators/order.schema';
 
 const upload = receiptUpload;
 const router: Router = Router();

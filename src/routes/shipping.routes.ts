@@ -3,7 +3,7 @@ import { ShippingController } from '../controllers/shipping.controller';
 import { protect, adminOnly } from '../middleware/auth';
 import { requirePlanCapability } from '@/middleware/planGuard';
 import { validateSchema } from '@/middleware/validator.middleware';
-import { CreateShippingOptionSchema, UpdateShippingOptionSchema } from '@/schemas/shipping.schema';
+import { CreateShippingOptionSchema, UpdateShippingOptionSchema } from '@/validators/shipping.schema';
 
 const router: Router = Router();
 

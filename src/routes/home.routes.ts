@@ -4,7 +4,7 @@ import { Router } from 'express';
 import { protect, adminOnly } from '@/middleware/auth';
 import { requirePlanCapability } from '@/middleware/planGuard';
 import { validateSchema } from '@/middleware/validator.middleware';
-import { CreateBannerSchema, UpdateBannerSchema } from '@/schemas/banner.schema';
+import { CreateBannerSchema, UpdateBannerSchema } from '@/validators/banner.schema';
 import { imageUpload } from '@/config/multer';
 
 const upload = imageUpload;

@@ -12,6 +12,63 @@ export interface IMPItem {
 
 export class MercadoPagoService {
 
+	/**
+	 * Resuelve las credenciales activas de Mercado Pago según el entorno (`production` | `sandbox`),
+	 * manteniendo retrocompatibilidad con los campos planos legados para producción.
+	 */
+	static resolveMpCredentials(mpConfig: any, envOverride?: 'sandbox' | 'production'): {
+		environment: 'sandbox' | 'production';
+		publicKey: string;
+		accessToken: string;
+		webhookSecret?: string;
+		credentialSource: 'oauth' | 'manual';
+	} {
+		const env: 'sandbox' | 'production' = envOverride || mpConfig?.environment || 'production';
+		const envCreds = env === 'sandbox'
+			? mpConfig?.credentials?.sandbox
+			: mpConfig?.credentials?.production;
+
+		const accessToken = envCreds?.accessToken || (env === 'production' ? mpConfig?.accessToken : undefined);
+		const publicKey = envCreds?.publicKey || (env === 'production' ? mpConfig?.publicKey : undefined);
+		const webhookSecret = envCreds?.webhookSecret || (env === 'production' ? mpConfig?.webhookSecret : undefined);
+
+		if (!accessToken || accessToken === 'no asignado') {
+			throw new AppError(
+				'Missing MercadoPago access token',
+				`Falta el Access Token de Mercado Pago para el entorno '${env}'.`,
+				400
+			);
+		}
+
+		return {
+			environment: env,
+			publicKey: publicKey && publicKey !== 'no asignado' ? publicKey : '',
+			accessToken,
+			webhookSecret: webhookSecret && webhookSecret !== 'no asignado' ? webhookSecret : undefined,
+			credentialSource: envCreds?.credentialSource || (mpConfig?.oauth?.connected ? 'oauth' : 'manual')
+		};
+	}
+
+	/**
+	 * Construye las exclusiones de medios de pago para órdenes QR dinámicas.
+	 * Cuando `qr.allowCardsInQr === false`, excluye tarjetas de crédito, débito y prepagas
+	 * para que el comprador pague únicamente con Dinero en cuenta MP.
+	 */
+	static buildQrPaymentExclusions(mpConfig: any): {
+		excluded_payment_types: Array<{ id: string }>;
+	} {
+		if (mpConfig?.qr?.allowCardsInQr === false) {
+			return {
+				excluded_payment_types: [
+					{ id: 'credit_card' },
+					{ id: 'debit_card' },
+					{ id: 'prepaid_card' }
+				]
+			};
+		}
+		return { excluded_payment_types: [] };
+	}
+
 
 
 	/**

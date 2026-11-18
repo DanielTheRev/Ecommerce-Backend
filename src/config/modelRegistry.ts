@@ -3,15 +3,11 @@ import { Connection, Model } from 'mongoose';
 // Schemas
 import { BannerSchema } from '@/models/Banner.model';
 import { cashRegisterSchema } from '@/models/CashRegister.model';
-import { ClothingProductSchema } from '@/models/discriminators/ClothingProduct.discriminator';
-import { TechProductSchema } from '@/models/discriminators/TechProduct.discriminator';
-import { BeautyProductSchema } from '@/models/discriminators/BeautyProduct.discriminator';
-import { KioskProductSchema } from '@/models/discriminators/KioskProduct.discriminator';
+import { ProductSchema, BaseProductSchema } from '@/models/Product.model';
 import { EcommerceSchema } from '@/models/Ecommerce.model';
 import { HeroSlideSchema } from '@/models/HeroSlide.model';
 import { orderSchema } from '@/models/Order.model';
 import { paymentMethodSchema } from '@/models/PaymentMethod.model';
-import { BaseProductSchema } from '@/models/Product.model';
 import { shippingOptionSchema } from '@/models/ShippingOption.model';
 import { userSchema } from '@/models/User.model';
 import { BentoConfigSchema } from '@/models/BentoConfig.model';
@@ -35,6 +31,11 @@ import { accountMovementSchema } from '@/models/AccountMovement.model';
 import { IAccountMovementDocument } from '@/interfaces/accountMovement.interface';
 import { roleProfileSchema } from '@/models/RoleProfile.model';
 import { IRoleProfileDocument } from '@/interfaces/permission.interface';
+import { DataSetSchema } from '@/models/DataSet.model';
+import { IDataSetDocument } from '@/interfaces/dataSet.interface';
+import { ProductBundleSchema } from '@/models/ProductBundle.model';
+import { IProductBundleDocument } from '@/interfaces/productBundle.interface';
+import { AddonInstallationSchema, IAddonInstallation } from '@/models/AddonInstallation.model';
 
 // Interfaces
 import { ICashRegisterDocument, ICashRegisterModel } from '@/interfaces/cash-register.interface';
@@ -88,30 +89,22 @@ export interface TenantModels {
 	Invoice: Model<IInvoiceDocument>;
 	AccountMovement: Model<IAccountMovementDocument>;
 	RoleProfile: Model<IRoleProfileDocument>;
+	DataSet: Model<IDataSetDocument>;
+	ProductBundle: Model<IProductBundleDocument>;
+	AddonInstallation: Model<IAddonInstallation>;
 }
 
 export function getModelsForConnection(db: Connection): TenantModels {
-	// Product (Base Model)
+	// Product (Modelo Unificado - Cero Discriminadores)
 	const ProductModel = db.models.Product
 		? (db.model('Product') as Model<IProductDocument>)
-		: db.model<IProductDocument>('Product', BaseProductSchema);
+		: db.model<IProductDocument>('Product', ProductSchema);
 
-	// Discriminators
-	const TechProductModel = db.models.TechProduct
-		? (db.model('TechProduct') as Model<IProductDocument>)
-		: ProductModel.discriminator<IProductDocument>('TechProduct', TechProductSchema);
-
-	const ClothingProductModel = db.models.ClothingProduct
-		? (db.model('ClothingProduct') as Model<IProductDocument>)
-		: ProductModel.discriminator<IProductDocument>('ClothingProduct', ClothingProductSchema);
-
-	const BeautyProductModel = db.models.BeautyProduct
-		? (db.model('BeautyProduct') as Model<IProductDocument>)
-		: ProductModel.discriminator<IProductDocument>('BeautyProduct', BeautyProductSchema);
-
-	const KioskProductModel = db.models.KioskProduct
-		? (db.model('KioskProduct') as Model<IProductDocument>)
-		: ProductModel.discriminator<IProductDocument>('KioskProduct', KioskProductSchema);
+	// Aliases para compatibilidad con código existente
+	const TechProductModel = ProductModel;
+	const ClothingProductModel = ProductModel;
+	const BeautyProductModel = ProductModel;
+	const KioskProductModel = ProductModel;
 
 
 	// User
@@ -234,6 +227,21 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		? (db.model('RoleProfile') as Model<IRoleProfileDocument>)
 		: db.model<IRoleProfileDocument>('RoleProfile', roleProfileSchema);
 
+	// DataSet (Conjuntos de Datos dinámicos)
+	const DataSetModel = db.models.DataSet
+		? (db.model('DataSet') as Model<IDataSetDocument>)
+		: db.model<IDataSetDocument>('DataSet', DataSetSchema);
+
+	// ProductBundle (Combos / Packs comerciales)
+	const ProductBundleModel = db.models.ProductBundle
+		? (db.model('ProductBundle') as Model<IProductBundleDocument>)
+		: db.model<IProductBundleDocument>('ProductBundle', ProductBundleSchema);
+
+	// AddonInstallation (Configuración aislada de complementos por tenant)
+	const AddonInstallationModel = db.models.AddonInstallation
+		? (db.model('AddonInstallation') as Model<IAddonInstallation>)
+		: db.model<IAddonInstallation>('AddonInstallation', AddonInstallationSchema);
+
 	return {
 		Product: ProductModel,
 		TechProduct: TechProductModel,
@@ -263,6 +271,9 @@ export function getModelsForConnection(db: Connection): TenantModels {
 		CategoryGroup: CategoryGroupModel,
 		Invoice: InvoiceModel,
 		AccountMovement: AccountMovementModel,
-		RoleProfile: RoleProfileModel
+		RoleProfile: RoleProfileModel,
+		DataSet: DataSetModel,
+		ProductBundle: ProductBundleModel,
+		AddonInstallation: AddonInstallationModel
 	};
 }

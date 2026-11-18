@@ -239,13 +239,13 @@ export class ProductController {
 			if (typeof data.specifications === 'string') {
 				data.specifications = JSON.parse(data.specifications) as IProductSpec[];
 			} else if (!data.specifications) {
-				data.specifications = [];
+				data.specifications = undefined;
 			}
 
 			if (typeof data.features === 'string') {
 				data.features = JSON.parse(data.features) as string[];
 			} else if (!data.features) {
-				data.features = [];
+				data.features = undefined;
 			}
 
 			// Parsear Variantes con polimorfismo estricto
@@ -292,7 +292,8 @@ export class ProductController {
 				data,
 				imageFiles,
 				ogImageFile,
-				req.tenant?.slug
+				req.tenant?.slug,
+				req.tenant?.planTier
 			);
 
 			if (req.tenant?.slug) {
@@ -371,7 +372,8 @@ export class ProductController {
 				data,
 				imageFiles,
 				ogImageFile,
-				req.tenant?.slug
+				req.tenant?.slug,
+				req.tenant?.planTier
 			);
 
 			if (req.tenant?.slug) {
@@ -666,6 +668,7 @@ export class ProductController {
 				costPrice,
 				additionalCosts,
 				discountPercentageTransfer,
+				channelPricing,
 				useCustomProfit,
 				customProfitMargin,
 				pricingMethodChoice,
@@ -675,7 +678,8 @@ export class ProductController {
 			const result = await FinanceService.CalculatePrices({
 				providerCost: costPrice,
 				additionalCosts: additionalCosts || [],
-				discountPercentageTransfer: discountPercentageTransfer || 0,
+				discountPercentageTransfer,
+				channelPricing,
 				dolar: venta,
 				models: req.models!,
 				useCustomProfit,

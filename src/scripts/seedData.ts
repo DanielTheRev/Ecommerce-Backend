@@ -2,8 +2,6 @@
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import { Product } from '../models/Product.model';
-import { TechProduct } from '../models/discriminators/TechProduct.discriminator';
-import { ClothingProduct } from '../models/discriminators/ClothingProduct.discriminator';
 import { getDolar } from '@/services/dolar.service';
 import { FinanceService } from '@/services/finance.service';
 import { EcommercePaymentProviders } from '@/interfaces/ecommerce.interface';
@@ -308,7 +306,7 @@ const seedDatabase = async (): Promise<void> => {
 		for (const item of techData) {
 			try {
 				const { price, finance } = await FinanceService.CalculatePrices({ providerCost: item.price, dolar: venta });
-				await TechProduct.create({
+				await Product.create({
 					slug: genSlug(item.brand, item.model),
 					brand: item.brand, model: item.model, category: item.category,
 					shortDescription: item.shortDescription, largeDescription: item.largeDescription,
@@ -326,7 +324,7 @@ const seedDatabase = async (): Promise<void> => {
 		for (const item of clothingData) {
 			try {
 				const { price, finance } = await FinanceService.CalculatePrices({ providerCost: item.price, dolar: venta });
-				await ClothingProduct.create({
+				await Product.create({
 					slug: genSlug(item.brand, item.model),
 					brand: item.brand, model: item.model, category: item.category,
 					shortDescription: item.shortDescription, largeDescription: item.largeDescription,

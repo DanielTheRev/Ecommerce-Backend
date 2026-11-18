@@ -1,8 +1,11 @@
 import { Router } from 'express';
 import { AccountMovementController } from '@/controllers/accountMovement.controller';
 import { protect, staffOnly } from '@/middleware/auth';
+import { requirePlanCapability } from '@/middleware/planGuard';
 
 const router: Router = Router();
+
+router.use(requirePlanCapability('hasCustomerAccounts', 'Cuentas Corrientes'));
 
 // Todas las operaciones de cuenta corriente requieren usuario autenticado de tienda (admin o empleado/cajero)
 router.use(protect);

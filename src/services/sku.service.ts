@@ -25,8 +25,8 @@ export class SkuService {
 		models: TenantModels,
 		variants: any[],
 		category: string,
-		productType: ProductType,
-		brand: string,
+		productType?: ProductType | string,
+		brand?: string,
 		existingSequence?: number
 	): Promise<any[]> {
 		if (!variants || variants.length === 0) return variants;

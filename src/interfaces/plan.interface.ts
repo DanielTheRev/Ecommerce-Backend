@@ -29,6 +29,11 @@ export interface PlanCapabilities {
 	hasTeamManagement: boolean;
 	hasArcaBilling: boolean;
 	hasInStorePaymentConfig: boolean;
+	hasSalesHistory: boolean;
+	hasDailySummary: boolean;
+	hasFiscalAudit: boolean;
+	hasCategoryManager: boolean;
+	hasStoreIdentity: boolean;
 
 	// Catálogo Digital & Pedidos (Capa 2)
 	hasWebCatalog: boolean;
@@ -39,13 +44,20 @@ export interface PlanCapabilities {
 	hasFeaturedProducts: boolean;
 	hasStoreHoursAndStatus: boolean;
 	hasSocialLinks: boolean;
+	hasProductBundles: boolean;
+	hasDataSets: boolean;
+	hasHomeLayoutBuilder: boolean;
+	hasCustomerAuthConfig: boolean;
 
 	// Omnicanal & Tienda Web Completa (Capa 3)
 	hasFullWebStore: boolean;
 	hasCustomDomain: boolean;
 	hasMarketingBanners: boolean;
-	hasShopTheLook: boolean;
 	hasOnlinePaymentGateways: boolean;
 	hasAutomatedShippingCouriers: boolean;
 	hasProductFeeds: boolean;
+	hasMetricDataSets: boolean;
+	hasNewsletter: boolean;
+	hasHeadlessApiKey: boolean;
+	hasExternalIntegrations: boolean;
 }

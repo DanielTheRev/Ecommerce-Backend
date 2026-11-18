@@ -5,7 +5,18 @@ import {
 	IPricingStrategy,
 	PricingMethod
 } from '@/interfaces/ecommerce.interface';
-import { IProductPrices, IProductFinance, ICostConcept } from '@/interfaces/product.interface';
+import {
+	IChannelPriceSnapshot,
+	IChannelPricingConfig,
+	IChannelPricingRule,
+	ICostConcept,
+	IPricingInsight,
+	IProductFinance,
+	IProductPrices,
+	PricingChannelKey
+} from '@/interfaces/product.interface';
+import { PriceBuilderEngine } from '@/addons/price_builder';
+import { IPriceBuilderChannelPricing } from '@/addons/price_builder/priceBuilder.types';
 import { EcommerceService } from './ecommerce.service';
 
 /**
@@ -60,7 +71,7 @@ export class FinanceService {
 				400
 			);
 
-		const mpConfig = EcommerceConfig.paymentGateways.mercadopago;
+		const activeGateway = this.resolveActiveGateway(EcommerceConfig);
 
 		const hasValidCustomMargin = customProfitMargin !== undefined && customProfitMargin !== null && !isNaN(Number(customProfitMargin));
 		const isCustomProfit = useCustomProfit !== undefined
@@ -119,10 +130,10 @@ export class FinanceService {
 			};
 		});
 
-		// Comisiones de Mercado Pago
-		const rawBaseComm = mpConfig.baseCommission;
-		const rawCFT3 = mpConfig.cft3cuotas;
-		const rawCFT6 = mpConfig.cft6Cuotas;
+		// Comisiones de la pasarela activa / por defecto
+		const rawBaseComm = activeGateway.baseCommission;
+		const rawCFT3 = activeGateway.cft3cuotas;
+		const rawCFT6 = activeGateway.cft6Cuotas;
 
 		const baseCommFactor = this.normalizePercentage(Number(rawBaseComm));
 		const cft3Factor = this.normalizePercentage(Number(rawCFT3));
@@ -160,13 +171,16 @@ export class FinanceService {
 
 		const profitFactor = this.normalizePercentage(profitMargin);
 
-		const maxInstallments = mpConfig?.maxInstallments ?? 1;
+		const maxInstallments = activeGateway.maxInstallments;
+		const absorbInstallments = EcommerceConfig.pricingStrategy?.absorbInstallments ?? true;
 
 		let worstCaseTasa = totalTasa1;
-		if (maxInstallments >= 6) {
-			worstCaseTasa = totalTasa6;
-		} else if (maxInstallments >= 3) {
-			worstCaseTasa = totalTasa3;
+		if (absorbInstallments) {
+			if (maxInstallments >= 6) {
+				worstCaseTasa = totalTasa6;
+			} else if (maxInstallments >= 3) {
+				worstCaseTasa = totalTasa3;
+			}
 		}
 
 		let listPrice = 0;
@@ -258,7 +272,6 @@ export class FinanceService {
 		];
 
 		// Cuotas sin interés
-		const absorbInstallments = EcommerceConfig.pricingStrategy?.absorbInstallments ?? true;
 		const hasThreeInstallmentsSeamless = absorbInstallments && maxInstallments >= 3;
 		const hasSixInstallmentsSeamless = absorbInstallments && maxInstallments >= 6;
 
@@ -306,6 +319,9 @@ export class FinanceService {
 				rawCFT6,
 				hasThreeInstallmentsSeamless,
 				hasSixInstallmentsSeamless,
+				absorbInstallments,
+				activeGateway,
+				ivaFactor,
 				dolar,
 			}
 		};
@@ -358,88 +374,64 @@ export class FinanceService {
 		providerCost: number;
 		additionalCosts?: ICostConcept[];
 		discountPercentageTransfer?: number;
+		channelPricing?: IChannelPricingConfig | string;
+		paymentRestrictions?: { allowCardPayment?: boolean; allowInterestFreeInstallments?: boolean; maxInstallments?: number };
 		useCustomProfit?: boolean;
 		customProfitMargin?: number;
 		pricingMethodChoice?: PricingMethod;
 		dolar: number;
 		models?: TenantModels;
 		config?: any;
-	}): Promise<{ price: IProductPrices; finance: IProductFinance }> {
+	}): Promise<{ price: IProductPrices; finance: IProductFinance; insights: IPricingInsight[]; activeGateway: { key: string; label: string } }> {
 		try {
-			// 1. Calcular precio de lista
-			const listResult = await this.CalculateListPrice({
-				models: data.models,
-				config: data.config,
+			const EcommerceConfig = data.config || (data.models ? await EcommerceService.getConfig(data.models) : null);
+			if (!EcommerceConfig) {
+				throw new AppError(
+					'Ecommerce config not found',
+					'No se encontró la configuración de Ecommerce para calcular precios.',
+					500
+				);
+			}
+
+			const parsedChannelPricing = this.parseChannelPricingInput(data.channelPricing) as IPriceBuilderChannelPricing | undefined;
+			const useCustomProfit = data.useCustomProfit !== undefined
+				? (typeof data.useCustomProfit === 'string' ? data.useCustomProfit === 'true' : Boolean(data.useCustomProfit))
+				: (data.customProfitMargin !== undefined && data.customProfitMargin !== null && !isNaN(Number(data.customProfitMargin)));
+			const customProfitMargin = data.customProfitMargin !== undefined && data.customProfitMargin !== null && !isNaN(Number(data.customProfitMargin))
+				? Number(data.customProfitMargin)
+				: undefined;
+
+			const result = PriceBuilderEngine.calculate({
 				providerCost: Number(data.providerCost),
-				additionalCosts: data.additionalCosts || [],
-				useCustomProfit: data.useCustomProfit !== undefined
-					? (typeof data.useCustomProfit === 'string' ? data.useCustomProfit === 'true' : Boolean(data.useCustomProfit))
-					: (data.customProfitMargin !== undefined && data.customProfitMargin !== null && !isNaN(Number(data.customProfitMargin))),
-				customProfitMargin: data.customProfitMargin !== undefined && data.customProfitMargin !== null && !isNaN(Number(data.customProfitMargin)) ? Number(data.customProfitMargin) : undefined,
+				additionalCosts: data.additionalCosts,
+				discountPercentageTransfer: data.discountPercentageTransfer !== undefined ? Number(data.discountPercentageTransfer) : undefined,
+				channelPricing: parsedChannelPricing,
+				paymentRestrictions: data.paymentRestrictions,
+				useCustomProfit,
+				customProfitMargin,
 				pricingMethodChoice: data.pricingMethodChoice,
 				dolar: Number(data.dolar),
+				config: EcommerceConfig
 			});
 
-			// 2. Calcular precio de transferencia
-			const transferResult = this.CalculateTransferPrice({
-				listPrice: listResult.listPrice,
-				discountPercentageTransfer: data.discountPercentageTransfer !== undefined ? Number(data.discountPercentageTransfer) : undefined,
-				maxSafeDiscount: listResult.maxSafeDiscount,
-				totalCostInARS: listResult._internal.totalCostInARS,
-				taxRateOnSaleFactor: listResult._internal.taxRateOnSaleFactor,
-			});
-
-			// 3. Ensamblar resultado
-			const { _internal: i } = listResult;
-			const EcommerceConfig = data.config || (data.models ? await EcommerceService.getConfig(data.models) : null);
-			const shippingConcept = (data.additionalCosts || []).find(
-				(c) => c.category === 'shipping' || /env[ií]o/i.test(c.concept || '')
-			);
-			const shippingSubsidy = shippingConcept
-				? Number(shippingConcept.value) || 0
-				: (EcommerceConfig?.shippingConfig?.defaultItemSubsidy ?? 4000);
+			const transferChannel = result.price.channels.transfer;
+			const computedDiscount = transferChannel?.discountPercent !== undefined
+				? transferChannel.discountPercent
+				: (result.price.listPrice > 0
+					? Math.max(0, Math.round(((result.price.listPrice - result.price.cashTransferPrice) / result.price.listPrice) * 100))
+					: 0);
 
 			const price: IProductPrices = {
-				listPrice: listResult.listPrice,
-				card_ticket1PayPrice: listResult.one_pay,
-				cashTransferPrice: transferResult.cashTransferPrice,
-				discountPercentageTransfer: transferResult.discountPercentageTransfer,
-				updatedAt: new Date(),
-				shippingSubsidy,
-				installments: {
-					threePaymentsAmount: listResult.installments.threePaymentsAmount,
-					sixPaymentsAmount: listResult.installments.sixPaymentsAmount,
-					hasThreeInstallmentsSeamless: i.hasThreeInstallmentsSeamless,
-					hasSixInstallmentsSeamless: i.hasSixInstallmentsSeamless,
-				},
+				...result.price,
+				discountPercentageTransfer: computedDiscount
 			};
 
-			const finance: IProductFinance = {
-				exchangeRateSnapshot: Number(data.dolar),
-				mpCommissionSnapshot: {
-					base: i.rawBaseComm,
-					cft3Cuotas: i.rawCFT3,
-					cft6Cuotas: i.rawCFT6,
-				},
-				providerCost: {
-					inUSD: i.providerCostInUSD,
-					inARS: i.providerCostInARS,
-				},
-				additionalCosts: i.processedAdditionalCosts,
-				pricingStrategy: {
-					method: i.strategyMethod as PricingMethod,
-					targetProfit: i.profitMargin,
-				},
-				calculatedProfits: {
-					transfer: transferResult.transferProfit,
-					card_ticket1Pay: Math.round(i.card_ticket1PayProfit),
-					card3Installments: Math.round(i.card3InstallmentsProfit),
-					card6Installments: Math.round(i.card6InstallmentsProfit),
-				},
-				maxSafeDiscount: listResult.maxSafeDiscount,
+			return {
+				price,
+				finance: result.finance,
+				insights: result.insights,
+				activeGateway: result.activeGateway
 			};
-
-			return { price, finance };
 		} catch (error) {
 			if (error instanceof AppError) throw error;
 			console.error('Error in FinanceService.CalculatePrices:', error);
@@ -451,6 +443,289 @@ export class FinanceService {
 		}
 	}
 
+
+	// =========================================================
+	// MOTOR MULTI-CANAL (EFECTIVO, TRANSFERENCIA, QR, DÉBITO, 1 PAGO, LISTA)
+	// =========================================================
+
+	private static resolveActiveGateway(config: any): {
+		gatewayKey: 'mercadopago' | 'getnet' | 'uala' | 'none';
+		label: string;
+		baseCommission: number;
+		qrCommission: number;
+		debitCommission: number;
+		cft3cuotas: number;
+		cft6Cuotas: number;
+		maxInstallments: number;
+	} {
+		const gateways = config?.paymentGateways || {};
+		const labels: Record<'mercadopago' | 'getnet' | 'uala', string> = {
+			mercadopago: 'Mercado Pago',
+			getnet: 'Getnet',
+			uala: 'Ualá Bis'
+		};
+
+		const activeKeys = (['mercadopago', 'getnet', 'uala'] as const).filter(
+			(k) => Boolean(gateways[k]?.active)
+		);
+
+		let selectedKey: 'mercadopago' | 'getnet' | 'uala' | 'none' = 'none';
+		const configuredDefault = gateways.defaultGateway as 'mercadopago' | 'getnet' | 'uala' | undefined;
+
+		if (configuredDefault && gateways[configuredDefault]?.active) {
+			selectedKey = configuredDefault;
+		} else if (activeKeys.length === 1) {
+			selectedKey = activeKeys[0];
+		} else if (activeKeys.length > 1) {
+			throw new AppError(
+				'Default Gateway Required',
+				'Tenés múltiples pasarelas de pago activas. Seleccioná una pasarela por defecto en Cobros y Pagos.',
+				400
+			);
+		}
+
+		if (selectedKey === 'none') {
+			return {
+				gatewayKey: 'none',
+				label: 'Sin pasarela online activa',
+				baseCommission: 0,
+				qrCommission: 0,
+				debitCommission: 0,
+				cft3cuotas: 0,
+				cft6Cuotas: 0,
+				maxInstallments: 1
+			};
+		}
+
+		const gw = gateways[selectedKey] || {};
+		return {
+			gatewayKey: selectedKey,
+			label: labels[selectedKey],
+			baseCommission: Number(gw.baseCommission || 0),
+			qrCommission: Number(gw.qrCommission || 0),
+			debitCommission: Number(gw.debitCommission || 0),
+			cft3cuotas: Number(gw.cft3cuotas || 0),
+			cft6Cuotas: Number(gw.cft6Cuotas || 0),
+			maxInstallments: Number(gw.maxInstallments || 1)
+		};
+	}
+
+	private static buildPricingInsights(params: {
+		activeGateway: { gatewayKey: string; label: string; baseCommission: number; qrCommission: number; debitCommission: number };
+		ivaFactor: number;
+		absorbInstallments: boolean;
+		maxInstallments: number;
+		maxSafeDiscount: number;
+		channels: Partial<Record<PricingChannelKey, IChannelPriceSnapshot>>;
+	}): IPricingInsight[] {
+		const insights: IPricingInsight[] = [];
+		const { activeGateway, ivaFactor, absorbInstallments, maxInstallments, maxSafeDiscount, channels } = params;
+
+		if (activeGateway.gatewayKey === 'none') {
+			insights.push({
+				type: 'info',
+				code: 'NO_GATEWAY_ACTIVE',
+				message: 'No tenés pasarelas online activas: los precios se calculan sin comisiones de tarjeta ni cuotas.'
+			});
+		} else {
+			const effectiveBase = (activeGateway.baseCommission <= 1 ? activeGateway.baseCommission * 100 : activeGateway.baseCommission) * ivaFactor;
+			insights.push({
+				type: 'info',
+				code: 'ACTIVE_GATEWAY',
+				message: `Calculado con ${activeGateway.label} (comisión base efectiva con IVA: ${effectiveBase.toFixed(2)}%).`
+			});
+		}
+
+		if (absorbInstallments && maxInstallments >= 3) {
+			insights.push({
+				type: 'info',
+				code: 'INSTALLMENTS_ABSORBED',
+				message: `Absorbés hasta ${maxInstallments} cuotas sin interés: el Precio de Lista incluye el CFT. Podés ofrecer hasta ${maxSafeDiscount}% OFF en efectivo/transferencia/QR sin perder tu margen.`
+			});
+		} else {
+			insights.push({
+				type: 'info',
+				code: 'INSTALLMENTS_NOT_ABSORBED',
+				message: 'No absorbés cuotas sin interés: el Precio de Lista coincide con 1 Pago Crédito y el interés de las cuotas lo abona el comprador.'
+			});
+		}
+
+		const channelNames: Record<PricingChannelKey, string> = {
+			cash: 'Efectivo',
+			transfer: 'Transferencia',
+			qr: 'QR',
+			debit: 'Débito',
+			credit1Pay: '1 Pago Crédito',
+			list: 'Precio de Lista'
+		};
+
+		for (const key of Object.keys(channels) as PricingChannelKey[]) {
+			const snap = channels[key];
+			if (snap?.isWarningLoss) {
+				insights.push({
+					type: 'warning',
+					code: `LOSS_WARNING_${key.toUpperCase()}`,
+					message: `Atención: en el canal ${channelNames[key]} estás perdiendo $${Math.abs(snap.netProfit)} por venta.`
+				});
+			}
+		}
+
+		return insights;
+	}
+
+	private static parseChannelPricingInput(raw?: IChannelPricingConfig | string): IChannelPricingConfig | undefined {
+		if (!raw) return undefined;
+		if (typeof raw === 'string') {
+			try {
+				const parsed = JSON.parse(raw);
+				return (parsed && typeof parsed === 'object' ? parsed : undefined) as IChannelPricingConfig | undefined;
+			} catch {
+				throw new AppError('Invalid channelPricing', 'El formato JSON de channelPricing es inválido.', 400);
+			}
+		}
+		return raw;
+	}
+
+	private static resolveChannelPrices(params: {
+		listPrice: number;
+		onePayPrice: number;
+		priceTarget: number;
+		totalCostInARS: number;
+		taxRateOnSaleFactor: number;
+		totalTasa1: number;
+		debitTasaFactor: number;
+		qrTasaFactor: number;
+		worstCaseTasa: number;
+		discountPercentageTransfer: number;
+		channelRules: IChannelPricingConfig;
+	}): Partial<Record<PricingChannelKey, IChannelPriceSnapshot>> {
+		const {
+			listPrice,
+			onePayPrice,
+			priceTarget,
+			totalCostInARS,
+			taxRateOnSaleFactor,
+			totalTasa1,
+			debitTasaFactor,
+			qrTasaFactor,
+			worstCaseTasa,
+			discountPercentageTransfer,
+			channelRules
+		} = params;
+
+		const defaultRules: Record<'cash' | 'transfer' | 'qr' | 'debit' | 'credit1Pay', IChannelPricingRule> = {
+			credit1Pay: { mode: 'auto' },
+			transfer: { mode: 'discount_from_list', discountPercent: discountPercentageTransfer },
+			qr: { mode: 'linked', linkedTo: 'transfer' },
+			cash: { mode: 'linked', linkedTo: 'transfer' },
+			debit: { mode: 'linked', linkedTo: 'credit1Pay' }
+		};
+
+		const effectiveRules: Record<'cash' | 'transfer' | 'qr' | 'debit' | 'credit1Pay', IChannelPricingRule> = {
+			credit1Pay: channelRules.credit1Pay || defaultRules.credit1Pay,
+			transfer: channelRules.transfer || defaultRules.transfer,
+			qr: channelRules.qr || defaultRules.qr,
+			cash: channelRules.cash || defaultRules.cash,
+			debit: channelRules.debit || defaultRules.debit
+		};
+
+		const feeByChannel: Record<PricingChannelKey, number> = {
+			cash: 0,
+			transfer: 0,
+			qr: qrTasaFactor,
+			debit: debitTasaFactor,
+			credit1Pay: totalTasa1,
+			list: worstCaseTasa
+		};
+
+		const resolvedPrice = new Map<PricingChannelKey, number>();
+		resolvedPrice.set('list', listPrice);
+
+		const resolveSinglePrice = (key: PricingChannelKey, visiting: Set<PricingChannelKey>): number => {
+			const cached = resolvedPrice.get(key);
+			if (cached !== undefined) return cached;
+			if (key === 'list') return listPrice;
+
+			if (visiting.has(key)) {
+				throw new AppError(
+					'Invalid Channel Pricing',
+					'Existe una referencia circular entre los canales de pago configurados.',
+					400
+				);
+			}
+			visiting.add(key);
+
+			const rule = effectiveRules[key];
+			let computed = 0;
+
+			if (rule.mode === 'linked') {
+				const target = rule.linkedTo;
+				if (!target) {
+					throw new AppError('Invalid Channel Pricing', `El canal '${key}' está en modo 'linked' sin indicar 'linkedTo'.`, 400);
+				}
+				computed = resolveSinglePrice(target, visiting);
+			} else if (rule.mode === 'fixed') {
+				const fixed = Number(rule.fixedPrice);
+				if (rule.fixedPrice === undefined || isNaN(fixed) || fixed < 0) {
+					throw new AppError('Invalid Channel Pricing', `El precio fijo del canal '${key}' debe ser un número válido >= 0.`, 400);
+				}
+				computed = Math.round(fixed);
+			} else if (rule.mode === 'discount_from_list') {
+				const discount = Number(rule.discountPercent ?? 0);
+				if (isNaN(discount) || discount < 0 || discount >= 100) {
+					throw new AppError('Invalid Channel Pricing', `El descuento del canal '${key}' debe estar entre 0 y 99.9%.`, 400);
+				}
+				computed = this.roundCharmPrice(listPrice * (1 - discount / 100));
+			} else {
+				// mode === 'auto'
+				if (key === 'credit1Pay') {
+					computed = onePayPrice;
+				} else if (key === 'debit') {
+					computed = this.roundCharmPrice(priceTarget / Math.max(0.05, 1 - debitTasaFactor));
+				} else if (key === 'qr') {
+					computed = this.roundCharmPrice(priceTarget / Math.max(0.05, 1 - qrTasaFactor));
+				} else {
+					computed = this.roundCharmPrice(priceTarget);
+				}
+			}
+
+			visiting.delete(key);
+			resolvedPrice.set(key, computed);
+			return computed;
+		};
+
+		const buildSnapshot = (key: PricingChannelKey): IChannelPriceSnapshot => {
+			const price = resolveSinglePrice(key, new Set<PricingChannelKey>());
+			const feeFactor = feeByChannel[key];
+			const netProfit = Math.round(price - totalCostInARS - price * feeFactor - price * taxRateOnSaleFactor);
+			const netMarginPercent = price > 0 ? Math.round((netProfit / price) * 1000) / 10 : 0;
+			const rule = key === 'list' ? { mode: 'auto' as const } : effectiveRules[key];
+			const discountFromList = listPrice > 0 ? Math.round(((listPrice - price) / listPrice) * 1000) / 10 : 0;
+
+			return {
+				price,
+				mode: rule.mode,
+				...(rule.linkedTo ? { linkedTo: rule.linkedTo } : {}),
+				...(rule.mode === 'discount_from_list'
+					? { discountPercent: Number(rule.discountPercent ?? discountFromList) }
+					: discountFromList > 0
+						? { discountPercent: discountFromList }
+						: {}),
+				netProfit,
+				netMarginPercent,
+				isWarningLoss: netProfit < 0
+			};
+		};
+
+		return {
+			list: buildSnapshot('list'),
+			credit1Pay: buildSnapshot('credit1Pay'),
+			debit: buildSnapshot('debit'),
+			qr: buildSnapshot('qr'),
+			transfer: buildSnapshot('transfer'),
+			cash: buildSnapshot('cash')
+		};
+	}
 
 	// =========================================================
 	// UTILIDADES

@@ -2,8 +2,11 @@ import { Router } from 'express';
 import { PosController } from '../controllers/pos.controller';
 import { PointController } from '../controllers/point.controller';
 import { protect, staffOnly } from '../middleware/auth';
+import { requirePlanCapability } from '@/middleware/planGuard';
 
 const router: Router = Router();
+
+router.use(requirePlanCapability('hasPos', 'Punto de Venta (POS)'));
 
 // Rutas de escaneo y sincronización móvil con mostrador POS
 router.post('/scan', protect, staffOnly, PosController.scanBarcode);

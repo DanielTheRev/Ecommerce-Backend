@@ -7,6 +7,7 @@ import { escapeRegex } from '@/utils/regex.util';
 import createDOMPurify from 'dompurify';
 import { JSDOM } from 'jsdom';
 import { Types } from 'mongoose';
+import { randomUUID } from 'crypto';
 import slugify from 'slugify';
 import { getDolar } from './dolar.service';
 import { ImageService } from './images.service';
@@ -20,6 +21,7 @@ import { PushNotificationService } from './pushNotification.service';
 import { IVisitorInfo } from '@/utils/deviceDetector';
 import { isProductTypeAllowed, getAllowedProductTypes } from '@/config/planCapabilities';
 import { getProductModel } from './product/productModel.helper';
+import { ProductDomainFactory } from '@/domain/product/product.classes';
 import { ProductDisplayService } from './product/productDisplay.service';
 import { ProductRankingService } from './product/productRanking.service';
 import { ProductInventoryService } from './product/productInventory.service';
@@ -30,8 +32,100 @@ import { ProductSearchService } from './product/productSearch.service';
 export class ProductService {
 	private constructor() { }
 
+	private static ensureImageIdentity(images: any[]): any[] {
+		if (!Array.isArray(images)) return [];
+		return images.map((img: any) => ({
+			...img,
+			id: typeof img.id === 'string' && img.id.trim() !== '' ? img.id : `img_${randomUUID()}`,
+			storageProvider: img.storageProvider || 'cloudinary',
+			storageKey: img.storageKey || img.public_id || '',
+			variantSkus: Array.isArray(img.variantSkus)
+				? Array.from(new Set(img.variantSkus.filter((s: unknown) => typeof s === 'string' && s.trim() !== '')))
+				: [],
+		}));
+	}
+
+	private static deriveVariantLabel(variant: any): string {
+		if (typeof variant.label === 'string' && variant.label.trim() !== '') {
+			return variant.label.trim();
+		}
+		const parts: string[] = [];
+		if (variant.color?.name) parts.push(String(variant.color.name).trim());
+		if (variant.size) parts.push(String(variant.size).trim());
+		if (variant.volume) parts.push(String(variant.volume).trim());
+		if (Array.isArray(variant.attributes)) {
+			for (const attr of variant.attributes) {
+				if (attr?.value) parts.push(String(attr.value).trim());
+			}
+		}
+		const joined = parts.filter(Boolean).join(' · ');
+		return joined || variant.sku || 'Variante';
+	}
+
+	private static async calculatePerVariantPrices(
+		variants: any[],
+		pricingContext: {
+			additionalCosts: any[];
+			discountPercentageTransfer?: number;
+			dolar: number;
+			models: TenantModels;
+			pricingMethodChoice?: any;
+			channelPricing?: any;
+			paymentRestrictions?: any;
+		}
+	): Promise<any[]> {
+		return Promise.all(
+			variants.map(async (v: any) => {
+				const label = this.deriveVariantLabel(v);
+				const inheritPrice = v.inheritPrice !== false;
+				if (!inheritPrice && v.providerCost !== undefined && v.providerCost !== null && !isNaN(Number(v.providerCost))) {
+					const hasCustomMargin =
+						v.profitMargin !== undefined && v.profitMargin !== null && !isNaN(Number(v.profitMargin));
+					const { price } = await FinanceService.CalculatePrices({
+						providerCost: Number(v.providerCost),
+						additionalCosts: pricingContext.additionalCosts,
+						discountPercentageTransfer: pricingContext.discountPercentageTransfer,
+						dolar: pricingContext.dolar,
+						models: pricingContext.models,
+						useCustomProfit: hasCustomMargin,
+						customProfitMargin: hasCustomMargin ? Number(v.profitMargin) : undefined,
+						pricingMethodChoice: pricingContext.pricingMethodChoice,
+						channelPricing: pricingContext.channelPricing,
+						paymentRestrictions: pricingContext.paymentRestrictions,
+					});
+					return {
+						...v,
+						label,
+						inheritPrice: false,
+						providerCost: Number(v.providerCost),
+						profitMargin: hasCustomMargin ? Number(v.profitMargin) : v.profitMargin,
+						prices: price,
+					};
+				}
+				return {
+					...v,
+					label,
+					inheritPrice: true,
+				};
+			})
+		);
+	}
+
+	private static pruneOrphanedVariantSkus(images: any[], variants: any[]): any[] {
+		if (!Array.isArray(images)) return [];
+		const validSkus = new Set(
+			(variants || []).map((v: any) => (typeof v?.sku === 'string' ? v.sku.trim() : '')).filter(Boolean)
+		);
+		return images.map((img: any) => ({
+			...img,
+			variantSkus: Array.isArray(img.variantSkus)
+				? img.variantSkus.filter((sku: string) => validSkus.has(sku))
+				: [],
+		}));
+	}
+
 	private static purifyConfig = {
-		ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'ul', 'ol', 'li', 'br', 'span'],
+		ALLOWED_TAGS: ['b', 'i', 'u', 'em', 'strong', 'a', 'p', 'ul', 'ol', 'li', 'br', 'span'],
 		ALLOWED_ATTR: ['href', 'target', 'class'],
 		ALLOW_DATA_ATTR: false,
 	};
@@ -190,7 +284,7 @@ export class ProductService {
 				})
 				.lean()) as unknown as IProduct;
 			if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
-			return product;
+			return ProductDisplayService.projectPublicProduct(product);
 		} catch (error) {
 			if (error instanceof AppError) throw error;
 			throw new AppError('Failed to fetch product', 'Error al obtener el producto', 500);
@@ -272,75 +366,132 @@ export class ProductService {
 				const product = products.find(p => p._id.toString() === item._id.toString());
 				if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
 
+				const prodLabel = product.name || `${product.brand} ${product.model}`;
 				if (product.status !== 'published') {
 					throw new AppError(
-						`Product ${product.brand} ${product.model} is not published`,
-						`El producto ${product.brand} ${product.model} no está disponible para la compra`,
+						`Product ${prodLabel} is not published`,
+						`El producto ${prodLabel} no está disponible para la compra`,
 						400
 					);
 				}
 
-				const variant = product.variants?.find((v: any) => v.sku === item.sku && v.isActive !== false) as any;
-				if (!variant) {
+				const isWeighable = product.isSoldByWeight === true;
+				if (!isWeighable && !Number.isInteger(item.quantity)) {
 					throw new AppError(
-						`Variant ${item.sku} not found`,
-						`Variante ${item.sku} no encontrada o inactiva`,
-						404
-					);
-				}
-
-				const availableStock = variant.stock - (variant.reservedStock || 0);
-				if (availableStock < item.quantity) {
-					throw new AppError(
-						`Insufficient stock for variant ${item.sku}`,
-						`Stock insuficiente para la variante ${item.sku}`,
+						`Fractional quantity is only allowed for weighable products (${prodLabel})`,
+						`El producto "${prodLabel}" se vende por unidad entera; la cantidad debe ser un número entero`,
 						400
 					);
 				}
+				const qty = isWeighable
+					? Math.round(item.quantity * 1000) / 1000
+					: item.quantity;
 
-				bulkOperations.push({
-					updateOne: {
-						filter: {
-							_id: new Types.ObjectId(item._id),
-							'variants.sku': item.sku,
-							'variants.stock': { $gte: item.quantity }
-						},
-						update: {
-							$inc: {
-								'variants.$[elem].stock': -item.quantity
-							}
-						},
-						arrayFilters: [{ 'elem.sku': item.sku }]
+				const hasVariants = Array.isArray(product.variants) && product.variants.length > 0;
+				let variantSnapshot: any = {};
+
+				if (hasVariants) {
+					const variant = product.variants?.find((v: any) => v.sku === item.sku && v.isActive !== false) as any;
+					if (!variant) {
+						throw new AppError(
+							`Variant ${item.sku} not found`,
+							`Variante ${item.sku} no encontrada o inactiva en "${prodLabel}"`,
+							404
+						);
 					}
-				});
 
-				// Extraemos los campos estrictamente operativos de la base de datos.
-				// ...variantData absorberá dinámicamente CUALQUIER propiedad presente 
-				// dependiente del tipo de variante (size, attributes, olor, peso, etc)
-				const {
-					stock,
-					reservedStock,
-					isActive,
-					_id,
-					id,
-					...variantData
-				} = variant as any;
+					const availableStock = variant.stock - (variant.reservedStock || 0);
+					if (availableStock < qty) {
+						throw new AppError(
+							`Insufficient stock for variant ${item.sku}`,
+							`Stock insuficiente para la variante ${item.sku}`,
+							400
+						);
+					}
 
-				let variantSnapshot = { ...variantData };
+					bulkOperations.push({
+						updateOne: {
+							filter: {
+								_id: new Types.ObjectId(item._id),
+								'variants.sku': item.sku,
+								'variants.stock': { $gte: qty }
+							},
+							update: {
+								$inc: {
+									'variants.$[elem].stock': -qty,
+									netStock: -qty
+								}
+							},
+							arrayFilters: [{ 'elem.sku': item.sku }]
+						}
+					});
+
+					const {
+						stock,
+						reservedStock,
+						isActive,
+						_id,
+						id,
+						...variantData
+					} = variant as any;
+					variantSnapshot = { ...variantData };
+				} else {
+					// Producto simple o al peso/fraccionado sin variantes
+					const currentStock = typeof product.netStock === 'number'
+						? product.netStock
+						: (typeof (product as any).stock === 'number' ? (product as any).stock : 0);
+					const availableStock = currentStock - ((product as any).reservedStock || 0);
+
+					if (availableStock < qty) {
+						throw new AppError(
+							`Insufficient stock for product ${prodLabel}`,
+							`Stock insuficiente para "${prodLabel}" (disponible: ${availableStock})`,
+							400
+						);
+					}
+
+					bulkOperations.push({
+						updateOne: {
+							filter: {
+								_id: new Types.ObjectId(item._id),
+								netStock: { $gte: qty }
+							},
+							update: {
+								$inc: {
+									netStock: -qty
+								}
+							}
+						}
+					});
+
+					variantSnapshot = {
+						sku: product.barcode || 'SIMPLE',
+						name: prodLabel
+					};
+				}
+
+				const taggedVariantImg = hasVariants && Array.isArray(product.images)
+					? product.images.find((img: any) => Array.isArray(img.variantSkus) && img.variantSkus.includes(item.sku))
+					: undefined;
 
 				finalItems.push({
 					productSnapshot: {
 						_id: product._id,
+						name: product.name || `${product.brand} ${product.model}`,
 						brand: product.brand,
 						model: product.model,
-						image: variant.imageReference?.url || product.images?.[0]?.url || '',
+						image: hasVariants
+							? (taggedVariantImg?.url || variantSnapshot?.imageReference?.url || product.images?.[0]?.url || '')
+							: (product.images?.[0]?.url || ''),
 						slug: product.slug || '',
 						price: product.price,
 						finance: product.finance,
 						providerSnapshot: product.provider,
+						isSoldByWeight: Boolean(product.isSoldByWeight),
+						unit: product.unit || 'un'
 					},
 					variantSnapshot,
-					quantity: item.quantity,
+					quantity: qty,
 					price: 0,
 					data: product
 				});
@@ -717,7 +868,7 @@ export class ProductService {
 				})
 				.lean()) as unknown as IProduct;
 			if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
-			return product;
+			return ProductDisplayService.projectPublicProduct(product);
 		} catch (error) {
 			if (error instanceof AppError) throw error;
 			throw new AppError('Failed to fetch product by slug', 'Error al obtener el producto', 500);
@@ -745,21 +896,35 @@ export class ProductService {
 	static getSmartNews = ProductRankingService.getSmartNews;
 
 
-	static async createProduct(models: TenantModels, data: IProductCreateDTO, imagesDTO: Express.Multer.File[], ogImageFile: Express.Multer.File | null, tenantSlug: string = 'general'): Promise<IProduct> {
+	static async createProduct(
+		models: TenantModels,
+		data: IProductCreateDTO,
+		imagesDTO: Express.Multer.File[],
+		ogImageFile: Express.Multer.File | null,
+		tenantSlug: string = 'general',
+		planTier?: string
+	): Promise<IProduct> {
 		try {
-			if (!data.productType) {
-				throw new AppError('Product type is required', 'El tipo de producto (productType) es obligatorio', 400);
+			// Aceptar brand o name para identificar el producto
+			const rawName = data.name?.trim();
+			const rawBrand = data.brand?.trim();
+			const rawModel = data.model?.trim();
+			const productName = rawName || [rawBrand, rawModel].filter(Boolean).join(' ').trim();
+
+			if (!productName) {
+				throw new AppError('Product identification required', 'El producto debe tener un nombre comercial o marca/modelo identificable', 400);
 			}
-			if (!data.brand || typeof data.brand !== 'string' || !data.brand.trim()) {
-				throw new AppError('Brand is required', 'La marca del producto es obligatoria', 400);
-			}
-			const slug = this.generateSlug(data.brand, data.model);
+
+			const brand = rawBrand || rawName || 'General';
+			const model = rawModel || rawName || 'General';
+			const slug = this.generateSlug(brand, model);
+
 			const config = await EcommerceService.getConfig(models);
 			const businessType = config.businessType;
 			if (!businessType) {
 				throw new AppError('Business type not configured', 'El comercio no tiene un rubro comercial configurado en su tienda', 500);
 			}
-			if (!isProductTypeAllowed(businessType, data.productType)) {
+			if (data.productType && !isProductTypeAllowed(businessType, data.productType)) {
 				throw new AppError('Product type not allowed', `El tipo de producto '${data.productType}' no está permitido para el rubro comercial '${businessType}'. Tipos permitidos: ${getAllowedProductTypes(businessType).join(', ')}`, 400);
 			}
 
@@ -769,9 +934,13 @@ export class ProductService {
 				? JSON.parse(data.additionalCosts)
 				: data.additionalCosts;
 
-			const additionalCosts = (Array.isArray(parsedAdditionalCosts) && parsedAdditionalCosts.length > 0)
+			const additionalCosts = Array.isArray(parsedAdditionalCosts)
 				? parsedAdditionalCosts
 				: (config.defaultAdditionalCosts || []);
+
+			const parsedPaymentRestrictions = typeof data.paymentRestrictions === 'string'
+				? JSON.parse(data.paymentRestrictions)
+				: data.paymentRestrictions;
 
 			const discountPercentageTransfer = data.discountPercentageTransfer !== undefined
 				? Number(data.discountPercentageTransfer)
@@ -780,196 +949,186 @@ export class ProductService {
 			const { price, finance } = await FinanceService.CalculatePrices(
 				{
 					providerCost: data.providerCost !== undefined ? data.providerCost : data.price!,
-					additionalCosts: additionalCosts || [],
+					additionalCosts,
 					discountPercentageTransfer,
 					dolar: venta,
 					models,
 					useCustomProfit: data.useCustomProfit ?? (data.customProfitMargin !== undefined && data.customProfitMargin !== null && !isNaN(Number(data.customProfitMargin))),
 					customProfitMargin: data.customProfitMargin !== undefined && data.customProfitMargin !== null && !isNaN(Number(data.customProfitMargin)) ? Number(data.customProfitMargin) : undefined,
 					pricingMethodChoice: data.pricingMethodChoice,
+					channelPricing: data.channelPricing,
+					paymentRestrictions: parsedPaymentRestrictions,
 				}
 			);
 
 			let images: any[] = [];
 			if (imagesDTO && imagesDTO.length > 0) {
 				const rawImages = imagesDTO.map((image) => ({
-					id: `${data.brand}-${data.model}`,
+					id: `${brand}-${model}`,
 					source: image
 				}));
 				images = await ImageService.UploadImages(rawImages, `${tenantSlug}/product-images`);
 			} else if (Array.isArray(data.images) && data.images.length > 0) {
 				images = data.images;
+			} else if (typeof data.masterImageUrl === 'string' && /^https?:\/\//i.test(data.masterImageUrl.trim())) {
+				images = [{
+					url: data.masterImageUrl.trim(),
+					public_id: 'master_catalog'
+				}];
 			}
+			images = this.ensureImageIdentity(images);
 
-			// Para productos de tipo KIOSK: inicializar variante por defecto si no vino ninguna
-			if (data.productType === ProductType.KIOSK) {
-				const variantsArr = Array.isArray(data.variants) ? data.variants : [];
-				if (variantsArr.length === 0) {
-					data.variants = [{
-						sku: '',
-						stock: (data as any).stock !== undefined ? Number((data as any).stock) : 0,
-						reservedStock: 0,
-						barcode: data.barcode ? data.barcode.trim() : undefined,
-						isActive: true
-					}] as any[];
-				} else if (variantsArr.length === 1 && data.barcode && !(variantsArr[0] as any).barcode) {
-					(variantsArr[0] as any).barcode = data.barcode.trim();
-				}
-			}
+			// Procesar variantes si se recibieron
+			let variants: any[] = [];
+			let netStock = 0;
 
 			if (data.variants && data.variants.length > 0 && Array.isArray(data.variants)) {
-				data.variants = data.variants.map((v: any) => {
+				variants = data.variants.map((v: any) => {
+					// [REMOVE-BEFORE-PROD] Compatibilidad temporal para imageIndex -> imageReference
 					if (v.imageIndex !== undefined && v.imageIndex !== null && images[v.imageIndex]) {
 						v.imageReference = {
 							url: images[v.imageIndex].url,
 							public_id: images[v.imageIndex].public_id
 						};
 					}
-					delete v.imageIndex; // Lo borramos para que Mongoose no chille
+					delete v.imageIndex;
 					if (!v.sku || typeof v.sku !== 'string' || v.sku.trim() === '') {
-						delete v.sku; // Si no tiene SKU, SkuService lo auto-genera
+						delete v.sku;
 					} else {
 						v.sku = v.sku.trim();
 					}
 					return v;
 				});
 
-				// ── Auto-generar SKUs para las variantes que no tengan ──
-				data.variants = await SkuService.generateSkusForVariants(
+				variants = await SkuService.generateSkusForVariants(
 					models,
-					data.variants as any[],
+					variants,
 					data.category,
 					data.productType,
-					data.brand
+					brand
 				);
 
-				// ── Validar que ningún SKU colisione internamente ni con otro producto ──
-				await this.validateUniqueSkus(models, data.variants as any[]);
+				await this.validateUniqueSkus(models, variants);
+				variants = await this.calculatePerVariantPrices(variants, {
+					additionalCosts,
+					discountPercentageTransfer,
+					dolar: venta,
+					models,
+					pricingMethodChoice: data.pricingMethodChoice,
+					channelPricing: data.channelPricing,
+					paymentRestrictions: parsedPaymentRestrictions,
+				});
+				images = this.pruneOrphanedVariantSkus(images, variants);
+				netStock = variants.reduce((acc, v) => acc + Math.max(0, Number(v.stock) || 0), 0);
+			} else {
+				// Producto simple o al peso/fraccionado sin variantes
+				images = this.pruneOrphanedVariantSkus(images, []);
+				netStock = Math.max(0, Number(data.netStock ?? (data as any).stock ?? 0));
 			}
 
 			// Subir og_image a Cloudinary si se proporcionó
-			let seoData: any = data.seo || {};
+			let seoData: any = data.seo && Object.keys(data.seo).length > 0 ? { ...data.seo } : undefined;
 			if (ogImageFile) {
-				const uploaded = await ImageService.UploadImage(
+				const uploaded = await ImageService.UploadOgImage1200x630(
 					ogImageFile,
-					`${data.brand}-${data.model}-og`,
+					`${brand}-${model}-og`,
 					`${tenantSlug}/seo-images`
 				);
 				seoData = {
-					...seoData,
-					og_image: {
+					...(seoData || {}),
+					metaImage: {
 						url: uploaded.secure_url,
 						public_id: uploaded.public_id
 					}
 				};
 			}
 
-			// Elegir modelo según el tipo de producto
-			const Model = this.getModel(models, data.productType);
-
 			const baseScore = data.rankingScore !== undefined && data.rankingScore !== null && !isNaN(Number(data.rankingScore))
 				? Number(data.rankingScore)
 				: 100;
 
-			// Campos comunes
-			const baseData: any = {
-				slug,
-				linkProductProvider: data.linkProductProvider || '',
-				brand: data.brand,
-				shortDescription: data.shortDescription ? this.sanitizeDescription(data.shortDescription) : `${data.brand} ${data.model}`,
-				largeDescription: data.largeDescription ? this.sanitizeDescription(data.largeDescription) : '',
-				model: data.model,
-				category: data.category,
-				features: data.features || [],
+			const effectivePlanTier = planTier || (config as any).planTier || 'local';
 
+			// Instanciación y blindaje a través de la Clase de Dominio
+			const domainEntity = ProductDomainFactory.createByPlan(effectivePlanTier, {
+				name: productName,
+				brand,
+				model,
+				category: data.category,
+				barcode: data.barcode?.trim(),
+				netStock,
+				lowStockThreshold: data.lowStockThreshold !== undefined ? Number(data.lowStockThreshold) : 3,
 				price,
 				finance,
-				images,
-				specifications: data.specifications || [],
-				variants: data.variants || [],
-				status: data.status || 'draft',
+				status: (data.status as any) || 'draft',
+				linkProductProvider: data.linkProductProvider,
+				variants: variants.length > 0 ? variants : undefined,
+				tags: Array.isArray(data.tags) ? data.tags : undefined,
+				specifications: Array.isArray(data.specifications) ? data.specifications : undefined,
+				images: images.length > 0 ? images : undefined,
+				isSoldByWeight: Boolean(data.isSoldByWeight),
+				unit: data.unit,
+				weight: data.weight,
+				descriptions: data.descriptions || {
+					subtitle: data.subtitle,
+					shortDescription: data.shortDescription ? this.sanitizeDescription(data.shortDescription) : `${brand} ${model}`,
+					largeDescription: data.largeDescription ? this.sanitizeDescription(data.largeDescription) : ''
+				},
 				isFeatured: Boolean(data.isFeatured),
-				rankingScore: baseScore,
-				effectiveScore: baseScore,
-				tags: data.tags || [],
-				seo: seoData
-			};
+				seo: seoData,
+				combineWith: Array.isArray(data.combineWith) ? (data.combineWith as any) : undefined
+			});
 
-			if (data.provider && data.provider !== '') {
-				baseData.provider = data.provider;
-			}
+			const dbPayload = domainEntity.toDatabaseObject();
 
-			// Campos específicos de tech
-			if (data.productType === ProductType.TECH) {
-				if (data.storage) baseData.storage = data.storage;
-				if (data.ram) baseData.ram = data.ram;
-				if (data.processor) baseData.processor = data.processor;
-				if (data.screenSize) baseData.screenSize = data.screenSize;
-				if (data.os) baseData.os = data.os;
-			}
+			// Campos de servidor adicionales
+			dbPayload.slug = slug;
+			dbPayload.rankingScore = baseScore;
+			dbPayload.effectiveScore = baseScore;
+			if (data.productType) dbPayload.productType = data.productType;
+			if (data.features) dbPayload.features = data.features;
+			if (data.provider) dbPayload.provider = data.provider;
 
-			// Campos específicos de ropa
-			if (data.productType === ProductType.CLOTHING) {
-				if (data.gender) baseData.gender = data.gender;
-				if (data.fit) baseData.fit = data.fit;
-				if (data.material) baseData.material = data.material;
-				if (data.composition) baseData.composition = data.composition;
-				if (data.sizeType) baseData.sizeType = data.sizeType;
-				if (data.sizeGuide) baseData.sizeGuide = typeof data.sizeGuide === 'string' ? JSON.parse(data.sizeGuide) : data.sizeGuide;
-				if (data.careInstructions) baseData.careInstructions = data.careInstructions;
-				if (data.season) baseData.season = data.season;
-				if (data.combineWith) {
-					const raw = Array.isArray(data.combineWith)
-						? data.combineWith
-						: (typeof data.combineWith === 'string' ? JSON.parse(data.combineWith) : []);
-					baseData.combineWith = (Array.isArray(raw) ? raw : []).map((item: any) => {
-						if (typeof item === 'string') return { product: item, color: null };
-						if (item && typeof item === 'object') {
-							const prodId = item.product || item._id;
-							return prodId ? { product: typeof prodId === 'object' ? prodId._id : prodId, color: item.color || null } : null;
-						}
-						return null;
-					}).filter(Boolean);
-				}
-			}
+			// Extensiones de rubro específicas si están en el payload
+			if (data.storage) dbPayload.storage = data.storage;
+			if (data.ram) dbPayload.ram = data.ram;
+			if (data.processor) dbPayload.processor = data.processor;
+			if (data.screenSize) dbPayload.screenSize = data.screenSize;
+			if (data.os) dbPayload.os = data.os;
+			if (data.connectivity) dbPayload.connectivity = data.connectivity;
+			if (data.gender) dbPayload.gender = data.gender;
+			if (data.fit) dbPayload.fit = data.fit;
+			if (data.material) dbPayload.material = data.material;
+			if (data.composition) dbPayload.composition = data.composition;
+			if (data.sizeType) dbPayload.sizeType = data.sizeType;
+			if (data.sizeGuide) dbPayload.sizeGuide = typeof data.sizeGuide === 'string' ? JSON.parse(data.sizeGuide) : data.sizeGuide;
+			if (data.careInstructions) dbPayload.careInstructions = data.careInstructions;
+			if (data.season) dbPayload.season = data.season;
+			if (data.volume) dbPayload.volume = data.volume;
+			if (data.concentration) dbPayload.concentration = data.concentration;
+			if (data.fragranceFamily) dbPayload.fragranceFamily = data.fragranceFamily;
+			if (data.scentNotes) dbPayload.scentNotes = typeof data.scentNotes === 'string' ? JSON.parse(data.scentNotes) : data.scentNotes;
+			if (data.applicationArea) dbPayload.applicationArea = data.applicationArea;
 
-			// Campos específicos de belleza / perfumería
-			if (data.productType === ProductType.BEAUTY) {
-				if (data.volume) baseData.volume = data.volume;
-				if (data.concentration) baseData.concentration = data.concentration;
-				if (data.fragranceFamily) baseData.fragranceFamily = data.fragranceFamily;
-				if (data.gender) baseData.gender = data.gender;
-				if (data.scentNotes) baseData.scentNotes = typeof data.scentNotes === 'string' ? JSON.parse(data.scentNotes) : data.scentNotes;
-				if (data.applicationArea) baseData.applicationArea = data.applicationArea;
-			}
-
-			// Campos específicos de mostrador (Kiosco / Almacén / Carnicería / Panadería)
-			if (data.productType === ProductType.KIOSK) {
-				if (data.barcode) baseData.barcode = data.barcode.trim();
-				if (data.isSoldByWeight !== undefined) baseData.isSoldByWeight = Boolean(data.isSoldByWeight);
-				if (data.unit) baseData.unit = data.unit;
-				if (data.weight) baseData.weight = data.weight;
-			}
-
-			const newProduct = await Model.create(baseData);
-			if (baseData.provider) {
+			const newProduct = await models.Product.create(dbPayload);
+			if (dbPayload.provider) {
 				await newProduct.populate('provider');
 			}
 
 			// Crowdsourcing silencioso al catálogo global de Vexx
-			const barcodeToSync = baseData.barcode || baseData.variants?.[0]?.barcode;
+			const barcodeToSync = dbPayload.barcode || dbPayload.variants?.[0]?.barcode;
 			if (barcodeToSync) {
 				try {
 					const { MasterCatalogService } = await import('./masterCatalog.service');
 					MasterCatalogService.silentlyUpsertFromProduct({
 						barcode: barcodeToSync,
-						model: baseData.model,
-						brand: baseData.brand,
-						category: baseData.category,
-						imageUrl: baseData.images?.[0]?.url || '',
-						unit: baseData.unit || 'un',
-						isSoldByWeight: baseData.isSoldByWeight,
-						price: baseData.price?.card_ticket1PayPrice || baseData.price?.listPrice || 0
+						model: dbPayload.model,
+						brand: dbPayload.brand,
+						category: dbPayload.category,
+						imageUrl: dbPayload.images?.[0]?.url || '',
+						unit: dbPayload.unit || 'un',
+						isSoldByWeight: dbPayload.isSoldByWeight,
+						price: dbPayload.price?.card_ticket1PayPrice || dbPayload.price?.listPrice || 0
 					});
 				} catch {
 					// Ignorar errores en background sync
@@ -990,7 +1149,15 @@ export class ProductService {
 	static previewRecalculatePrices = ProductPricingService.previewRecalculatePrices;
 	static recalculateAllProductsPrices = ProductPricingService.recalculateAllProductsPrices;
 
-	static async updateProductById(models: TenantModels, id: string, updateData: Partial<IProductUpdateDTO>, files: Express.Multer.File[], ogImageFile: Express.Multer.File | null, tenantSlug: string = 'general'): Promise<IProduct> {
+	static async updateProductById(
+		models: TenantModels,
+		id: string,
+		updateData: Partial<IProductUpdateDTO>,
+		files: Express.Multer.File[],
+		ogImageFile: Express.Multer.File | null,
+		tenantSlug: string = 'general',
+		planTier?: string
+	): Promise<IProduct> {
 		console.log('updateProductById');
 		console.log('Data:');
 		console.log(updateData);
@@ -1124,9 +1291,9 @@ export class ProductService {
 				updateData.images = currentImages;
 			}
 
-			if (updateData.brand || updateData.model) {
-				const newBrand = updateData.brand || product.brand;
-				const newModel = updateData.model || product.model;
+			if (updateData.brand || updateData.model || updateData.name) {
+				const newBrand = updateData.brand || product.brand || updateData.name || product.name || 'General';
+				const newModel = updateData.model || product.model || updateData.name || product.name || 'General';
 				updateData.slug = this.generateSlug(newBrand, newModel);
 			}
 
@@ -1137,7 +1304,8 @@ export class ProductService {
 				updateData.customProfitMargin !== undefined || 
 				updateData.pricingMethodChoice !== undefined ||
 				updateData.additionalCosts !== undefined ||
-				updateData.discountPercentageTransfer !== undefined
+				updateData.discountPercentageTransfer !== undefined ||
+				updateData.channelPricing !== undefined
 			) {
 				const config = await EcommerceService.getConfig(models);
 
@@ -1171,6 +1339,7 @@ export class ProductService {
 						useCustomProfit: updateData.useCustomProfit ?? (product.finance?.pricingStrategy?.targetProfit !== undefined),
 						customProfitMargin: currentCustomProfitMargin,
 						pricingMethodChoice: updateData.pricingMethodChoice ?? product.finance?.pricingStrategy?.method,
+						channelPricing: updateData.channelPricing,
 					}
 				);
 				(updateData as any).price = price;
@@ -1274,7 +1443,7 @@ export class ProductService {
 					}
 
 					const category = (updateData.category as string) || product.category;
-					const brand = (updateData.brand as string) || product.brand;
+					const brand = (updateData.brand as string) || product.brand || product.name || 'General';
 
 					const generated = await SkuService.generateSkusForVariants(
 						models,
@@ -1292,6 +1461,35 @@ export class ProductService {
 
 				// ── Validar que ningún SKU colisione internamente ni con otro producto ──
 				await this.validateUniqueSkus(models, updateData.variants as any[], id);
+
+				const { venta: variantDolar } = await getDolar();
+				const variantAdditionalCosts = updateData.additionalCosts !== undefined
+					? (typeof updateData.additionalCosts === 'string' ? JSON.parse(updateData.additionalCosts) : updateData.additionalCosts)
+					: (product.finance?.additionalCosts || []);
+				const variantDiscountTransfer = updateData.discountPercentageTransfer !== undefined
+					? Number(updateData.discountPercentageTransfer)
+					: product.price?.discountPercentageTransfer;
+
+				updateData.variants = await this.calculatePerVariantPrices(updateData.variants as any[], {
+					additionalCosts: variantAdditionalCosts,
+					discountPercentageTransfer: variantDiscountTransfer,
+					dolar: variantDolar,
+					models,
+					pricingMethodChoice: updateData.pricingMethodChoice ?? product.finance?.pricingStrategy?.method,
+					channelPricing: updateData.channelPricing,
+				}) as any;
+			}
+			if (Array.isArray(updateData.images)) {
+				const finalVariants = (updateData.variants as any[]) ?? (product.variants as any[]) ?? [];
+				updateData.images = this.pruneOrphanedVariantSkus(
+					this.ensureImageIdentity(updateData.images),
+					finalVariants
+				) as any;
+			} else if (updateData.variants && Array.isArray(product.images)) {
+				updateData.images = this.pruneOrphanedVariantSkus(
+					this.ensureImageIdentity(product.images as any[]),
+					updateData.variants as any[]
+				) as any;
 			}
 			if (updateData.tags) updateData.tags = JSON.parse(updateData.tags as string);
 			if (updateData.careInstructions) updateData.careInstructions = JSON.parse(updateData.careInstructions as string);
@@ -1353,7 +1551,7 @@ export class ProductService {
 			if (ogImageFile) {
 				const brand = updateData.brand || product.brand;
 				const model = updateData.model || product.model;
-				const uploaded = await ImageService.UploadImage(
+				const uploaded = await ImageService.UploadOgImage1200x630(
 					ogImageFile,
 					`${brand}-${model}-og`,
 					`${tenantSlug}/seo-images`
@@ -1373,13 +1571,24 @@ export class ProductService {
 			console.log(fieldsToSelect);
 			console.log('Parsed data');
 			console.log(updateData);
-			const TargetModel = this.getModel(models, product.productType);
-
-			if (!TargetModel) {
-				throw new AppError('Internal Server Error', 'No se encontró el modelo discriminador', 500);
+			// Recalcular netStock si se modificaron variantes o netStock directo
+			if (Array.isArray(updateData.variants) && updateData.variants.length > 0) {
+				(updateData as any).netStock = updateData.variants.reduce((acc: number, v: any) => acc + Math.max(0, Number(v.stock) || 0), 0);
+			} else if (updateData.netStock !== undefined) {
+				(updateData as any).netStock = Math.max(0, Number(updateData.netStock));
 			}
 
-			console.log(`Aplicando update sobre el modelo estricto: ${TargetModel.modelName}`);
+			// Validar límite de imágenes según plan
+			if (currentImages.length > 0 && planTier) {
+				const maxImages = (planTier.toLowerCase() === 'pro') ? 100 : (planTier.toLowerCase() === 'point' ? 50 : 20);
+				if (currentImages.length > maxImages) {
+					throw new AppError(
+						'Image limit exceeded',
+						`El plan '${planTier}' permite un máximo de ${maxImages} imágenes por producto. Se intentaron guardar ${currentImages.length}.`,
+						400
+					);
+				}
+			}
 
 			// Construir la operación de update
 			const updateOp: any = { $set: updateData };
@@ -1390,8 +1599,8 @@ export class ProductService {
 				updateOp.$unset = { sizeGuide: '' };
 			}
 
-			// 2. Ejecutamos la actualización sobre el TargetModel en vez de models.Product
-			const updatedProduct = await TargetModel.findByIdAndUpdate(
+			// Ejecutar la actualización directamente sobre models.Product (Cero discriminadores)
+			const updatedProduct = await models.Product.findByIdAndUpdate(
 				id,
 				updateOp,
 				{
@@ -1420,6 +1629,17 @@ export class ProductService {
 		try {
 			const product = await models.Product.findByIdAndDelete(id).lean() as unknown as IProduct;
 			if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
+
+			// Limpieza de imágenes asociadas en Cloudinary (background)
+			if (Array.isArray(product.images) && product.images.length > 0) {
+				const publicIds = product.images.map(img => img.public_id).filter(Boolean);
+				if (publicIds.length > 0) {
+					Promise.all(publicIds.map(pubId => ImageService.DeleteImage(pubId))).catch(err => {
+						console.error('[Cloudinary] Error eliminando imágenes del producto borrado:', err);
+					});
+				}
+			}
+
 			return product;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
@@ -1473,7 +1693,7 @@ export class ProductService {
 				{ new: true }
 			).lean() as unknown as IProduct;
 			if (!product) throw new AppError('Product not found', 'Producto no encontrado', 404);
-			return product;
+			return ProductDisplayService.projectPublicProduct(product);
 		} catch (error) {
 			if (error instanceof AppError) throw error;
 			throw new AppError(
@@ -1588,12 +1808,12 @@ export class ProductService {
 		}
 	}
 
-	static async getPublicActiveProducts(models: TenantModels) {
+	static async getPublicActiveProducts(models: TenantModels): Promise<IProduct[]> {
 		try {
 			const products = await models.Product.find({ status: 'published' })
 				.populate('provider')
 				.lean();
-			return products;
+			return products as unknown as IProduct[];
 		} catch (error) {
 			throw new AppError('Failed to fetch active products', 'Error al obtener los productos activos', 500);
 		}
@@ -1636,7 +1856,7 @@ export class ProductService {
 				const costPriceARS = Number(item.costPriceARS || item.price || item.providerCost || 0);
 
 				const rawAdditionalCosts = item.additionalCosts;
-				const additionalCosts = (Array.isArray(rawAdditionalCosts) && rawAdditionalCosts.length > 0)
+				const additionalCosts = Array.isArray(rawAdditionalCosts)
 					? rawAdditionalCosts
 					: (config.defaultAdditionalCosts || []);
 

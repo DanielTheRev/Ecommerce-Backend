@@ -12,12 +12,29 @@ export interface IVariantAttribute {
 export interface IBaseVariant {
 	_id?: string;
 	sku: string;
+	/** Etiqueta legible auto-derivada o explícita para POS, tickets y carrito */
+	label?: string;
 	color?: IVariantColor;
 	stock: number;
 	reservedStock?: number;
 	isActive: boolean;
+	// [REMOVE-BEFORE-PROD]: legacy imageReference / imageIndex
 	imageReference?: { url: string; public_id: string };
+	imageIndex?: number;
 	barcode?: string;
+	/** Sobreescritura opcional de precio si difiere del precio base del producto */
+	price?: number;
+	/** Si es false, usa providerCost y profitMargin propios para calcular prices[] */
+	inheritPrice?: boolean;
+	providerCost?: number;
+	profitMargin?: number;
+	prices?: Record<string, any>;
+	/** Talle (Indumentaria) o Medida/Presentación (Almacén, Carnicería, Ferretería) */
+	size?: string;
+	/** Capacidad líquida o peso fraccionado (ej: 750ml, 1L, 500g) */
+	volume?: string;
+	/** Atributos clave-valor libres (RAM, Almacenamiento, Material, etc.) */
+	attributes?: IVariantAttribute[];
 }
 
 // Moda / Indumentaria (ClothingProduct) — talle obligatorio

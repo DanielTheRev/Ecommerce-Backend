@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import { NewsletterController } from '../controllers/newsletter.controller';
 import { protect, adminOnly } from '../middleware/auth';
-import { requirePlanCapability } from '@/middleware/planGuard';
+import { requireAddon } from '@/middleware/addonGuard';
 
 const router: Router = Router();
 
-// Exigir capacidad de Tienda Web Completa para el módulo de newsletter
-router.use(requirePlanCapability('hasFullWebStore', 'Newsletter'));
+// Exigir complemento Newsletter activo
+router.use(requireAddon('newsletter', 'Newsletter & Suscriptores'));
 
 // Endpoint público para suscribirse al newsletter
 router.post('/subscribe', NewsletterController.subscribe);

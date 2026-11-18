@@ -6,12 +6,17 @@ import { flattenObject } from '@/utils/object.util';
 import { MercadoPagoService } from './mercadopago.service';
 import { ProductService } from './product.service';
 import { getEffectivePlanCapabilities } from '@/config/planCapabilities';
-import { BusinessType } from '@/interfaces/tenant.interface';
+import { BusinessType, ITenant } from '@/interfaces/tenant.interface';
+import { toPublicStoreConfigView } from '@/addons/price_builder';
+import { StorefrontTemplateService } from './storefrontTemplate.service';
 
 export class EcommerceService {
 	private static readonly SENSITIVE_FIELDS_SELECT =
 		'+paymentGateways.uala.credentials.userName +paymentGateways.uala.credentials.clientId +paymentGateways.uala.credentials.clientSecret ' +
 		'+paymentGateways.mercadopago.accessToken +paymentGateways.mercadopago.webhookSecret ' +
+		'+paymentGateways.mercadopago.credentials.production.accessToken +paymentGateways.mercadopago.credentials.production.webhookSecret ' +
+		'+paymentGateways.mercadopago.credentials.sandbox.accessToken +paymentGateways.mercadopago.credentials.sandbox.webhookSecret ' +
+		'+paymentGateways.mercadopago.oauth.refreshToken ' +
 		'+paymentGateways.getnet.clientId +paymentGateways.getnet.clientSecret ' +
 		'+integrations.metaPixel.accessToken +integrations.resend.apiKey +integrations.googleAuth.clientId ' +
 		'+integrations.arca.cert +integrations.arca.key';
@@ -32,7 +37,7 @@ export class EcommerceService {
 		}
 	};
 
-	static getConfig = async (models: TenantModels): Promise<IEcommerceConfig> => {
+	static getConfig = async (models: TenantModels, tenant?: ITenant): Promise<IEcommerceConfig> => {
 		try {
 			const config = await models.EcommerceConfig.findOne({ key: 'global_config' })
 				.select(this.SENSITIVE_FIELDS_SELECT)
@@ -46,7 +51,15 @@ export class EcommerceService {
 				);
 
 			const decryptConfig = this.decryptEcommerceConfig(config as IEcommerceConfig);
-			decryptConfig.capabilities = getEffectivePlanCapabilities((decryptConfig as any).planTier, decryptConfig.businessType);
+			const effectivePlanTier = tenant?.planTier || (decryptConfig as any).planTier;
+			const effectiveBusinessType = tenant?.businessType || decryptConfig.businessType;
+			if (effectivePlanTier && effectiveBusinessType) {
+				decryptConfig.capabilities = getEffectivePlanCapabilities(
+					effectivePlanTier,
+					effectiveBusinessType,
+					tenant?.activeAddons
+				);
+			}
 			return decryptConfig;
 		} catch (error) {
 			if (error instanceof AppError) throw error;
@@ -59,7 +72,11 @@ export class EcommerceService {
 		}
 	};
 
-	static getPublicConfig = async (models: TenantModels, tenantSlug?: string): Promise<Partial<IEcommerceConfigPublic>> => {
+	static getPublicConfig = async (
+		models: TenantModels,
+		tenantSlug?: string,
+		tenant?: ITenant
+	): Promise<Partial<IEcommerceConfigPublic>> => {
 		try {
 			const cacheKey = 'config:public';
 			if (tenantSlug) {
@@ -84,6 +101,12 @@ export class EcommerceService {
 			if (publicConfig.paymentGateways?.mercadopago?.publicKey && publicConfig.paymentGateways.mercadopago.publicKey !== 'no asignado') {
 				publicConfig.paymentGateways.mercadopago.publicKey = safeDecryptString(publicConfig.paymentGateways.mercadopago.publicKey);
 			}
+			if (publicConfig.paymentGateways?.mercadopago?.credentials?.production?.publicKey && publicConfig.paymentGateways.mercadopago.credentials.production.publicKey !== 'no asignado') {
+				publicConfig.paymentGateways.mercadopago.credentials.production.publicKey = safeDecryptString(publicConfig.paymentGateways.mercadopago.credentials.production.publicKey);
+			}
+			if (publicConfig.paymentGateways?.mercadopago?.credentials?.sandbox?.publicKey && publicConfig.paymentGateways.mercadopago.credentials.sandbox.publicKey !== 'no asignado') {
+				publicConfig.paymentGateways.mercadopago.credentials.sandbox.publicKey = safeDecryptString(publicConfig.paymentGateways.mercadopago.credentials.sandbox.publicKey);
+			}
 
 			// Desencriptar googleAuth clientId si existe
 			if (publicConfig.integrations?.googleAuth?.clientId) {
@@ -103,7 +126,14 @@ export class EcommerceService {
 				);
 			}
 
-			const capabilities = getEffectivePlanCapabilities((publicConfig as any).planTier || 'local', publicConfig.businessType);
+			const effectivePlanTier = tenant?.planTier || (publicConfig as any).planTier;
+			const effectiveBusinessType = tenant?.businessType || publicConfig.businessType;
+			const capabilities = effectivePlanTier
+				? getEffectivePlanCapabilities(effectivePlanTier, effectiveBusinessType, tenant?.activeAddons)
+				: undefined;
+			const storefront = tenant
+				? await StorefrontTemplateService.buildTenantStorefrontSummary(tenant)
+				: undefined;
 
 			const data: IEcommerceConfigPublic = {
 				name: publicConfig.name || 'Mi Tienda',
@@ -115,6 +145,7 @@ export class EcommerceService {
 				brands: publicConfig.brands || [],
 				categories: publicConfig.categories || [],
 				clothingFits: publicConfig.businessType === BusinessType.FASHION ? publicConfig.clothingFits : [],
+				customLists: publicConfig.customLists || {},
 				shippingConfig: publicConfig.shippingConfig,
 				workingHours: publicConfig.workingHours || {
 					weekdayStart: '10:00',
@@ -128,7 +159,8 @@ export class EcommerceService {
 					absorbInstallments: publicConfig.pricingStrategy?.absorbInstallments ?? true,
 					maxInstallmentsToAbsorb: publicConfig.pricingStrategy?.maxInstallmentsToAbsorb || 3,
 					transferDiscountPercentage: publicConfig.pricingStrategy?.transferDiscountPercentage || 0,
-					cashDiscountPercentage: publicConfig.pricingStrategy?.cashDiscountPercentage || 0
+					cashDiscountPercentage: publicConfig.pricingStrategy?.cashDiscountPercentage || 0,
+					priceRoundingMode: publicConfig.pricingStrategy?.priceRoundingMode || '100'
 				},
 				authConfig: {
 					allowEmailPassword: publicConfig.authConfig?.allowEmailPassword ?? true,
@@ -157,12 +189,29 @@ export class EcommerceService {
 					}
 				},
 				paymentGateways: {
-					mercadopago: {
-						active: publicConfig.paymentGateways?.mercadopago?.active ?? false,
-						publicKey: publicConfig.paymentGateways?.mercadopago?.publicKey || '',
-						maxInstallments: publicConfig.paymentGateways?.mercadopago?.maxInstallments || 1,
-						excludedPaymentMethods: publicConfig.paymentGateways?.mercadopago?.excludedPaymentMethods || [],
-						excludedPaymentTypes: publicConfig.paymentGateways?.mercadopago?.excludedPaymentTypes || [],
+					defaultGateway: publicConfig.paymentGateways?.defaultGateway,
+					defaultWebGateway: publicConfig.paymentGateways?.defaultWebGateway,
+					mercadopago: (() => {
+						const sanitizedMp = toPublicStoreConfigView(publicConfig);
+						return {
+							active: publicConfig.paymentGateways?.mercadopago?.active ?? false,
+							environment: sanitizedMp.environment,
+							isTestMode: sanitizedMp.isTestMode,
+							checkoutMode: sanitizedMp.checkoutMode,
+							publicKey: sanitizedMp.publicKey,
+							maxInstallments: sanitizedMp.maxInstallments,
+							absorbInstallments: sanitizedMp.absorbInstallments,
+							excludedPaymentMethods: sanitizedMp.excludedPaymentMethods,
+							excludedPaymentTypes: sanitizedMp.excludedPaymentTypes,
+						};
+					})(),
+					getnet: {
+						active: publicConfig.paymentGateways?.getnet?.active ?? false,
+						maxInstallments: publicConfig.paymentGateways?.getnet?.maxInstallments || 1,
+						checkoutMode: publicConfig.paymentGateways?.getnet?.checkoutMode || 'redirect',
+					},
+					uala: {
+						active: publicConfig.paymentGateways?.uala?.active ?? false,
 					},
 					transfer: {
 						active: (publicConfig.paymentGateways?.transfer?.active ?? true),
@@ -172,7 +221,8 @@ export class EcommerceService {
 						titular: activeTransferMethod?.titular || publicConfig.paymentGateways?.transfer?.titular || ''
 					}
 				},
-				homeLayout: publicConfig.homeLayout
+				homeLayout: publicConfig.homeLayout,
+				...(storefront ? { storefront } : {})
 			};
 
 			if (tenantSlug) {
@@ -221,7 +271,13 @@ export class EcommerceService {
 		}
 	};
 
-	static updateConfig = async (models: TenantModels, data: IEcommerceConfig, userId?: string, tenantSlug?: string): Promise<{ config: IEcommerceConfig; shouldRecalculate: boolean }> => {
+	static updateConfig = async (
+		models: TenantModels,
+		data: IEcommerceConfig,
+		userId?: string,
+		tenantSlug?: string,
+		tenant?: ITenant
+	): Promise<{ config: IEcommerceConfig; shouldRecalculate: boolean }> => {
 		try {
 			// 1. Obtenemos la configuración antigua antes de actualizar
 			const oldConfig = await models.EcommerceConfig.findOne({ key: 'global_config' }).lean() as unknown as IEcommerceConfig;
@@ -269,7 +325,15 @@ export class EcommerceService {
 			if (!updatedConfig) throw new AppError('Failed to update config', 'Error al actualizar configuración', 500);
 
 			const finalConfig = this.decryptEcommerceConfig(updatedConfig);
-			finalConfig.capabilities = getEffectivePlanCapabilities((finalConfig as any).planTier || 'local', finalConfig.businessType);
+			const effectivePlanTier = tenant?.planTier || (finalConfig as any).planTier;
+			const effectiveBusinessType = tenant?.businessType || finalConfig.businessType;
+			if (effectivePlanTier && effectiveBusinessType) {
+				finalConfig.capabilities = getEffectivePlanCapabilities(
+					effectivePlanTier,
+					effectiveBusinessType,
+					tenant?.activeAddons
+				);
+			}
 
 			// Invalidar caché instantáneamente (Purge on Mutation)
 			if (tenantSlug) {
@@ -291,12 +355,13 @@ export class EcommerceService {
 				const grossUpChanged = oldConfig.pricingStrategy?.transferGrossUp !== finalConfig.pricingStrategy?.transferGrossUp;
 				const absorbChanged = oldConfig.pricingStrategy?.absorbInstallments !== finalConfig.pricingStrategy?.absorbInstallments;
 				const card1PayDiscountChanged = oldConfig.pricingStrategy?.card1PayDiscount !== finalConfig.pricingStrategy?.card1PayDiscount;
+				const priceRoundingChanged = (oldConfig.pricingStrategy?.priceRoundingMode || '100') !== (finalConfig.pricingStrategy?.priceRoundingMode || '100');
 				const gatewayChanged = oldConfig.paymentGateways?.getnet?.active !== finalConfig.paymentGateways?.getnet?.active
 					|| oldConfig.paymentGateways?.mercadopago?.active !== finalConfig.paymentGateways?.mercadopago?.active;
 
 				shouldRecalculate = costCurrencyChanged || profitChanged || profit1PayChanged
 					|| profitInstallmentsChanged || ivaChanged || pricingMethodChanged
-					|| grossUpChanged || absorbChanged || card1PayDiscountChanged || gatewayChanged;
+					|| grossUpChanged || absorbChanged || card1PayDiscountChanged || priceRoundingChanged || gatewayChanged;
 			}
 
 			return { config: finalConfig, shouldRecalculate };
@@ -412,6 +477,19 @@ export class EcommerceService {
 				if (mp.accessToken) mp.accessToken = safeEncryptString(mp.accessToken);
 				if (mp.publicKey) mp.publicKey = safeEncryptString(mp.publicKey);
 				if (mp.webhookSecret) mp.webhookSecret = safeEncryptString(mp.webhookSecret);
+				if (mp.oauth?.refreshToken) mp.oauth.refreshToken = safeEncryptString(mp.oauth.refreshToken);
+				if (mp.credentials?.production) {
+					const prod = mp.credentials.production;
+					if (prod.accessToken) prod.accessToken = safeEncryptString(prod.accessToken);
+					if (prod.publicKey) prod.publicKey = safeEncryptString(prod.publicKey);
+					if (prod.webhookSecret) prod.webhookSecret = safeEncryptString(prod.webhookSecret);
+				}
+				if (mp.credentials?.sandbox) {
+					const sbx = mp.credentials.sandbox;
+					if (sbx.accessToken) sbx.accessToken = safeEncryptString(sbx.accessToken);
+					if (sbx.publicKey) sbx.publicKey = safeEncryptString(sbx.publicKey);
+					if (sbx.webhookSecret) sbx.webhookSecret = safeEncryptString(sbx.webhookSecret);
+				}
 			}
 			if (configObj.paymentGateways.getnet) {
 				const gn = configObj.paymentGateways.getnet;
@@ -456,6 +534,21 @@ export class EcommerceService {
 				}
 				if (mp.webhookSecret && mp.webhookSecret !== 'no asignado') {
 					mp.webhookSecret = safeDecryptString(mp.webhookSecret);
+				}
+				if (mp.oauth?.refreshToken && mp.oauth.refreshToken !== 'no asignado') {
+					mp.oauth.refreshToken = safeDecryptString(mp.oauth.refreshToken);
+				}
+				if (mp.credentials?.production) {
+					const prod = mp.credentials.production;
+					if (prod.accessToken && prod.accessToken !== 'no asignado') prod.accessToken = safeDecryptString(prod.accessToken);
+					if (prod.publicKey && prod.publicKey !== 'no asignado') prod.publicKey = safeDecryptString(prod.publicKey);
+					if (prod.webhookSecret && prod.webhookSecret !== 'no asignado') prod.webhookSecret = safeDecryptString(prod.webhookSecret);
+				}
+				if (mp.credentials?.sandbox) {
+					const sbx = mp.credentials.sandbox;
+					if (sbx.accessToken && sbx.accessToken !== 'no asignado') sbx.accessToken = safeDecryptString(sbx.accessToken);
+					if (sbx.publicKey && sbx.publicKey !== 'no asignado') sbx.publicKey = safeDecryptString(sbx.publicKey);
+					if (sbx.webhookSecret && sbx.webhookSecret !== 'no asignado') sbx.webhookSecret = safeDecryptString(sbx.webhookSecret);
 				}
 			}
 			// Getnet
@@ -503,13 +596,30 @@ export class EcommerceService {
 			const mpTokens = await MercadoPagoService.exchangeAuthorizationCode(code, redirectUri);
 
 			// 2. Armamos el objeto para actualizar la configuración
+			const tokenExpiresAt = mpTokens.expiresIn
+				? new Date(Date.now() + Number(mpTokens.expiresIn) * 1000)
+				: undefined;
+
 			const configToUpdate = {
 				paymentGateways: {
 					mercadopago: {
 						active: true,
 						accessToken: mpTokens.accessToken,
 						publicKey: mpTokens.publicKey,
-						refreshToken: mpTokens.refreshToken
+						refreshToken: mpTokens.refreshToken,
+						oauth: {
+							connected: true,
+							mpUserId: mpTokens.userId ? String(mpTokens.userId) : null,
+							refreshToken: mpTokens.refreshToken,
+							tokenExpiresAt
+						},
+						credentials: {
+							production: {
+								credentialSource: 'oauth',
+								publicKey: mpTokens.publicKey,
+								accessToken: mpTokens.accessToken
+							}
+						}
 					}
 				}
 			} as unknown as IEcommerceConfig;

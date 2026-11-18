@@ -43,11 +43,15 @@ class ConnectionManager {
 			}).asPromise();
 			this.masterDb = this.baseConnection.useDb('master_db', { useCache: true });
 
-			// Registrar modelo Tenant y MasterProduct en master_db
+			// Registrar modelo Tenant, MasterProduct y StorefrontTemplate en master_db
 			this.masterDb.model<ITenant>('Tenant', TenantSchema);
 			if (!this.masterDb.models.MasterProduct) {
 				const { MasterProductSchema } = await import('@/models/MasterProduct.model');
 				this.masterDb.model('MasterProduct', MasterProductSchema);
+			}
+			if (!this.masterDb.models.StorefrontTemplate) {
+				const { StorefrontTemplateSchema } = await import('@/models/StorefrontTemplate.model');
+				this.masterDb.model('StorefrontTemplate', StorefrontTemplateSchema);
 			}
 
 			console.log('✅ MongoDB conectado exitosamente (Multi-Tenant)');
@@ -149,23 +153,49 @@ class ConnectionManager {
 	}
 
 	/**
-	 * Busca un tenant por dominio (para resolución por subdominio/dominio).
+	 * Busca un tenant por dominio o subdominio de plataforma (ej. mikioko.vexx.com.ar o www.vuraclothing.com).
 	 */
 	async getTenantByDomain(domain: string): Promise<ITenant | null> {
-		const cleanDomain = (domain || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+		const cleanDomain = (domain || '')
+			.trim()
+			.toLowerCase()
+			.replace(/^https?:\/\//, '')
+			.replace(/\/.*$/, '')
+			.replace(/:\d+$/, '');
 		if (!cleanDomain) return null;
 
 		const cached = this.tenantDomainCache.get(cleanDomain);
 		if (cached) return cached;
+
+		// 1. Si es subdominio de la plataforma (*.vexx.com.ar), resolver por slug
+		const baseDomain = (process.env.VEXX_BASE_DOMAIN || 'vexx.com.ar').trim().toLowerCase();
+		if (cleanDomain.endsWith(`.${baseDomain}`)) {
+			const prefix = cleanDomain.slice(0, -(baseDomain.length + 1)).replace(/^www\./, '');
+			const reservedSubdomains = new Set(['', 'www', 'api', 'panel', 'console', 'admin', 'mail', 'cdn', 'static']);
+			if (prefix && !prefix.includes('.') && !reservedSubdomains.has(prefix)) {
+				const tenantBySubdomain = await this.getTenantBySlug(prefix);
+				if (tenantBySubdomain) {
+					this.tenantDomainCache.set(cleanDomain, tenantBySubdomain);
+					return tenantBySubdomain;
+				}
+			}
+		}
+
+		// 2. Resolver por dominio propio (custom domain, con o sin www.)
+		const bareDomain = cleanDomain.replace(/^www\./, '');
+		const wwwDomain = `www.${bareDomain}`;
 
 		const masterDb = this.getMasterDb();
 		const TenantModel = masterDb.model<ITenant>('Tenant');
 		const tenant = await TenantModel.findOne({
 			$or: [
 				{ domain: cleanDomain },
-				{ domain: `https://${cleanDomain}` },
-				{ domain: `http://${cleanDomain}` },
-				{ domain: { $regex: new RegExp(`^https?://${escapeRegex(cleanDomain)}/?$`, 'i') } }
+				{ domain: bareDomain },
+				{ domain: wwwDomain },
+				{ domain: `https://${bareDomain}` },
+				{ domain: `https://${wwwDomain}` },
+				{ domain: `http://${bareDomain}` },
+				{ domain: { $regex: new RegExp(`^(https?://)?(www\\.)?${escapeRegex(bareDomain)}/?$`, 'i') } }
 			],
 			isActive: true
 		}).lean() as ITenant | null;

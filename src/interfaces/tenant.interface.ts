@@ -1,5 +1,6 @@
 import { Document } from 'mongoose';
 import { VexxPlanTier } from './plan.interface';
+import { TenantDomainMode } from './storefrontTemplate.interface';
 
 export enum TenantPlan {
 	free = 'free',
@@ -26,6 +27,10 @@ export interface ITenant {
 	dbName: string;
 	businessType?: TenantBusinessType;
 	domain?: string;
+	domainMode?: TenantDomainMode;
+	activeTemplateKey?: string;
+	unlockedTemplates?: string[];
+	templateSettings?: Record<string, unknown>;
 	apiKey?: string;
 	ownerContact?: {
 		email: string;
@@ -36,11 +41,10 @@ export interface ITenant {
 	isActive: boolean;
 	plan: TenantPlan;
 	planTier?: VexxPlanTier;
+	activeAddons?: string[];
+	customLabels?: Record<string, string>;
+	addonLabels?: Record<string, Record<string, string>>;
 	extraEmployeesPurchased?: number;
-	commission: {
-		percentage: number;
-		fixedFee: number;
-	};
 	settings: {
 		logo?: string;
 		primaryColor?: string;

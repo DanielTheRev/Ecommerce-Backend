@@ -26,9 +26,9 @@ router.get('/catalog-ranking', staffOnly, EcommerceConfigController.getCatalogRa
 // Rutas sensibles de configuración y conexión (Solo Administrador)
 router.get('/mercadopago/auth-url', adminOnly, EcommerceConfigController.getMercadoPagoAuthUrl);
 router.get('/mercadopago-methods', adminOnly, EcommerceConfigController.getMercadoPagoMethods);
-router.get('/connection', adminOnly, EcommerceConfigController.getConnectionSettings);
-router.post('/connection/regenerate-key', adminOnly, EcommerceConfigController.regenerateApiKey);
-router.put('/connection/allowed-origins', adminOnly, EcommerceConfigController.updateAllowedOrigins);
+router.get('/connection', adminOnly, requirePlanCapability('hasHeadlessApiKey', 'Conexión & API Key para Web Externa'), EcommerceConfigController.getConnectionSettings);
+router.post('/connection/regenerate-key', adminOnly, requirePlanCapability('hasHeadlessApiKey', 'Conexión & API Key para Web Externa'), EcommerceConfigController.regenerateApiKey);
+router.put('/connection/allowed-origins', adminOnly, requirePlanCapability('hasHeadlessApiKey', 'Conexión & API Key para Web Externa'), EcommerceConfigController.updateAllowedOrigins);
 
 // Mutaciones de configuración (Solo Administrador)
 router.put('/recommendations', adminOnly, EcommerceConfigController.updateRecommendationsConfig);
