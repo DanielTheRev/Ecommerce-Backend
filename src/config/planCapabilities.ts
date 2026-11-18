@@ -67,6 +67,7 @@ abstract class BaseVexxCapabilities implements PlanCapabilities {
 	hasProductFeeds = false;
 	hasMetricDataSets = false;
 	hasNewsletter = false;
+	hasFavorites = false;
 	hasHeadlessApiKey = false;
 	hasExternalIntegrations = false;
 }

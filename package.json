@@ -16,6 +16,7 @@
 		"seedShippingOptions": "ts-node -r tsconfig-paths/register src/scripts/seedShippingOptions.ts",
 		"seedPaymentMethods": "ts-node -r tsconfig-paths/register src/scripts/seedPaymentMethods.ts",
 		"seedTenant": "ts-node -r tsconfig-paths/register src/scripts/create-tenant.ts",
+		"createSuperAdmin": "ts-node -r tsconfig-paths/register src/scripts/createMasterOperator.ts",
 		"seedHero": "ts-node -r tsconfig-paths/register src/scripts/seedHero.ts",
 		"TestResendAPI": "ts-node -r tsconfig-paths/register src/scripts/resendTest.ts",
 		"configureMercadopago": "ts-node -r tsconfig-paths/register src/scripts/update-mercadopago.ts",

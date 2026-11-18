@@ -1,59 +1,94 @@
 import { Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
 import { MasterAuthRequest } from '@/middleware/masterAuth.middleware';
 import { MasterTenantService } from '@/services/masterTenant.service';
 import { TenantHealthService } from '@/services/tenantHealth.service';
+import { MasterAuthService } from '@/services/auth/masterAuth.service';
 import { AppError } from '@/errors/app.error';
-import crypto from 'crypto';
 
 export class MasterTenantController {
 	/**
 	 * POST /api/master/auth/login
-	 * Iniciar sesión de SuperAdmin en la Master Console ("Root").
+	 * Iniciar sesión de SuperAdmin / Operador en console.vexx.
 	 */
 	static async login(req: MasterAuthRequest, res: Response, next: NextFunction): Promise<void> {
 		try {
-			const { masterKey, password } = req.body;
-			const configuredKey = process.env.MASTER_ADMIN_KEY;
+			const { email, password, rememberMe } = req.body || {};
+			const result = await MasterAuthService.login({
+				email,
+				password,
+				rememberMe: Boolean(rememberMe)
+			});
 
-			if (!configuredKey || configuredKey.trim().length < 16) {
-				console.warn('🚨 [MasterLogin] Intento de login pero MASTER_ADMIN_KEY no está configurada o es demasiado corta');
-				throw new AppError('Master Auth Disabled', 'El login maestro no está configurado en el servidor.', 500);
-			}
-
-			const inputKey = (masterKey || password || '').trim();
-			if (!inputKey) {
-				throw new AppError('Invalid Credentials', 'Clave de acceso de SuperAdmin incorrecta.', 401);
-			}
-
-			const inputHash = crypto.createHash('sha256').update(inputKey).digest();
-			const configHash = crypto.createHash('sha256').update(configuredKey).digest();
-
-			if (!crypto.timingSafeEqual(inputHash, configHash)) {
-				throw new AppError('Invalid Credentials', 'Clave de acceso de SuperAdmin incorrecta.', 401);
-			}
-
-			// Emitir token JWT maestro de 7 días
-			const token = jwt.sign(
-				{
-					email: 'master@vex.ar',
-					role: 'superadmin',
-					isMaster: true
-				},
-				process.env.JWT_SECRET!,
-				{ expiresIn: '7d' }
-			);
+			const maxAgeMs = rememberMe ? 7 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+			res.cookie('vexx_master_token', result.token, {
+				expires: new Date(Date.now() + maxAgeMs),
+				maxAge: maxAgeMs,
+				httpOnly: true,
+				secure: process.env.NODE_ENV === 'production',
+				sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+			});
 
 			res.status(200).json({
 				success: true,
 				message: 'Acceso concedido a Master Console',
-				token,
-				user: {
-					email: 'master@vex.ar',
-					role: 'superadmin',
-					platform: 'VEX'
-				}
+				token: result.token,
+				user: result.user
 			});
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	static async forgotPassword(req: MasterAuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const result = await MasterAuthService.forgotPassword(req.body?.email);
+			res.status(200).json(result);
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	static async resetPassword(req: MasterAuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const { token, newPassword, email } = req.body || {};
+			const result = await MasterAuthService.resetPassword({ token, newPassword, email });
+			res.status(200).json(result);
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	static async logout(_req: MasterAuthRequest, res: Response): Promise<void> {
+		res.clearCookie('vexx_master_token', {
+			httpOnly: true,
+			secure: process.env.NODE_ENV === 'production',
+			sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+		});
+		res.status(200).json({ success: true, message: 'Sesión maestra cerrada.' });
+	}
+
+	static async listOperators(_req: MasterAuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const operators = await MasterAuthService.listOperators();
+			res.status(200).json({ success: true, count: operators.length, data: operators });
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	static async createOperator(req: MasterAuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const created = await MasterAuthService.createOperator(req.body || {});
+			res.status(201).json({ success: true, message: 'Operador creado.', data: created });
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	static async updateOperator(req: MasterAuthRequest, res: Response, next: NextFunction): Promise<void> {
+		try {
+			const updated = await MasterAuthService.updateOperator(req.params.id, req.body || {});
+			res.status(200).json({ success: true, message: 'Operador actualizado.', data: updated });
 		} catch (error) {
 			next(error);
 		}

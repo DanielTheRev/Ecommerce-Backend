@@ -75,13 +75,33 @@ const userSchema = new Schema<IUser>(
 			default: false
 		},
 		rewards: {
-			firstPurchaseEligible: { type: Boolean, default: true },
-			firstPurchaseUsed: { type: Boolean, default: false },
-			newsletterSubscribed: { type: Boolean, default: false },
-			newsletterSubscribedAt: { type: Date, default: null },
-			newsletterUsed: { type: Boolean, default: false },
-			instagramClaimed: { type: Boolean, default: false },
-			instagramUsed: { type: Boolean, default: false }
+			type: {
+				firstPurchaseEligible: { type: Boolean, default: true },
+				firstPurchaseUsed: { type: Boolean, default: false },
+				newsletterSubscribed: { type: Boolean, default: false },
+				newsletterSubscribedAt: { type: Date, default: null },
+				newsletterUsed: { type: Boolean, default: false },
+				instagramClaimed: { type: Boolean, default: false },
+				instagramUsed: { type: Boolean, default: false }
+			},
+			default: undefined
+		},
+		tokenVersion: {
+			type: Number,
+			default: 0
+		},
+		resetPasswordTokenHash: {
+			type: String,
+			select: false,
+			default: undefined
+		},
+		resetPasswordExpiresAt: {
+			type: Date,
+			select: false,
+			default: undefined
+		},
+		lastLoginAt: {
+			type: Date
 		},
 		currentAccount: {
 			balance: {

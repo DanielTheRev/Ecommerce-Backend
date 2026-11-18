@@ -87,6 +87,7 @@ export interface AddonManifest {
 	icon: string;
 	implementationStatus: AddonImplementationStatus;
 	includedInPlans: readonly VexxPlanTier[];
+	minPlanTier?: VexxPlanTier;
 	isPurchasable: boolean;
 	monthlyPriceARS: number;
 	surfaces: readonly AddonSurface[];
@@ -119,6 +120,7 @@ export interface PublicAddonCatalogItem {
 	icon: string;
 	implementationStatus: AddonImplementationStatus;
 	includedInPlans: readonly VexxPlanTier[];
+	minPlanTier?: VexxPlanTier;
 	isPurchasable: boolean;
 	monthlyPriceARS: number;
 	surfaces: readonly AddonSurface[];

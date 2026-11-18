@@ -22,7 +22,7 @@ import {
 	buildAbandonedCartEmail,
 	buildBackInStockEmail,
 } from '@/templates/emails/marketingTemplates';
-import { buildOtpEmail } from '@/templates/emails/authTemplates';
+import { buildOtpEmail, buildPasswordResetEmail } from '@/templates/emails/authTemplates';
 
 export class ResendService {
 	static #apikey = process.env.RESEND_API_KEY;
@@ -624,6 +624,75 @@ export class ResendService {
 		} catch (error: any) {
 			console.error(`❌ [Email Error] Falló el envío de email de prueba a ${recipientEmail}:`, error);
 			throw error;
+		}
+	}
+
+	/**
+	 * Envía correo de recuperación de contraseña para usuarios de un comercio (admin, employee o user).
+	 */
+	static async sendPasswordResetEmail(params: {
+		email: string;
+		recipientName?: string;
+		resetUrl: string;
+		rawToken: string;
+		models: TenantModels;
+	}): Promise<void> {
+		const store = await this.getStoreDetails(params.models);
+		if (!store.apiKey) {
+			throw new Error('Resend API key not configured for tenant or platform');
+		}
+		const resend = new Resend(store.apiKey);
+		const { subject, html } = buildPasswordResetEmail({
+			brandName: store.name,
+			logoUrl: store.logoUrl,
+			websiteUrl: store.websiteUrl,
+			recipientName: params.recipientName,
+			resetUrl: params.resetUrl,
+			rawToken: params.rawToken
+		});
+
+		const { error } = await resend.emails.send({
+			from: store.fromEmail,
+			to: [params.email],
+			subject,
+			html
+		});
+		if (error) {
+			throw new Error(`Resend password reset error: ${error.message}`);
+		}
+	}
+
+	/**
+	 * Envía correo de recuperación de contraseña para operadores de plataforma (console.vexx).
+	 */
+	static async sendPlatformPasswordResetEmail(params: {
+		email: string;
+		recipientName?: string;
+		resetUrl: string;
+		rawToken: string;
+	}): Promise<void> {
+		const apiKey = this.#apikey || process.env.RESEND_API_KEY;
+		if (!apiKey) {
+			throw new Error('Falta RESEND_API_KEY en el servidor para enviar recuperación de SuperAdmin.');
+		}
+		const fromEmail = process.env.PLATFORM_FROM_EMAIL || 'Vexx Console <no-reply@vexx.com.ar>';
+		const resend = new Resend(apiKey);
+		const { subject, html } = buildPasswordResetEmail({
+			brandName: 'Vexx Console',
+			websiteUrl: process.env.CONSOLE_URL || 'https://console.vexx.com.ar',
+			recipientName: params.recipientName,
+			resetUrl: params.resetUrl,
+			rawToken: params.rawToken
+		});
+
+		const { error } = await resend.emails.send({
+			from: fromEmail,
+			to: [params.email],
+			subject,
+			html
+		});
+		if (error) {
+			throw new Error(`Resend platform password reset error: ${error.message}`);
 		}
 	}
 }

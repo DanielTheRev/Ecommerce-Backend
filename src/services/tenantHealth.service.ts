@@ -286,29 +286,29 @@ export class TenantHealthService {
 		checks.push(configCheck);
 
 		let ownerUser: BootstrapUserInput | null = null;
-		const ownerCheck = await runTimedCheck('owner_user', 'Usuario Administrador Activo', async () => {
-			const admin = await activeModels.User.findOne({ role: Role.admin, isActive: { $ne: false } })
-				.select('_id name lastName email role position permissions')
+		const ownerCheck = await runTimedCheck('owner_user', 'Dueño del Comercio Activo (StoreOwner)', async () => {
+			const StoreOwnerModel = connectionManager.getStoreOwnerModel();
+			const owner = await StoreOwnerModel.findOne({ tenantId: tenant._id, isActive: { $ne: false } })
+				.select('_id name lastName email')
 				.lean();
 
-			if (!admin) {
+			if (!owner) {
 				return {
 					status: 'error',
 					httpStatus: 404,
 					errorCode: 'OWNER_USER_NOT_FOUND',
-					message: 'No existe ningún usuario administrador activo en la base del comercio.',
-					details: `Collection users en ${tenant.dbName} no tiene registros con role='admin' activos.`
+					message: 'No existe ningún dueño (StoreOwner) activo en master_db para este comercio.',
+					details: `Collection store_owners en master_db no tiene registros activos para tenantId=${tenant._id}.`
 				};
 			}
 
 			ownerUser = {
-				_id: admin._id,
-				name: admin.name,
-				lastName: admin.lastName,
-				email: admin.email,
-				role: admin.role,
-				position: admin.position,
-				permissions: admin.permissions
+				_id: owner._id,
+				name: owner.name,
+				lastName: owner.lastName,
+				email: owner.email,
+				role: Role.admin,
+				permissions: ['*']
 			};
 			return { status: 'ok' };
 		});

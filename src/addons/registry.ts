@@ -37,6 +37,7 @@ import { customerAccountsAddon } from './customer_accounts';
 import { suppliersAddon } from './suppliers';
 import { localDeliveryAddon } from './local_delivery';
 import { newsletterAddon } from './newsletter';
+import { favoritesAddon } from './favorites';
 import { variantsAddon } from './variants';
 import { mediaStudioAddon } from './media_studio';
 import { productDescriptionsAddon } from './product_descriptions';
@@ -75,6 +76,7 @@ export const ADDON_MODULES: readonly AddonModule[] = [
 	arcaInvoicingAddon,
 	couponsAddon,
 	newsletterAddon,
+	favoritesAddon,
 	emailStudioAddon,
 	metaMarketingAddon,
 	googleAnalyticsAddon,
@@ -161,6 +163,7 @@ export function createEmptyCapabilities(): PlanCapabilities {
 		hasProductFeeds: false,
 		hasMetricDataSets: false,
 		hasNewsletter: false,
+		hasFavorites: false,
 		hasHeadlessApiKey: false,
 		hasExternalIntegrations: false
 	};

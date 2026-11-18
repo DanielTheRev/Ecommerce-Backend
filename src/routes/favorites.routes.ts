@@ -5,9 +5,9 @@ import { requirePlanCapability } from '@/middleware/planGuard';
 
 const router: Router = Router();
 
-// Todas las rutas de favoritos requieren estar autenticado y plan con Tienda Web (Pro)
+// Todas las rutas de favoritos requieren estar autenticado y tener activo el addon 'favorites' (gratis desde plan PRO)
 router.use(protect);
-router.use(requirePlanCapability('hasFullWebStore', 'Favoritos de Tienda Web'));
+router.use(requirePlanCapability('hasFavorites', 'Favoritos & Aviso de Stock'));
 
 // ==================== RUTAS DE ADMIN ====================
 // Van primero para que /admin/* no matchee con /:productId

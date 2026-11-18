@@ -58,6 +58,7 @@ export interface PlanCapabilities {
 	hasProductFeeds: boolean;
 	hasMetricDataSets: boolean;
 	hasNewsletter: boolean;
+	hasFavorites: boolean;
 	hasHeadlessApiKey: boolean;
 	hasExternalIntegrations: boolean;
 }

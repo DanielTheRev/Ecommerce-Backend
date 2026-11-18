@@ -16,6 +16,11 @@ export type EmployeePermission =
 	| 'pos:checkout'            // Cobrar ventas y emitir tickets
 	| 'pos:manual_discount'     // Aplicar descuentos manuales
 
+	// Ventas & Analítica
+	| 'sales:view'              // Ver historial de ventas
+	| 'sales:cancel'            // Anular ventas cerradas
+	| 'analytics:daily_summary' // Ver resumen diario y métricas
+
 	// Caja Registradora & Turnos
 	| 'cash:open_close'         // Abrir turno y hacer arqueo ciego
 	| 'cash:movements'          // Registrar egresos y gastos menores
@@ -26,6 +31,7 @@ export type EmployeePermission =
 	| 'products:adjust_stock'   // Modificar o corregir cantidades de stock
 	| 'products:create_edit'    // Crear o editar productos y precios de venta
 	| 'products:view_costs'     // Ver costo de compra y margen de ganancia
+	| 'categories:manage'       // Administrar categorías y marcas
 
 	// Pedidos Online (Capa 2 / 3)
 	| 'orders:manage'           // Atender bandeja de pedidos web/WhatsApp
@@ -35,7 +41,13 @@ export type EmployeePermission =
 	| 'customers:manage'        // Crear o editar clientes
 
 	// Proveedores & Compras
-	| 'suppliers:manage';       // Cargar compras y remitos de mercadería
+	| 'suppliers:manage'        // Cargar compras y remitos de mercadería
+
+	// Marketing, Fiscal y Ajustes
+	| 'marketing:manage'        // Cupones, banners, diseño web y envíos
+	| 'fiscal:manage'           // Arqueo fiscal, Monotributo y ARCA
+	| 'settings:manage'         // Ajustes de tienda
+	| 'staff:manage';           // Administrar equipo y permisos
 
 /**
  * Entidad de Perfil de Rol / Alias creado por el comerciante.

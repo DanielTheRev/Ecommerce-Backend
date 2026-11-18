@@ -49,23 +49,30 @@ export const resolveTenant = async (
 			}
 		}
 
-		// Prioridad 1: Extraer del body (para login con 3 campos - tiene la máxima prioridad)
+		// Prioridad 1: Extraer del body (Nombre del comercio o identificador para login del panel)
+		let tenantIdentifier: string | undefined;
 		if (!tenant && req.body) {
-			if (typeof req.body.tenantSlug === 'string' && req.body.tenantSlug.trim()) {
-				tenantSlug = req.body.tenantSlug.trim().toLowerCase();
+			if (typeof req.body.storeName === 'string' && req.body.storeName.trim()) {
+				tenantIdentifier = req.body.storeName.trim();
+			} else if (typeof req.body.businessName === 'string' && req.body.businessName.trim()) {
+				tenantIdentifier = req.body.businessName.trim();
+			} else if (typeof req.body.tenantSlug === 'string' && req.body.tenantSlug.trim()) {
+				tenantIdentifier = req.body.tenantSlug.trim();
 			} else if (typeof req.body.tenant === 'string' && req.body.tenant.trim()) {
-				tenantSlug = req.body.tenant.trim().toLowerCase();
+				tenantIdentifier = req.body.tenant.trim();
 			}
 		}
 
-		// Prioridad 2: Extraer del JWT Token (Bearer header o Cookie del panel/usuario)
-		if (!tenant && !tenantSlug) {
+		// Prioridad 2: Extraer del JWT Token (Bearer header o Cookie nueva del panel/tienda)
+		if (!tenant && !tenantSlug && !tenantIdentifier) {
 			const authHeader = req.headers.authorization;
 			let token: string | undefined;
 			if (authHeader && authHeader.startsWith('Bearer ')) {
 				token = authHeader.split(' ')[1];
-			} else if (req.cookies && req.cookies.token_b && req.cookies.token_b !== 'none') {
-				token = req.cookies.token_b;
+			} else if (req.cookies?.vexx_panel_token && req.cookies.vexx_panel_token !== 'none') {
+				token = req.cookies.vexx_panel_token;
+			} else if (req.cookies?.vexx_store_token && req.cookies.vexx_store_token !== 'none') {
+				token = req.cookies.vexx_store_token;
 			}
 
 			if (token) {
@@ -109,7 +116,7 @@ export const resolveTenant = async (
 		}
 
 		// Si es una petición pública que solo manda el viejo x-tenant-id sin x-api-key ni sesión: BLOQUEAR
-		if (!tenant && !tenantSlug && req.headers['x-tenant-id']) {
+		if (!tenant && !tenantSlug && !tenantIdentifier && req.headers['x-tenant-id']) {
 			throw new AppError(
 				'Storefront API Key Required',
 				'El acceso público mediante x-tenant-id fue deshabilitado. Se requiere una Llave de Tienda válida (x-api-key) en los headers.',
@@ -118,7 +125,9 @@ export const resolveTenant = async (
 		}
 
 		if (!tenant) {
-			if (tenantSlug) {
+			if (tenantIdentifier) {
+				tenant = await connectionManager.getTenantByIdentifier(tenantIdentifier);
+			} else if (tenantSlug) {
 				tenant = await connectionManager.getTenantBySlug(tenantSlug);
 			} else {
 				// Prioridad 4: Resolver por dominio/hostname

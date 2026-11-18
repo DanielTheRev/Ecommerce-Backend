@@ -5,15 +5,21 @@ import { VerticalPresetController } from '@/controllers/verticalPreset.controlle
 import { StorefrontTemplateController } from '@/controllers/storefrontTemplate.controller';
 import { SubscriptionPlanController } from '@/controllers/subscriptionPlan.controller';
 import { MarketplaceService, PurchaseStatus } from '@/services/marketplace.service';
-import { requireSuperAdmin } from '@/middleware/masterAuth.middleware';
+import { requireSuperAdmin, requireRootSuperAdminOnly } from '@/middleware/masterAuth.middleware';
 
 const router: Router = Router();
 
 // ============================================================================
-// 1. AUTENTICACIÓN MASTER / ROOT (SuperAdmin de la Plataforma Vexx)
+// 1. AUTENTICACIÓN MASTER / ROOT & OPERADORES DE VEXX (console.vexx)
 // ============================================================================
 router.post('/auth/login', MasterTenantController.login);
+router.post('/auth/logout', MasterTenantController.logout);
+router.post('/auth/forgot-password', MasterTenantController.forgotPassword);
+router.post('/auth/reset-password', MasterTenantController.resetPassword);
 router.get('/auth/me', requireSuperAdmin, MasterTenantController.getMe);
+router.get('/operators', requireSuperAdmin, requireRootSuperAdminOnly, MasterTenantController.listOperators);
+router.post('/operators', requireSuperAdmin, requireRootSuperAdminOnly, MasterTenantController.createOperator);
+router.patch('/operators/:id', requireSuperAdmin, requireRootSuperAdminOnly, MasterTenantController.updateOperator);
 router.get('/addons', requireSuperAdmin, AddonController.getMasterCatalog);
 router.get('/onboarding-config', requireSuperAdmin, AddonController.getMasterOnboardingConfig);
 

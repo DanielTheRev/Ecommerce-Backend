@@ -37,3 +37,61 @@ export function buildOtpEmail(store: any, code: string): AuthEmailResult {
 
 	return { subject, html };
 }
+
+/** 11. Recuperación de Contraseña (SuperAdmin, Panel/Empleados o Comprador) */
+export function buildPasswordResetEmail(params: {
+	brandName: string;
+	logoUrl?: string;
+	websiteUrl?: string;
+	recipientName?: string;
+	resetUrl: string;
+	rawToken: string;
+	ttlMinutes?: number;
+}): AuthEmailResult {
+	const { brandName, logoUrl, websiteUrl, recipientName, resetUrl, rawToken, ttlMinutes = 15 } = params;
+	const headerHtml = logoUrl
+		? buildEmailHeader({ name: brandName, logoUrl })
+		: `<span style="font-size: 20px; font-weight: 800; letter-spacing: -0.5px; color: #0a0a0a;">${brandName}</span>`;
+
+	const html = `
+    <div style="max-width: 520px; margin: 0 auto; padding: 30px 24px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #111; border: 1px solid #eeeeee; border-radius: 12px; background-color: #ffffff;">
+      <div style="text-align: center; padding-bottom: 20px; border-bottom: 1px solid #f1f1f1;">
+        ${headerHtml}
+      </div>
+
+      <div style="padding: 28px 8px;">
+        <h1 style="font-size: 20px; font-weight: 700; margin: 0 0 12px 0; color: #0a0a0a;">Restablecer contraseña</h1>
+        <p style="font-size: 14px; color: #444; line-height: 1.5; margin: 0 0 20px 0;">
+          Hola${recipientName ? ` ${recipientName}` : ''}, recibimos una solicitud para cambiar la contraseña de tu cuenta en <strong>${brandName}</strong>.
+        </p>
+
+        <div style="text-align: center; margin: 26px 0;">
+          <a href="${resetUrl}" style="display: inline-block; background-color: #111111; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 12px 26px; border-radius: 8px;">
+            Crear nueva contraseña
+          </a>
+        </div>
+
+        <p style="font-size: 12px; color: #666; line-height: 1.5; margin: 0 0 12px 0;">
+          Si el botón no funciona, copiá y pegá este enlace o usá el código de recuperación:
+        </p>
+        <div style="background-color: #f7f7f8; border: 1px solid #e5e5ea; padding: 10px 12px; border-radius: 6px; font-family: monospace; font-size: 11px; word-break: break-all; color: #333; margin-bottom: 16px;">
+          ${resetUrl}
+        </div>
+        <div style="background-color: #f7f7f8; border: 1px dashed #d1d1d6; padding: 10px 12px; border-radius: 6px; font-family: monospace; font-size: 11px; word-break: break-all; color: #111; margin-bottom: 18px;">
+          Token: ${rawToken}
+        </div>
+
+        <p style="font-size: 12px; color: #8e8e93; margin: 0;">
+          Este enlace vence en ${ttlMinutes} minutos y solo puede usarse una vez. Si no pediste este cambio, ignorá este correo.
+        </p>
+      </div>
+
+      ${websiteUrl ? `<div style="text-align: center; padding-top: 16px; border-top: 1px solid #f1f1f1;"><a href="${websiteUrl}" style="font-size: 12px; font-weight: 600; color: #000; text-decoration: none;">${brandName}</a></div>` : ''}
+    </div>
+  `;
+
+	return {
+		subject: `${brandName} - Restablecer contraseña`,
+		html
+	};
+}

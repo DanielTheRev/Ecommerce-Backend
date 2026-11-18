@@ -204,22 +204,23 @@ async function createTenant() {
 
 		console.log(`✅ Tenant creado: ${tenant.slug} (${tenant._id})`);
 
-		// 6️⃣ Crear usuario admin en la DB del tenant
+		// 6️⃣ Crear Dueño (StoreOwner) en master_db y preparar modelos del tenant
 		const tenantDb = connectionManager.getTenantDb(dbName);
 		const models = getModelsForConnection(tenantDb);
+		const StoreOwnerModel = connectionManager.getStoreOwnerModel();
 
-		const existingUser = await models.User.findOne({ email: adminEmail });
-		if (existingUser) {
-			console.log(`⚠️  Ya existe un usuario con email "${adminEmail}" en esta DB`);
+		const existingOwner = await StoreOwnerModel.findOne({ tenantId: tenant._id, email: adminEmail });
+		if (existingOwner) {
+			console.log(`⚠️  Ya existe un StoreOwner con email "${adminEmail}" para este comercio`);
 		} else {
-			const adminUser = await models.User.create({
+			const storeOwner = await StoreOwnerModel.create({
+				tenantId: tenant._id,
 				name: adminName,
 				email: adminEmail,
-				password: adminPassword, // Se hashea automáticamente con el pre-save hook
-				role: Role.admin,
+				password: adminPassword,
 				isActive: true
 			});
-			console.log(`✅ Admin creado: ${adminUser.email} (role: admin)`);
+			console.log(`✅ StoreOwner creado en master_db: ${storeOwner.email}`);
 		}
 
 		// 7️⃣ Seed de config base del ecommerce

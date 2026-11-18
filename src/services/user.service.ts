@@ -4,6 +4,7 @@ import { IUser, Role } from '@/interfaces/user.interface';
 import { TenantModels } from '@/config/modelRegistry';
 import { getEffectiveMaxEmployees } from '@/config/planCapabilities';
 import { EmployeePermission } from '@/interfaces/permission.interface';
+import { EmailSecurityUtil } from '@/utils/emailSecurity.util';
 
 const defaultRewards = {
 	firstPurchaseEligible: true,
@@ -72,16 +73,18 @@ export class UserService {
 
 	static async createUser(models: TenantModels, userData: Partial<IUser>) {
 		try {
+			const role = userData.role || Role.user;
+			const cleanEmail = userData.email ? EmailSecurityUtil.normalizeAndValidateEmail(userData.email) : userData.email;
 			const user = await models.User.create({
 				name: userData.name,
 				lastName: userData.lastName || '',
 				dni: userData.dni || '',
 				phone: userData.phone || '',
-				email: userData.email,
-				role: userData.role || Role.user,
+				email: cleanEmail,
+				role,
 				googleID: userData.googleID,
 				profilePhoto: userData.profilePhoto,
-				rewards: userData.rewards || { ...defaultRewards },
+				...(role === Role.user ? { rewards: userData.rewards || { ...defaultRewards } } : {}),
 				currentAccount: userData.currentAccount || {
 					balance: 0,
 					creditLimit: 0,
@@ -206,13 +209,9 @@ export class UserService {
 	) {
 		try {
 			const filter: Record<string, any> = {
-				role: { $in: [Role.admin, Role.employee] },
+				role: Role.employee,
 				email: { $ne: 'ventas@local.com' }
 			};
-
-			if (query?.role && (query.role === Role.admin || query.role === Role.employee)) {
-				filter.role = query.role;
-			}
 
 			if (query?.isActive !== undefined) {
 				filter.isActive = query.isActive;
@@ -242,7 +241,9 @@ export class UserService {
 				phone: u.phone || '',
 				email: u.email,
 				role: u.role,
-				position: u.position || (u.role === Role.admin ? 'Administrador' : 'Cajero'),
+				position: u.position || '',
+				permissions: u.permissions || [],
+				roleProfileId: u.roleProfileId ? String(u.roleProfileId) : undefined,
 				isActive: u.isActive !== false,
 				hasPin: Boolean(u.pinCode),
 				createdAt: u.createdAt,
@@ -258,7 +259,7 @@ export class UserService {
 		try {
 			const user = (await models.User.findOne({
 				_id: id,
-				role: { $in: [Role.admin, Role.employee] }
+				role: Role.employee
 			})
 				.select('+pinCode')
 				.lean()) as any;
@@ -275,7 +276,9 @@ export class UserService {
 				phone: user.phone || '',
 				email: user.email,
 				role: user.role,
-				position: user.position || (user.role === Role.admin ? 'Administrador' : 'Cajero'),
+				position: user.position || '',
+				permissions: user.permissions || [],
+				roleProfileId: user.roleProfileId ? String(user.roleProfileId) : undefined,
 				isActive: user.isActive !== false,
 				hasPin: Boolean(user.pinCode),
 				createdAt: user.createdAt,
@@ -305,7 +308,7 @@ export class UserService {
 		tenantInfo?: { planTier?: string; extraEmployeesPurchased?: number }
 	) {
 		try {
-			const cleanEmail = data.email.toLowerCase().trim();
+			const cleanEmail = EmailSecurityUtil.normalizeAndValidateEmail(data.email);
 			const existingUser = await models.User.findOne({ email: cleanEmail });
 			if (existingUser) {
 				throw new AppError(
@@ -315,8 +318,8 @@ export class UserService {
 				);
 			}
 
-			// Validar límite de empleados permitidos (Base 10 + Cupos extra comprados)
-			const targetRole = data.role === Role.admin ? Role.admin : Role.employee;
+			// Todo miembro creado desde /api/users/staff entra como Role.employee (el Role.admin es exclusivo del Dueño titular)
+			const targetRole = Role.employee;
 			if (targetRole === Role.employee) {
 				const activeStaffCount = await models.User.countDocuments({ role: Role.employee, isActive: true });
 				const maxAllowed = getEffectiveMaxEmployees(tenantInfo?.planTier, tenantInfo?.extraEmployeesPurchased);
@@ -364,15 +367,11 @@ export class UserService {
 			}
 
 			if (!position) {
-				if (role === Role.admin) {
-					position = 'Administrador';
-				} else {
-					throw new AppError(
-						'Staff position required',
-						'Debes indicar el puesto del empleado o seleccionar un perfil de rol asignado (ej: Cajero, Repositor).',
-						400
-					);
-				}
+				throw new AppError(
+					'Staff position required',
+					'Debes indicar el puesto del empleado o seleccionar un perfil de rol asignado (ej: Cajero, Repositor).',
+					400
+				);
 			}
 
 			const newStaff = new models.User({
@@ -387,8 +386,7 @@ export class UserService {
 				permissions: finalPermissions,
 				roleProfileId: data.roleProfileId || undefined,
 				pinCode: data.pinCode || null,
-				isActive: true,
-				rewards: { ...defaultRewards }
+				isActive: true
 			});
 
 			await newStaff.save();
@@ -437,7 +435,7 @@ export class UserService {
 		try {
 			const staff = await models.User.findOne({
 				_id: id,
-				role: { $in: [Role.admin, Role.employee] }
+				role: Role.employee
 			}).select('+pinCode +password');
 
 			if (!staff) {
@@ -446,7 +444,7 @@ export class UserService {
 
 			// Validar unicidad de email si cambió
 			if (data.email) {
-				const cleanEmail = data.email.toLowerCase().trim();
+				const cleanEmail = EmailSecurityUtil.normalizeAndValidateEmail(data.email);
 				if (cleanEmail !== staff.email) {
 					const emailInUse = await models.User.findOne({ email: cleanEmail, _id: { $ne: id } });
 					if (emailInUse) {
@@ -457,27 +455,6 @@ export class UserService {
 						);
 					}
 					staff.email = cleanEmail;
-				}
-			}
-
-			// Proteger al último admin activo
-			if (staff.role === Role.admin) {
-				const willDemoteOrDeactivate =
-					(data.role && data.role !== Role.admin) || (data.isActive === false && staff.isActive);
-
-				if (willDemoteOrDeactivate) {
-					const otherActiveAdmins = await models.User.countDocuments({
-						role: Role.admin,
-						isActive: true,
-						_id: { $ne: id }
-					});
-					if (otherActiveAdmins === 0) {
-						throw new AppError(
-							'Cannot demote last admin',
-							'No se puede desactivar ni quitar el rol al único administrador del comercio',
-							400
-						);
-					}
 				}
 			}
 
@@ -500,10 +477,6 @@ export class UserService {
 				}
 			}
 
-			if (data.role && (data.role === Role.admin || data.role === Role.employee)) {
-				staff.role = data.role;
-			}
-
 			if (data.password) {
 				if (data.password.length < 6) {
 					throw new AppError(
@@ -513,6 +486,10 @@ export class UserService {
 					);
 				}
 				staff.password = data.password;
+				staff.tokenVersion = (staff.tokenVersion || 0) + 1;
+			}
+			if (Array.isArray(data.permissions) || data.role || data.isActive === false) {
+				staff.tokenVersion = (staff.tokenVersion || 0) + 1;
 			}
 
 			if (data.pinCode !== undefined) {
@@ -566,26 +543,11 @@ export class UserService {
 
 			const staff = await models.User.findOne({
 				_id: id,
-				role: { $in: [Role.admin, Role.employee] }
+				role: Role.employee
 			});
 
 			if (!staff) {
 				throw new AppError('Staff member not found', 'Empleado no encontrado', 404);
-			}
-
-			if (staff.role === Role.admin && staff.isActive) {
-				const otherActiveAdmins = await models.User.countDocuments({
-					role: Role.admin,
-					isActive: true,
-					_id: { $ne: id }
-				});
-				if (otherActiveAdmins === 0) {
-					throw new AppError(
-						'Cannot deactivate last admin',
-						'No podés desactivar al único administrador activo del comercio',
-						400
-					);
-				}
 			}
 
 			staff.isActive = !staff.isActive;
@@ -616,26 +578,11 @@ export class UserService {
 
 			const staff = await models.User.findOne({
 				_id: id,
-				role: { $in: [Role.admin, Role.employee] }
+				role: Role.employee
 			});
 
 			if (!staff) {
 				throw new AppError('Staff member not found', 'Empleado no encontrado', 404);
-			}
-
-			if (staff.role === Role.admin) {
-				const otherActiveAdmins = await models.User.countDocuments({
-					role: Role.admin,
-					isActive: true,
-					_id: { $ne: id }
-				});
-				if (otherActiveAdmins === 0) {
-					throw new AppError(
-						'Cannot delete last admin',
-						'No se puede eliminar al único administrador del comercio',
-						400
-					);
-				}
 			}
 
 			await models.User.findByIdAndDelete(id);
@@ -682,7 +629,7 @@ export class UserService {
 			if (staffId) {
 				const staff = await models.User.findOne({
 					_id: staffId,
-					role: { $in: [Role.admin, Role.employee] },
+					role: Role.employee,
 					isActive: true
 				}).select('+pinCode');
 
@@ -712,7 +659,7 @@ export class UserService {
 
 			// Desbloqueo rápido de mostrador: buscar entre todos los empleados activos quién tiene este PIN
 			const allStaffWithPin = await models.User.find({
-				role: { $in: [Role.admin, Role.employee] },
+				role: Role.employee,
 				isActive: true,
 				pinCode: { $exists: true, $ne: null }
 			}).select('+pinCode');

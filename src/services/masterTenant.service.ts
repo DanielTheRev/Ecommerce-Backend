@@ -224,17 +224,19 @@ export class MasterTenantService {
 			}
 		});
 
-		// 2. Aprovisionar DB del nuevo tenant y crear usuario Admin inicial
+		// 2. Aprovisionar DB del nuevo tenant y crear Dueño (StoreOwner) en master_db
 		const tenantDb = connectionManager.getTenantDb(dbName);
 		const models = getModelsForConnection(tenantDb);
+		const StoreOwnerModel = connectionManager.getStoreOwnerModel();
 
 		const passwordToUse = dto.adminPassword && dto.adminPassword.length >= 6 ? dto.adminPassword : 'VexAdmin2026!';
 
-		const adminUser = await models.User.create({
+		const storeOwner = await StoreOwnerModel.create({
+			tenantId: tenant._id,
 			name: dto.ownerName || dto.name,
 			email: dto.ownerEmail.trim().toLowerCase(),
+			phone: dto.ownerPhone ? dto.ownerPhone.trim() : undefined,
 			password: passwordToUse,
-			role: Role.admin,
 			isActive: true
 		});
 
@@ -248,10 +250,10 @@ export class MasterTenantService {
 		return {
 			tenant: tenant.toObject(),
 			adminUser: {
-				_id: adminUser._id,
-				name: adminUser.name,
-				email: adminUser.email,
-				role: adminUser.role,
+				_id: storeOwner._id,
+				name: storeOwner.name,
+				email: storeOwner.email,
+				role: Role.admin,
 				temporaryPassword: passwordToUse
 			}
 		};
@@ -476,20 +478,19 @@ export class MasterTenantService {
 			throw new AppError('Tenant Not Found', 'Comercio no encontrado.', 404);
 		}
 
-		const tenantDb = connectionManager.getTenantDb(tenant.dbName);
-		const models = getModelsForConnection(tenantDb);
-
-		const adminUser = await models.User.findOne({ role: Role.admin });
-		if (!adminUser) {
-			throw new AppError('User Not Found', 'No se encontró un usuario administrador para este comercio.', 404);
+		const StoreOwnerModel = connectionManager.getStoreOwnerModel();
+		const storeOwner = await StoreOwnerModel.findOne({ tenantId: tenant._id });
+		if (!storeOwner) {
+			throw new AppError('Owner Not Found', 'No se encontró un dueño (StoreOwner) registrado para este comercio.', 404);
 		}
 
 		const temporaryPassword = newPassword && newPassword.length >= 6 ? newPassword : `Vexx${crypto.randomBytes(3).toString('hex')}!`;
-		adminUser.password = temporaryPassword;
-		await adminUser.save();
+		storeOwner.password = temporaryPassword;
+		storeOwner.tokenVersion = (storeOwner.tokenVersion || 0) + 1;
+		await storeOwner.save();
 
 		return {
-			email: adminUser.email,
+			email: storeOwner.email,
 			temporaryPassword
 		};
 	}

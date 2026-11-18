@@ -13,6 +13,7 @@ import { EcommerceService } from '@/services/ecommerce.service';
 import { StorefrontTemplateService } from '@/services/storefrontTemplate.service';
 import { validateTenantSubscriptionIntegrity } from '@/middleware/planGuard';
 import { connectionManager } from '@/config/multitenancy';
+import { buildPermissionCatalogForAddons } from '@/config/permissionCatalog';
 
 const DEFAULT_VERTICAL_COLORS: Record<string, string> = {
 	kiosk_grocery: '#059669',
@@ -238,6 +239,7 @@ export class TenantBootstrapService {
 			isAdmin,
 			permissions
 		);
+		const permissionCatalog = buildPermissionCatalogForAddons(activeAddons);
 
 		return {
 			user: {
@@ -265,6 +267,7 @@ export class TenantBootstrapService {
 			addons,
 			modules,
 			navigation,
+			permissionCatalog,
 			forms: {
 				product: formConfig
 			},
@@ -355,8 +358,8 @@ export class TenantBootstrapService {
 						route: '/home/sales',
 						icon: 'bar_chart',
 						adminOnly: false,
-						requiredPermission: 'sales',
-						enabled: isEnabled('sales_control', capabilities.hasSalesHistory) && hasAccess(false, 'sales'),
+						requiredPermission: 'sales:view',
+						enabled: isEnabled('sales_control', capabilities.hasSalesHistory) && hasAccess(false, 'sales:view'),
 						actions: {
 							enablePdfTicketDownload: getSetting('sales_control', 'enablePdfTicketDownload', true),
 							allowEmployeeCancelSale: getSetting('sales_control', 'allowEmployeeCancelSale', false),
@@ -370,10 +373,10 @@ export class TenantBootstrapService {
 						route: '/home/daily-reports',
 						icon: 'calendar_today',
 						adminOnly: !allowStaffDailySummary,
-						requiredPermission: 'daily_reports',
+						requiredPermission: 'analytics:daily_summary',
 						enabled:
 							isEnabled('daily_summary', capabilities.hasDailySummary) &&
-							hasAccess(!allowStaffDailySummary, 'daily_reports', allowStaffDailySummary),
+							hasAccess(!allowStaffDailySummary, 'analytics:daily_summary', allowStaffDailySummary),
 						actions: {
 							showNetProfitInSummary: getSetting('daily_summary', 'showNetProfitInSummary', true),
 							showPaymentMethodBreakdown: getSetting('daily_summary', 'showPaymentMethodBreakdown', true),
@@ -387,11 +390,11 @@ export class TenantBootstrapService {
 						route: '/home/fiscal',
 						icon: 'account_balance',
 						adminOnly: true,
-						requiredPermission: 'fiscal',
+						requiredPermission: 'fiscal:manage',
 						enabled:
 							(isEnabled('fiscal_audit', capabilities.hasFiscalAudit) ||
 								isEnabled('arca_invoicing', capabilities.hasArcaBilling)) &&
-							hasAccess(true, 'fiscal'),
+							hasAccess(true, 'fiscal:manage'),
 						actions: {
 							enableRecategorizationAlerts: getSetting('fiscal_audit', 'enableRecategorizationAlerts', true),
 							alertThresholdPercent: getSetting('fiscal_audit', 'alertThresholdPercent', 80),
@@ -411,8 +414,8 @@ export class TenantBootstrapService {
 						route: '/home/client-orders',
 						icon: 'shopping_cart',
 						adminOnly: false,
-						requiredPermission: 'orders',
-						enabled: isEnabled('online_orders', capabilities.hasOnlineOrders) && hasAccess(false, 'orders'),
+						requiredPermission: 'orders:manage',
+						enabled: isEnabled('online_orders', capabilities.hasOnlineOrders) && hasAccess(false, 'orders:manage'),
 						actions: {
 							requireReceiptForTransferOrder: getSetting('online_orders', 'requireReceiptForTransferOrder', true),
 							enableGuestOrderTracking: getSetting('online_orders', 'enableGuestOrderTracking', true)
@@ -425,8 +428,8 @@ export class TenantBootstrapService {
 						route: '/home/pos',
 						icon: 'point_of_sale',
 						adminOnly: false,
-						requiredPermission: 'pos',
-						enabled: isEnabled('pos', capabilities.hasPos) && hasAccess(false, 'pos'),
+						requiredPermission: 'pos:access',
+						enabled: isEnabled('pos', capabilities.hasPos) && hasAccess(false, 'pos:access'),
 						actions: {
 							allowManualDiscount: getSetting('pos', 'allowManualDiscount', true),
 							autoPrintReceipt: getSetting('pos', 'autoPrintReceipt', false),
@@ -441,8 +444,8 @@ export class TenantBootstrapService {
 						route: '/home/cash-register',
 						icon: 'payments',
 						adminOnly: false,
-						requiredPermission: 'cash_register',
-						enabled: isEnabled('cash_register', capabilities.hasCashRegister) && hasAccess(false, 'cash_register'),
+						requiredPermission: 'cash:open_close',
+						enabled: isEnabled('cash_register', capabilities.hasCashRegister) && hasAccess(false, 'cash:open_close'),
 						actions: {
 							requireOpeningCashToSell: getSetting('cash_register', 'requireOpeningCashToSell', true),
 							blindCashCountOnClose: getSetting('cash_register', 'blindCashCountOnClose', false),
@@ -456,8 +459,8 @@ export class TenantBootstrapService {
 						route: '/home/clients',
 						icon: 'group',
 						adminOnly: true,
-						requiredPermission: 'clients',
-						enabled: isEnabled('customer_accounts', capabilities.hasCustomerAccounts) && hasAccess(true, 'clients'),
+						requiredPermission: 'customers:read',
+						enabled: isEnabled('customer_accounts', capabilities.hasCustomerAccounts) && hasAccess(true, 'customers:read'),
 						actions: {
 							allowQuickClientCreationInPos: getSetting('customer_accounts', 'allowQuickClientCreationInPos', true),
 							enableCreditLineAndFiados: getSetting('customer_accounts', 'enableCreditLineAndFiados', true)
@@ -476,8 +479,8 @@ export class TenantBootstrapService {
 						route: '/home/products',
 						icon: 'inventory_2',
 						adminOnly: false,
-						requiredPermission: 'products',
-						enabled: isEnabled('store_management', capabilities.hasStockAndCostControl) && hasAccess(false, 'products'),
+						requiredPermission: 'products:read_prices',
+						enabled: isEnabled('store_management', capabilities.hasStockAndCostControl) && hasAccess(false, 'products:read_prices'),
 						actions: {
 							showDataSetsTab: isEnabled('data_sets', capabilities.hasDataSets),
 							showProductBundlesTab: isEnabled('product_bundles', capabilities.hasProductBundles),
@@ -491,8 +494,8 @@ export class TenantBootstrapService {
 						route: '/home/product-bundles',
 						icon: 'Layers',
 						adminOnly: false,
-						requiredPermission: 'products',
-						enabled: isEnabled('product_bundles', capabilities.hasProductBundles) && hasAccess(false, 'products')
+						requiredPermission: 'products:create_edit',
+						enabled: isEnabled('product_bundles', capabilities.hasProductBundles) && hasAccess(false, 'products:create_edit')
 					},
 					{
 						key: 'data_sets',
@@ -501,8 +504,8 @@ export class TenantBootstrapService {
 						route: '/home/data-sets',
 						icon: 'filter_list',
 						adminOnly: false,
-						requiredPermission: 'products',
-						enabled: isEnabled('data_sets', capabilities.hasDataSets) && hasAccess(false, 'products'),
+						requiredPermission: 'products:create_edit',
+						enabled: isEnabled('data_sets', capabilities.hasDataSets) && hasAccess(false, 'products:create_edit'),
 						actions: {
 							allowMetricFiltersInDataSets: isEnabled('metric_datasets', capabilities.hasMetricDataSets)
 						}
@@ -514,8 +517,8 @@ export class TenantBootstrapService {
 						route: '/home/categories',
 						icon: 'category',
 						adminOnly: false,
-						requiredPermission: 'categories',
-						enabled: isEnabled('category_manager', capabilities.hasCategoryManager) && hasAccess(false, 'categories'),
+						requiredPermission: 'categories:manage',
+						enabled: isEnabled('category_manager', capabilities.hasCategoryManager) && hasAccess(false, 'categories:manage'),
 						actions: {
 							enableHierarchicalCategoryGroups: getSetting('category_manager', 'enableHierarchicalCategoryGroups', true),
 							enableBrandsCatalog: getSetting('category_manager', 'enableBrandsCatalog', true),
@@ -529,8 +532,8 @@ export class TenantBootstrapService {
 						route: '/home/providers',
 						icon: 'local_shipping',
 						adminOnly: true,
-						requiredPermission: 'providers',
-						enabled: isEnabled('suppliers', capabilities.hasSupplierPurchases) && hasAccess(true, 'providers'),
+						requiredPermission: 'suppliers:manage',
+						enabled: isEnabled('suppliers', capabilities.hasSupplierPurchases) && hasAccess(true, 'suppliers:manage'),
 						actions: {
 							showProviderUrlInProduct: getSetting('suppliers', 'showProviderUrlInProduct', true),
 							trackLastPurchaseCost: getSetting('suppliers', 'trackLastPurchaseCost', true)
@@ -549,8 +552,8 @@ export class TenantBootstrapService {
 						route: '/home/templates',
 						icon: 'palette',
 						adminOnly: true,
-						requiredPermission: 'settings',
-						enabled: isEnabled('storefront_templates', capabilities.hasThemeTemplates) && hasAccess(true, 'settings')
+						requiredPermission: 'settings:manage',
+						enabled: isEnabled('storefront_templates', capabilities.hasThemeTemplates) && hasAccess(true, 'settings:manage')
 					},
 					{
 						key: 'home_layout',
@@ -559,8 +562,8 @@ export class TenantBootstrapService {
 						route: '/home/home-layout',
 						icon: 'dashboard_customize',
 						adminOnly: true,
-						requiredPermission: 'marketing',
-						enabled: isEnabled('home_layout', capabilities.hasHomeLayoutBuilder) && hasAccess(true, 'marketing')
+						requiredPermission: 'marketing:manage',
+						enabled: isEnabled('home_layout', capabilities.hasHomeLayoutBuilder) && hasAccess(true, 'marketing:manage')
 					},
 					{
 						key: 'promo_banners',
@@ -569,11 +572,11 @@ export class TenantBootstrapService {
 						route: '/home/banners',
 						icon: 'view_carousel',
 						adminOnly: true,
-						requiredPermission: 'marketing',
+						requiredPermission: 'marketing:manage',
 						enabled:
 							isEnabled('marketing_banners', capabilities.hasMarketingBanners) &&
 							getSetting('marketing_banners', 'enablePromoBanners', true) &&
-							hasAccess(true, 'marketing')
+							hasAccess(true, 'marketing:manage')
 					},
 					{
 						key: 'hero_sliders',
@@ -582,11 +585,11 @@ export class TenantBootstrapService {
 						route: '/home/hero',
 						icon: 'slideshow',
 						adminOnly: true,
-						requiredPermission: 'marketing',
+						requiredPermission: 'marketing:manage',
 						enabled:
 							isEnabled('marketing_banners', capabilities.hasMarketingBanners) &&
 							getSetting('marketing_banners', 'enableHeroSliders', true) &&
-							hasAccess(true, 'marketing'),
+							hasAccess(true, 'marketing:manage'),
 						actions: {
 							maxHeroSlides: getSetting('marketing_banners', 'maxHeroSlides', 6)
 						}
@@ -598,11 +601,11 @@ export class TenantBootstrapService {
 						route: '/home/menus',
 						icon: 'grid_view',
 						adminOnly: true,
-						requiredPermission: 'marketing',
+						requiredPermission: 'marketing:manage',
 						enabled:
 							isEnabled('marketing_banners', capabilities.hasMarketingBanners) &&
 							getSetting('marketing_banners', 'enableBentoMenus', true) &&
-							hasAccess(true, 'marketing')
+							hasAccess(true, 'marketing:manage')
 					},
 					{
 						key: 'coupons',
@@ -611,8 +614,8 @@ export class TenantBootstrapService {
 						route: '/home/coupons',
 						icon: 'confirmation_number',
 						adminOnly: true,
-						requiredPermission: 'marketing',
-						enabled: isEnabled('coupons', capabilities.hasCoupons) && hasAccess(true, 'marketing'),
+						requiredPermission: 'marketing:manage',
+						enabled: isEnabled('coupons', capabilities.hasCoupons) && hasAccess(true, 'marketing:manage'),
 						actions: {
 							allowCouponsInPos: getSetting('coupons', 'allowCouponsInPos', true),
 							allowCouponsInStorefront: getSetting('coupons', 'allowCouponsInStorefront', true),
@@ -626,11 +629,25 @@ export class TenantBootstrapService {
 						route: '/home/subscribers',
 						icon: 'mail',
 						adminOnly: true,
-						requiredPermission: 'marketing',
-						enabled: isEnabled('newsletter', capabilities.hasNewsletter) && hasAccess(true, 'marketing'),
+						requiredPermission: 'marketing:manage',
+						enabled: isEnabled('newsletter', capabilities.hasNewsletter) && hasAccess(true, 'marketing:manage'),
 						actions: {
 							showFooterSubscription: getSetting('newsletter', 'showFooterSubscription', true),
 							enableSubscriberExportCsv: getSetting('newsletter', 'enableSubscriberExportCsv', true)
+						}
+					},
+					{
+						key: 'favorites',
+						addonId: 'favorites',
+						label: 'Favoritos & Stock',
+						route: '/home/favorites',
+						icon: 'favorite',
+						adminOnly: true,
+						requiredPermission: 'marketing:manage',
+						enabled: isEnabled('favorites', capabilities.hasFavorites) && hasAccess(true, 'marketing:manage'),
+						actions: {
+							enableBackInStockNotifications: getSetting('favorites', 'enableBackInStockNotifications', true),
+							showFavoriteCountInStorefront: getSetting('favorites', 'showFavoriteCountInStorefront', false)
 						}
 					},
 					{
@@ -640,8 +657,8 @@ export class TenantBootstrapService {
 						route: '/home/emails',
 						icon: 'mark_email_read',
 						adminOnly: true,
-						requiredPermission: 'marketing',
-						enabled: isEnabled('email_studio', capabilities.hasExternalIntegrations) && hasAccess(true, 'marketing')
+						requiredPermission: 'marketing:manage',
+						enabled: isEnabled('email_studio', capabilities.hasExternalIntegrations) && hasAccess(true, 'marketing:manage')
 					},
 					{
 						key: 'shipping_options',
@@ -650,11 +667,11 @@ export class TenantBootstrapService {
 						route: '/home/shipping-options',
 						icon: 'local_shipping',
 						adminOnly: true,
-						requiredPermission: 'settings',
+						requiredPermission: 'settings:manage',
 						enabled:
 							(isEnabled('local_delivery', capabilities.hasLocalDeliveryAndTakeaway) ||
 								isEnabled('courier_shipping', capabilities.hasAutomatedShippingCouriers)) &&
-							hasAccess(true, 'settings')
+							hasAccess(true, 'settings:manage')
 					}
 				].filter((i) => i.enabled)
 			},
@@ -669,8 +686,8 @@ export class TenantBootstrapService {
 						route: '/home/settings',
 						icon: 'settings',
 						adminOnly: true,
-						requiredPermission: 'settings',
-						enabled: hasAccess(true, 'settings')
+						requiredPermission: 'settings:manage',
+						enabled: hasAccess(true, 'settings:manage')
 					},
 					{
 						key: 'addons_catalog',
@@ -679,8 +696,8 @@ export class TenantBootstrapService {
 						route: '/home/addons',
 						icon: 'extension',
 						adminOnly: true,
-						requiredPermission: 'settings',
-						enabled: hasAccess(true, 'settings')
+						requiredPermission: 'settings:manage',
+						enabled: hasAccess(true, 'settings:manage')
 					},
 					{
 						key: 'staff_management',
@@ -689,8 +706,8 @@ export class TenantBootstrapService {
 						route: '/home/staff',
 						icon: 'badge',
 						adminOnly: true,
-						requiredPermission: 'staff',
-						enabled: isEnabled('store_management', capabilities.hasTeamManagement) && hasAccess(true, 'staff')
+						requiredPermission: 'staff:manage',
+						enabled: isEnabled('store_management', capabilities.hasTeamManagement) && hasAccess(true, 'staff:manage')
 					}
 				].filter((i) => i.enabled)
 			}
@@ -703,7 +720,7 @@ export class TenantBootstrapService {
 				label: getLabel('store_identity', 'identitySectionTitle', 'Identidad, Contacto & Redes'),
 				icon: 'store',
 				adminOnly: true,
-				enabled: isEnabled('store_identity', capabilities.hasStoreIdentity) && hasAccess(true, 'settings'),
+				enabled: isEnabled('store_identity', capabilities.hasStoreIdentity) && hasAccess(true, 'settings:manage'),
 				sections: {
 					showBasicIdentity: true,
 					showContactAndAddress: true,
@@ -722,7 +739,7 @@ export class TenantBootstrapService {
 					(isEnabled('price_builder', true) ||
 						isEnabled('pos', capabilities.hasPos) ||
 						isEnabled('ecommerce_web', capabilities.hasOnlinePaymentGateways)) &&
-					hasAccess(true, 'settings'),
+					hasAccess(true, 'settings:manage'),
 				sections: {
 					showGlobalMarginsAndRounding: true,
 					showMercadoPagoConfig: true,
@@ -739,7 +756,7 @@ export class TenantBootstrapService {
 				enabled:
 					(isEnabled('fiscal_audit', capabilities.hasFiscalAudit) ||
 						isEnabled('arca_invoicing', capabilities.hasArcaBilling)) &&
-					hasAccess(true, 'settings'),
+					hasAccess(true, 'settings:manage'),
 				sections: {
 					showTaxRegimeAndMonotributo: isEnabled('fiscal_audit', capabilities.hasFiscalAudit),
 					showArcaCertificatesAndPtoVta: isEnabled('arca_invoicing', capabilities.hasArcaBilling)
@@ -753,7 +770,7 @@ export class TenantBootstrapService {
 				adminOnly: true,
 				enabled:
 					(isEnabled('pos', capabilities.hasPos) || isEnabled('cash_register', capabilities.hasCashRegister)) &&
-					hasAccess(true, 'settings'),
+					hasAccess(true, 'settings:manage'),
 				sections: {
 					showTransferValidationMode: isEnabled('pos', capabilities.hasPos),
 					showCashRegisterRules: isEnabled('cash_register', capabilities.hasCashRegister),
@@ -770,7 +787,7 @@ export class TenantBootstrapService {
 					(isEnabled('storefront_templates', capabilities.hasThemeTemplates) ||
 						isEnabled('custom_domain', capabilities.hasCustomDomain) ||
 						isEnabled('storefront_connection', capabilities.hasHeadlessApiKey)) &&
-					hasAccess(true, 'settings'),
+					hasAccess(true, 'settings:manage'),
 				sections: {
 					showTemplateSelectorAndSettings: isEnabled('storefront_templates', capabilities.hasThemeTemplates),
 					showVexxSubdomainInfo: isEnabled('web_catalog', capabilities.hasWebCatalog),
@@ -789,7 +806,7 @@ export class TenantBootstrapService {
 					'Listas & Plantillas de Producto',
 				icon: 'tune',
 				adminOnly: true,
-				enabled: (isEnabled('details_builder', false) || isEnabled('size_guide', false)) && hasAccess(true, 'settings'),
+				enabled: (isEnabled('details_builder', false) || isEnabled('size_guide', false)) && hasAccess(true, 'settings:manage'),
 				sections: {
 					showCustomListsManager: isEnabled('details_builder', false),
 					showSizeGuideTemplatesManager: isEnabled('size_guide', false)
@@ -801,7 +818,7 @@ export class TenantBootstrapService {
 				label: getLabel('customer_auth', 'customerAuthTitle', 'Autenticación & Google Sign-In'),
 				icon: 'passkey',
 				adminOnly: true,
-				enabled: isEnabled('customer_auth', capabilities.hasCustomerAuthConfig) && hasAccess(true, 'settings'),
+				enabled: isEnabled('customer_auth', capabilities.hasCustomerAuthConfig) && hasAccess(true, 'settings:manage'),
 				sections: {
 					enableGoogleSignInOption: getSetting('customer_auth', 'enableGoogleSignInOption', true),
 					showGoogleClientIdInput: getSetting('customer_auth', 'showGoogleClientIdInput', true),
@@ -819,7 +836,7 @@ export class TenantBootstrapService {
 				enabled:
 					(isEnabled('local_delivery', capabilities.hasLocalDeliveryAndTakeaway) ||
 						isEnabled('courier_shipping', capabilities.hasAutomatedShippingCouriers)) &&
-					hasAccess(true, 'settings'),
+					hasAccess(true, 'settings:manage'),
 				sections: {
 					showZoneRatesAndFreeShipping: true,
 					showExpressShipping: true
@@ -831,7 +848,7 @@ export class TenantBootstrapService {
 				label: getLabel('email_studio', 'emailStudioTitle', 'Emails & Plantillas (Resend)'),
 				icon: 'mark_email_read',
 				adminOnly: true,
-				enabled: isEnabled('email_studio', capabilities.hasExternalIntegrations) && hasAccess(true, 'settings'),
+				enabled: isEnabled('email_studio', capabilities.hasExternalIntegrations) && hasAccess(true, 'settings:manage'),
 				sections: {
 					enableResendIntegration: getSetting('email_studio', 'enableResendIntegration', true),
 					enableEmailBranding: getSetting('email_studio', 'enableEmailBranding', true),
@@ -851,7 +868,7 @@ export class TenantBootstrapService {
 				enabled:
 					(isEnabled('meta_marketing', capabilities.hasProductFeeds) ||
 						isEnabled('google_analytics', capabilities.hasExternalIntegrations)) &&
-					hasAccess(true, 'settings'),
+					hasAccess(true, 'settings:manage'),
 				sections: {
 					enableMetaPixel:
 						isEnabled('meta_marketing', capabilities.hasProductFeeds) &&

@@ -1,5 +1,6 @@
-import mongoose, { Connection } from 'mongoose';
+import mongoose, { Connection, Model } from 'mongoose';
 import { TenantSchema } from '@/models/Tenant.model';
+import { IStoreOwner, StoreOwnerSchema } from '@/models/StoreOwner.model';
 import { ITenant } from '@/interfaces/tenant.interface';
 import { escapeRegex } from '@/utils/regex.util';
 
@@ -43,7 +44,7 @@ class ConnectionManager {
 			}).asPromise();
 			this.masterDb = this.baseConnection.useDb('master_db', { useCache: true });
 
-			// Registrar modelo Tenant, MasterProduct y StorefrontTemplate en master_db
+			// Registrar modelo Tenant, MasterProduct, StorefrontTemplate y MasterOperator en master_db
 			this.masterDb.model<ITenant>('Tenant', TenantSchema);
 			if (!this.masterDb.models.MasterProduct) {
 				const { MasterProductSchema } = await import('@/models/MasterProduct.model');
@@ -52,6 +53,13 @@ class ConnectionManager {
 			if (!this.masterDb.models.StorefrontTemplate) {
 				const { StorefrontTemplateSchema } = await import('@/models/StorefrontTemplate.model');
 				this.masterDb.model('StorefrontTemplate', StorefrontTemplateSchema);
+			}
+			if (!this.masterDb.models.MasterOperator) {
+				const { MasterOperatorSchema } = await import('@/models/MasterOperator.model');
+				this.masterDb.model('MasterOperator', MasterOperatorSchema);
+			}
+			if (!this.masterDb.models.StoreOwner) {
+				this.masterDb.model<IStoreOwner>('StoreOwner', StoreOwnerSchema);
 			}
 
 			console.log('✅ MongoDB conectado exitosamente (Multi-Tenant)');
@@ -94,6 +102,17 @@ class ConnectionManager {
 	}
 
 	/**
+	 * Obtiene el modelo StoreOwner en master_db.
+	 */
+	getStoreOwnerModel(): Model<IStoreOwner> {
+		const masterDb = this.getMasterDb();
+		if (!masterDb.models.StoreOwner) {
+			return masterDb.model<IStoreOwner>('StoreOwner', StoreOwnerSchema);
+		}
+		return masterDb.models.StoreOwner as Model<IStoreOwner>;
+	}
+
+	/**
 	 * Obtiene una conexión a la DB de un tenant específico.
 	 * Usa useDb con cache, así que no crea conexiones nuevas en cada request.
 	 */
@@ -128,6 +147,36 @@ class ConnectionManager {
 
 		if (tenant) {
 			this.tenantSlugCache.set(cleanSlug, tenant);
+		}
+		return tenant;
+	}
+
+	/**
+	 * Busca un tenant por su Nombre Comercial exacto (case-insensitive) o por slug.
+	 * Permite que el dueño o empleado ingrese el nombre de su comercio en el login sin exponer el slug técnico.
+	 */
+	async getTenantByIdentifier(identifier: string): Promise<ITenant | null> {
+		const raw = (identifier || '').trim();
+		if (!raw) return null;
+		const clean = raw.toLowerCase();
+
+		const cached = this.tenantSlugCache.get(clean);
+		if (cached) return cached;
+
+		const masterDb = this.getMasterDb();
+		const TenantModel = masterDb.model<ITenant>('Tenant');
+		const escaped = escapeRegex(raw);
+		const tenant = (await TenantModel.findOne({
+			$or: [
+				{ name: { $regex: new RegExp(`^${escaped}$`, 'i') } },
+				{ slug: clean }
+			],
+			isActive: true
+		}).lean()) as ITenant | null;
+
+		if (tenant) {
+			this.tenantSlugCache.set(clean, tenant);
+			this.tenantSlugCache.set(tenant.slug.toLowerCase(), tenant);
 		}
 		return tenant;
 	}
