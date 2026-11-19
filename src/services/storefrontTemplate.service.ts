@@ -76,190 +76,76 @@ export const SuperAdminUpdateTenantStorefrontZodSchema = z.object({
 
 export const DEFAULT_STOREFRONT_TEMPLATES: IStorefrontTemplate[] = [
 	{
-		key: 'point_mobile_catalog',
-		name: 'Catálogo Móvil Express',
-		shortDescription: 'Catálogo interactivo mobile-first con buscador instantáneo, carrito ágil y pedidos por WhatsApp o retiro en local.',
+		key: 'atelier_editorial',
+		name: 'Atelier Editorial',
+		shortDescription:
+			'Tienda online minimalista de alto impacto visual con fotografía en primer plano, variantes por color y talle, bloques modulares y checkout adaptable.',
 		longDescription:
-			'Diseñado para que cualquier comercio en Plan POINT comparta su link en Instagram o WhatsApp y reciba pedidos ordenados desde el celular.',
+			'Diseño editorial orientado a conversión con grilla 4:5, selector inteligente de variantes, bloques armables y medios de pago en cuotas/transferencia. ' +
+			'Guía de activación: para aprovechar todas las secciones verificá tener activos los addons correspondientes en tu panel (Pasarela de Pagos / Transferencia, Guía de Talles, Shop the Look, Menú Bento y Favoritos).',
 		engine: 'astro',
-		checkoutMode: 'whatsapp_and_pickup',
-		thumbnailUrl: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=800&q=80',
-		previewUrl: 'https://demo-point.vexx.com.ar',
+		checkoutMode: 'full_ecommerce',
+		templateKind: 'full_website',
+		thumbnailUrl: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=800&q=80',
+		previewUrl: 'https://demo.vexx.com.ar',
 		minPlanTier: VexxPlanTier.POINT,
 		supportedBusinessTypes: ['*'],
 		pricingType: 'included_in_plan',
 		priceARS: 0,
 		monthlyPriceARS: 0,
 		features: [
-			'Diseño ultra rápido para celulares (Astro SSR)',
-			'Carrito flotante con resumen de pedido',
-			'Envío de orden a WhatsApp y registro en Panel Vexx',
-			'Horarios de apertura y estado Abierto/Cerrado automático'
-		],
-		customizableFields: [
-			{
-				key: 'heroBannerTitle',
-				label: 'Título de Bienvenida',
-				type: 'string',
-				defaultValue: 'Hacé tu pedido online'
-			},
-			{
-				key: 'cardAspectRatio',
-				label: 'Proporción de Fotos en Grilla',
-				type: 'select',
-				defaultValue: '1:1',
-				options: ['1:1', '4:5']
-			},
-			{
-				key: 'showFloatingCart',
-				label: 'Mostrar barra inferior de carrito en móvil',
-				type: 'boolean',
-				defaultValue: true
-			},
-			{
-				key: 'showSearchHeader',
-				label: 'Mostrar buscador fijo superior',
-				type: 'boolean',
-				defaultValue: true
-			}
-		],
-		isDefaultForPlan: {
-			[VexxPlanTier.POINT]: true
-		},
-		isActive: true
-	},
-	{
-		key: 'vura_editorial',
-		name: 'Vura Editorial Luxury (Astro)',
-		shortDescription: 'Tienda e-commerce minimalista para indumentaria y moda con Shop the Look, Guía de Medidas y pasarelas online.',
-		longDescription:
-			'Inspirada en marcas internacionales de moda: fotografía en primer plano 4:5, selector de variantes por color/talle, prendas que combinan y checkout completo.',
-		engine: 'astro',
-		checkoutMode: 'full_ecommerce',
-		thumbnailUrl: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=800&q=80',
-		previewUrl: 'https://vura.vexx.com.ar',
-		minPlanTier: VexxPlanTier.PRO,
-		supportedBusinessTypes: ['fashion'],
-		pricingType: 'included_in_plan',
-		priceARS: 0,
-		monthlyPriceARS: 25000,
-		features: [
-			'Galería editorial 4:5 con fotos vinculadas por color',
-			'Módulo Combinar con / Shop the Look integrado',
-			'Drawer interactivo de Guía de Talles y Medidas',
-			'Checkout transparente con Mercado Pago, Getnet y Transferencia'
-		],
-		customizableFields: [
-			{
-				key: 'announcementBarText',
-				label: 'Texto de marquesina superior',
-				type: 'string',
-				defaultValue: 'Cuotas sin interés · Envíos a todo el país'
-			},
-			{
-				key: 'cardAspectRatio',
-				label: 'Proporción de tarjeta de producto',
-				type: 'select',
-				defaultValue: '4:5',
-				options: ['4:5', '9:16', '1:1']
-			},
-			{
-				key: 'showCombineWith',
-				label: 'Mostrar bloque "Completá el Look" en ficha de producto',
-				type: 'boolean',
-				defaultValue: true
-			},
-			{
-				key: 'showSizeGuideDrawer',
-				label: 'Mostrar botón de Guía de Medidas',
-				type: 'boolean',
-				defaultValue: true
-			}
-		],
-		isDefaultForPlan: {
-			[VexxPlanTier.PRO]: true
-		},
-		isDefaultForBusinessType: {
-			fashion: true
-		},
-		isActive: true
-	},
-	{
-		key: 'vura_angular_flagship',
-		name: 'Vura Flagship Store (Angular)',
-		shortDescription: 'Aplicación web completa de alto rendimiento en Angular (edición oficial de Vura en producción).',
-		longDescription:
-			'El storefront completo en Angular de Vura con Bento Grid, filtros dinámicos, favoritos, ranking ELO y checkout completo.',
-		engine: 'angular',
-		checkoutMode: 'full_ecommerce',
-		thumbnailUrl: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=800&q=80',
-		previewUrl: 'https://vura.com.ar',
-		minPlanTier: VexxPlanTier.PRO,
-		supportedBusinessTypes: ['fashion'],
-		pricingType: 'monthly_addon',
-		priceARS: 35000,
-		monthlyPriceARS: 35000,
-		features: [
-			'Arquitectura SPA/SSR Angular dedicada',
-			'Menú Visual Bento & Shop the Look interactivo',
-			'Cuentas de clientes con Google Auth y Magic Code',
-			'Integración completa con Meta Pixel, CAPI y Google Analytics 4'
+			'Fotografía editorial 4:5 con galería vinculada por variante/color',
+			'Desglose transparente de precio por transferencia y cuotas sin interés',
+			'Bloques modulares activables según plan: Shop the Look, Guía de Talles, Menú Bento y Favoritos',
+			'Advertencia: requiere configurar al menos un medio de cobro y envío activo en el panel para habilitar el checkout'
 		],
 		customizableFields: [
 			{
 				key: 'announcementBarText',
 				label: 'Texto de barra superior',
 				type: 'string',
-				defaultValue: 'Envíos gratis superando el mínimo de compra'
+				defaultValue: 'Cuotas sin interés · Envíos a todo el país'
 			},
 			{
-				key: 'enableQuickAdd',
-				label: 'Habilitar compra rápida en tarjetas',
-				type: 'boolean',
-				defaultValue: true
-			}
-		],
-		isActive: true
-	},
-	{
-		key: 'gastro_express_menu',
-		name: 'Carta Digital & Delivery Express',
-		shortDescription: 'Menú digital por categorías pensado para gastronomía, panaderías y carnicerías con pedidos rápidos.',
-		longDescription:
-			'Vista tipo app de delivery con pestañas de categorías fijas, productos por peso o unidad y checkout directo a mostrador/WhatsApp.',
-		engine: 'astro',
-		checkoutMode: 'whatsapp_and_pickup',
-		thumbnailUrl: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80',
-		previewUrl: 'https://demo-gastro.vexx.com.ar',
-		minPlanTier: VexxPlanTier.POINT,
-		supportedBusinessTypes: ['gastronomy', 'bakery', 'butcher', 'kiosk_grocery'],
-		pricingType: 'included_in_plan',
-		priceARS: 0,
-		monthlyPriceARS: 0,
-		features: [
-			'Navegación horizontal por categorías estilo app de pedidos',
-			'Soporte nativo para productos pesables (gramos / kilos) y combos',
-			'Selector de Retiro en Local o Envío a Domicilio'
-		],
-		customizableFields: [
-			{
-				key: 'showStoreStatusBadge',
-				label: 'Mostrar cartel de Abierto / Cerrado según horario',
-				type: 'boolean',
-				defaultValue: true
+				key: 'primaryColor',
+				label: 'Color de acento principal',
+				type: 'color',
+				defaultValue: '#111111'
 			},
 			{
-				key: 'defaultOrderType',
-				label: 'Modalidad de entrega seleccionada por defecto',
+				key: 'cardAspectRatio',
+				label: 'Proporción de tarjeta de producto',
 				type: 'select',
-				defaultValue: 'takeaway',
-				options: ['takeaway', 'delivery']
+				defaultValue: '4:5',
+				options: ['4:5', '1:1', '9:16']
+			},
+			{
+				key: 'checkoutStyle',
+				label: 'Flujo de Checkout',
+				type: 'select',
+				defaultValue: 'single_page',
+				options: ['single_page', 'three_steps'],
+				description: 'Elegí entre checkout rápido en 1 sola pantalla o flujo guiado en 3 pasos.'
+			},
+			{
+				key: 'showCombineWith',
+				label: 'Mostrar bloque "Completá el Look" (requiere addon Shop the Look)',
+				type: 'boolean',
+				defaultValue: true
+			},
+			{
+				key: 'showSizeGuideDrawer',
+				label: 'Mostrar Guía de Talles (requiere addon Guía de Talles)',
+				type: 'boolean',
+				defaultValue: true
 			}
 		],
+		isDefaultForPlan: {
+			[VexxPlanTier.POINT]: true,
+			[VexxPlanTier.PRO]: true
+		},
 		isDefaultForBusinessType: {
-			gastronomy: true,
-			bakery: true,
-			butcher: true
+			fashion: true
 		},
 		isActive: true
 	}

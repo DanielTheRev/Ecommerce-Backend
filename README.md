@@ -1,335 +1,112 @@
-# Electro Hub Backend
+# Vexx Backend
 
-Backend API para Electro Hub construido con Node.js, TypeScript, Express y MongoDB.
+Backend API multi-tenant para la plataforma **Vexx** (Gestión Comercial, POS, Tienda Digital y Console Master), construido con Node.js, TypeScript, Express 5, MongoDB (Mongoose) y Socket.IO.
 
-## 🚀 Características
+## 🚀 Características Principales
 
--  **Node.js** con **TypeScript** para desarrollo type-safe
--  **Express.js** para el servidor web
--  **MongoDB** con **Mongoose** para la base de datos
--  **CORS** habilitado para desarrollo
--  **Helmet** para seguridad
--  **Morgan** para logging
--  **dotenv** para variables de entorno
--  **Nodemon** para desarrollo con hot reload
+- **Arquitectura Multi-Tenant (`master_db` + DB por comercio):** Aislamiento de datos por tienda mediante `ConnectionManager` y resolución por dominio/subdominio o header `x-tenant-slug`.
+- **Autenticación Aislada por Superficie:**
+  - Dueños de tienda (`StoreOwner`) almacenados en `master_db.store_owners` (`aud: vexx_panel`).
+  - Empleados y clientes almacenados por tenant (`aud: vexx_panel` / `vexx_storefront`).
+  - Operadores de plataforma (`console.vexx`) con autenticación dedicada.
+- **Motor Modular de Addons y Capacidades:** Sistema de planes (`LOCAL`, `POINT`, `PRO`), `price_builder`, POS, caja, cuentas corrientes, ARCA/AFIP, Mercado Pago / Getnet, favoritos, plantillas de storefront y bootstrap dinámico (`/api/tenant/bootstrap`).
+- **Tiempo Real con Socket.IO + Expo Push:** Gateway WebSocket en `/api/socket.io` con salas aisladas por tenant (`admins_<slug>`, `pos_<slug>`, `terminal_<slug>_<id>`, `client_<slug>_<userId>`) y soporte de escáner móvil POS.
+- **Seguridad y Producción:** Helmet, CORS dinámico multi-tenant, cookies `httpOnly`, validación con Zod y Graceful Shutdown (`SIGTERM` / `SIGINT`).
+
+---
 
 ## 📁 Estructura del Proyecto
 
-```
+```text
 src/
-├── config/
-│   └── database.ts          # Configuración de MongoDB
-├── controllers/
-│   ├── productController.ts # Controladores CRUD de productos
-│   ├── authController.ts    # Controladores de autenticación
-│   └── orderController.ts   # Controladores de órdenes
-├── models/
-│   ├── Product.ts          # Modelo de productos
-│   ├── User.ts             # Modelo de usuarios
-│   └── Order.ts            # Modelo de órdenes
-├── routes/
-│   ├── productRoutes.ts    # Rutas de productos
-│   ├── authRoutes.ts       # Rutas de autenticación
-│   └── orderRoutes.ts      # Rutas de órdenes
-├── middleware/
-│   └── auth.ts             # Middleware de autenticación y autorización
-├── types/
-│   ├── product.types.ts    # Interfaces de productos
-│   ├── user.types.ts       # Interfaces de usuarios
-│   └── order.types.ts      # Interfaces de órdenes
-└── index.ts                # Punto de entrada
+├── addons/         # Módulos activables, registry y motor de precios (price_builder)
+├── config/         # Multitenancy (ConnectionManager), CORS, capacidades por plan, modelRegistry
+├── controllers/    # Controladores HTTP por dominio
+├── data/           # Presets y datos estáticos de vertical
+├── domain/         # Lógica de dominio pura
+├── errors/         # AppError y manejo centralizado de errores
+├── interfaces/     # Contratos e interfaces TypeScript
+├── middleware/     # tenant, auth (protect/authorize), planGuard, multer, rate limit
+├── models/         # Esquemas Mongoose (master_db y modelos por tenant)
+├── routes/         # Definición de rutas Express (/api/*)
+├── scripts/        # Scripts CLI de mantenimiento y migración
+├── services/       # Servicios de negocio (auth, orders, products, tenantBootstrap, etc.)
+├── sockets/        # Gateway Socket.IO, auth WS, handler POS y RealtimeService
+├── templates/      # Plantillas de emails / comprobantes PDF
+├── utils/          # Utilidades compartidas
+├── validators/     # Esquemas de validación Zod
+└── index.ts        # Entrypoint HTTP + WebSocket Server + Graceful Shutdown
 ```
 
-## 🛠️ Instalación
+---
 
-1. Instala las dependencias:
+## 🛠️ Instalación y Entorno Local
+
+1. Instalar dependencias con `pnpm` (gestor obligatorio):
 
 ```bash
 pnpm install
 ```
 
-2. Copia el archivo `.env` y configura tus variables:
+2. Configurar el archivo `.env.development` (para local) o `.env.production` (para servidor) en la raíz del proyecto. **Nunca commitear archivos `.env*`**.
 
-```bash
-PORT=3000
-MONGODB_URI=mongodb://localhost:27017/electro-hub
+Variables principales:
+
+```env
 NODE_ENV=development
+PORT=3000
+MONGODB_URI=mongodb://localhost:27017/vexx_dev
 JWT_SECRET=tu_jwt_secret_muy_seguro
 JWT_EXPIRES_IN=7d
 ```
 
-3. Asegúrate de tener MongoDB corriendo localmente o configura una conexión remota.
-
-## 🏃‍♂️ Comandos Disponibles
-
--  `pnpm dev` - Ejecuta el servidor en modo desarrollo con hot reload
--  `pnpm start` - Ejecuta el servidor en modo producción
--  `pnpm build` - Compila TypeScript a JavaScript
--  `pnpm build:watch` - Compila en modo watch
-
-## 🌐 Endpoints de la API
-
-### Autenticación
-
-| Método | Endpoint             | Descripción                   | Autenticación |
-| ------ | -------------------- | ----------------------------- | ------------- |
-| POST   | `/api/auth/register` | Registrar nuevo usuario       | No            |
-| POST   | `/api/auth/login`    | Iniciar sesión                | No            |
-| POST   | `/api/auth/logout`   | Cerrar sesión                 | Sí            |
-| GET    | `/api/auth/profile`  | Obtener perfil del usuario    | Sí            |
-| PUT    | `/api/auth/profile`  | Actualizar perfil del usuario | Sí            |
-
-### Productos
-
-| Método | Endpoint               | Descripción                                  | Autenticación |
-| ------ | ---------------------- | -------------------------------------------- | ------------- |
-| GET    | `/api/products`        | Obtener todos los productos (con paginación) | No            |
-| GET    | `/api/products/:id`    | Obtener un producto por ID                   | No            |
-| POST   | `/api/products`        | Crear un nuevo producto                      | Sí (Admin)    |
-| PUT    | `/api/products/:id`    | Actualizar un producto completo              | Sí (Admin)    |
-| PATCH  | `/api/products/:id`    | Actualizar parcialmente un producto          | Sí (Admin)    |
-| DELETE | `/api/products/:id`    | Eliminar un producto                         | Sí (Admin)    |
-| GET    | `/api/products/search` | Buscar productos con filtros                 | No            |
-
-### Órdenes
-
-| Método | Endpoint                  | Descripción                     | Autenticación |
-| ------ | ------------------------- | ------------------------------- | ------------- |
-| POST   | `/api/orders`             | Crear nueva orden               | Sí            |
-| GET    | `/api/orders/my-orders`   | Obtener órdenes del usuario     | Sí            |
-| GET    | `/api/orders/:id`         | Obtener una orden específica    | Sí            |
-| PUT    | `/api/orders/:id/cancel`  | Cancelar orden                  | Sí            |
-| GET    | `/api/orders`             | Obtener todas las órdenes       | Sí (Admin)    |
-| PUT    | `/api/orders/:id/status`  | Actualizar estado de orden      | Sí (Admin)    |
-| GET    | `/api/orders/admin/stats` | Obtener estadísticas de órdenes | Sí (Admin)    |
-
-### Ejemplo de Registro/Login
-
-```json
-// Registro
-{
-  "name": "Juan Pérez",
-  "email": "juan@example.com",
-  "password": "password123",
-  "phone": "+573001234567",
-  "address": "Calle 123 #45-67, Bogotá"
-}
-
-// Login
-{
-  "email": "juan@example.com",
-  "password": "password123"
-}
-```
-
-### Ejemplo de Producto
-
-```json
-{
-	"name": "Smartphone Samsung Galaxy S23",
-	"price": 999.99,
-	"discount": 10,
-	"rating": 4.5,
-	"reviews": 1250,
-	"image": {
-		"light": "https://example.com/galaxy-s23-light.jpg",
-		"dark": "https://example.com/galaxy-s23-dark.jpg"
-	},
-	"features": ["Pantalla AMOLED 6.1\"", "Cámara 50MP", "Batería 3900mAh", "128GB Storage"]
-}
-```
-
-### Ejemplo de Orden
-
-```json
-{
-	"items": [
-		{
-			"product": "product_id_here",
-			"quantity": 2,
-			"price": 999.99
-		}
-	],
-	"shippingAddress": {
-		"street": "Calle 123 #45-67",
-		"city": "Bogotá",
-		"state": "Cundinamarca",
-		"zipCode": "110111",
-		"country": "Colombia"
-	},
-	"paymentMethod": "credit_card"
-}
-```
-
-### Parámetros de Búsqueda
-
--  `q`: Término de búsqueda (nombre o características)
--  `minPrice`: Precio mínimo
--  `maxPrice`: Precio máximo
--  `minRating`: Rating mínimo
--  `page`: Número de página (default: 1)
--  `limit`: Elementos por página (default: 10)
-
-### Ejemplo de Búsqueda
-
-```
-GET /api/products/search?q=smartphone&minPrice=500&maxPrice=1500&minRating=4&page=1&limit=10
-```
-
-## 🔧 Configuración Adicional
-
-### Variables de Entorno
-
--  `PORT`: Puerto del servidor (default: 3000)
--  `MONGODB_URI`: URI de conexión a MongoDB
--  `NODE_ENV`: Ambiente de ejecución (development/production)
--  `JWT_SECRET`: Clave secreta para JWT (requerido)
--  `JWT_EXPIRES_IN`: Tiempo de expiración del token (default: 7d)
-
-### CORS
-
-Por defecto, CORS está configurado para aceptar conexiones desde:
-
--  `http://localhost:3000`
--  `http://localhost:3001`
--  `http://localhost:5173`
-
-Para producción, actualiza la configuración en `src/index.ts`.
-
-## 🧪 Testing
-
-Para probar la API puedes usar herramientas como:
-
--  **Postman**
--  **Thunder Client** (VS Code)
--  **curl**
-
-Ejemplos con curl:
+3. Compilar y ejecutar:
 
 ```bash
-# Registrar usuario
-curl -X POST http://localhost:3000/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Juan Pérez",
-    "email": "juan@example.com",
-    "password": "password123",
-    "phone": "+573001234567",
-    "address": "Calle 123 #45-67, Bogotá"
-  }'
+# Desarrollo con hot-reload
+pnpm run dev
 
-# Iniciar sesión
-curl -X POST http://localhost:3000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "juan@example.com",
-    "password": "password123"
-  }'
+# Compilación TypeScript + path aliases
+pnpm run build
 
-# Obtener todos los productos
-curl http://localhost:3000/api/products
-
-# Crear un producto (requiere autenticación como admin)
-curl -X POST http://localhost:3000/api/products \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -d '{
-    "name": "Test Product",
-    "price": 99.99,
-    "discount": 5,
-    "image": {
-      "light": "test-light.jpg",
-      "dark": "test-dark.jpg"
-    },
-    "features": ["Feature 1", "Feature 2"]
-  }'
-
-# Crear una orden (requiere autenticación)
-curl -X POST http://localhost:3000/api/orders \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -d '{
-    "items": [
-      {
-        "product": "product_id_here",
-        "quantity": 2,
-        "price": 999.99
-      }
-    ],
-    "shippingAddress": {
-      "street": "Calle 123 #45-67",
-      "city": "Bogotá",
-      "state": "Cundinamarca",
-      "zipCode": "110111",
-      "country": "Colombia"
-    },
-    "paymentMethod": "credit_card"
-  }'
+# Producción
+pnpm run start
 ```
 
-## 🔐 Autenticación y Autorización
+---
 
-### JWT (JSON Web Tokens)
+## 🏃 Comandos Disponibles
 
--  Los tokens JWT se usan para la autenticación
--  Se incluyen en el header `Authorization: Bearer <token>`
--  Los tokens expiran según la configuración `JWT_EXPIRES_IN`
--  Se almacenan también como httpOnly cookies para mayor seguridad
+| Comando | Descripción |
+| :--- | :--- |
+| `pnpm run dev` | Ejecuta el servidor en modo `development` con `nodemon` |
+| `pnpm run build` | Compila TypeScript (`tsc && tsc-alias`) a `dist/` |
+| `pnpm run build:watch` | Compila en modo watch |
+| `pnpm run start` | Ejecuta `dist/index.js` en modo `production` |
+| `pnpm exec tsc --noEmit` | Verifica tipos sin generar archivos |
 
-### Roles de Usuario
+---
 
--  **user**: Usuario regular, puede hacer órdenes y gestionar su perfil
--  **admin**: Administrador, puede gestionar productos y ver todas las órdenes
+## 🌐 Módulos de API Principales (`/api/*`)
 
-### Middleware de Protección
+- **Auth y Usuarios:** `/api/auth/*`, `/api/users/*`, `/api/role-profiles/*`
+- **Multi-Tenant y Bootstrap:** `/api/tenant/bootstrap`, `/api/master/*`, `/api/addons/*`
+- **Catálogo e Inventario:** `/api/products/*`, `/api/category-groups/*`, `/api/product-bundles/*`, `/api/master-catalog/*`, `/api/providers/*`
+- **Ventas, POS y Caja:** `/api/orders/*`, `/api/pos/*`, `/api/cash-register/*`, `/api/account-movements/*`, `/api/arca/*`
+- **Pagos y Envíos:** `/api/payment-methods/*`, `/api/getnet/*`, `/api/shipping/*`, `/api/coupons/*`
+- **Storefront y Marketing:** `/api/ecommerce-config/*`, `/api/home/*`, `/api/hero/*`, `/api/menus/*`, `/api/bento/*`, `/api/shop-the-look/*`, `/api/favorites/*`, `/api/newsletter/*`, `/api/feed/*`
+- **Notificaciones y WebSockets:** `/api/notifications/*` y Socket.IO en `/api/socket.io`
 
--  `protect`: Verifica que el usuario esté autenticado
--  `adminOnly`: Verifica que el usuario sea administrador
--  `authorize(roles)`: Verifica que el usuario tenga uno de los roles especificados
--  `ownerOrAdmin`: Verifica que el usuario sea propietario del recurso o administrador
--  `optionalAuth`: Obtiene el usuario si está autenticado, pero no requiere autenticación
+---
 
-## 📦 Sistema de Órdenes
+## ☁️ Despliegue en Producción (Ubuntu / AWS Lightsail + PM2 + Cloudflare Tunnel)
 
-### Estados de Orden
+```bash
+pnpm install --frozen-lockfile
+pnpm run build
+pm2 start dist/index.js --name vexx-backend
+pm2 save
+```
 
--  `pending`: Orden creada, esperando procesamiento
--  `processing`: Orden en proceso
--  `shipped`: Orden enviada
--  `delivered`: Orden entregada
--  `cancelled`: Orden cancelada
-
-### Funcionalidades
-
--  Creación de órdenes con múltiples productos
--  Cálculo automático de totales
--  Gestión de direcciones de envío
--  Integración con sistema de pagos (próximamente)
-
-## 📝 Notas de Desarrollo
-
-1. El servidor incluye manejo de errores global
-2. Todas las respuestas siguen un formato estándar con `success`, `message` y `data`
-3. La paginación está implementada por defecto
-4. Los productos incluyen timestamps automáticos
-5. Se incluyen índices en MongoDB para optimización
-6. Las contraseñas se hashean con bcrypt antes de almacenarse
-7. Los tokens JWT se firman con una clave secreta configurable
-8. Se implementa middleware de autorización por roles
-9. **Todas las funciones de los controladores retornan valores correctamente**
-10.   **Los middlewares de autenticación están correctamente configurados**
-11.   **Las rutas de productos son públicas para visualización, protegidas para modificación**
-
-## 🐛 Troubleshooting
-
-### Error de conexión a MongoDB
-
--  Asegúrate de que MongoDB esté corriendo
--  Verifica la URI de conexión en `.env`
--  Revisa los logs del servidor para más detalles
-
-### Puerto ya en uso
-
--  Cambia el puerto en `.env`
--  Mata el proceso que usa el puerto: `netstat -ano | findstr :3000`
--  taskkill /PID 12345 /F (reemplaza 12345 con el PID real)
+- Mantener **WebSockets** habilitado en Cloudflare Dashboard → **Network** para que `/api/socket.io` opere sobre `wss://`.
+- Configurar `MONGODB_URI` y secretos únicamente en `.env.production` con permisos restringidos (`chmod 600 .env.production`).
