@@ -220,8 +220,24 @@ const startServer = async (): Promise<void> => {
 // Iniciar el servidor
 if (!process.env.VERCEL) {
 	startServer();
+
+	const shutdown = async (signal: string) => {
+		console.log(`\n🛑 [${signal}] Cerrando servidor HTTP, WebSockets y conexiones MongoDB...`);
+		try {
+			await socketManager.close();
+			await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+			await connectionManager.disconnect();
+		} catch (err) {
+			console.error('❌ Error durante el cierre controlado:', err);
+		} finally {
+			process.exit(0);
+		}
+	};
+
+	process.on('SIGTERM', () => shutdown('SIGTERM'));
+	process.on('SIGINT', () => shutdown('SIGINT'));
 } else {
-	// En Vercel Serverless inicializamos la conexión al arrancar el contenedor
+	// LEGACY Vercel Serverless
 	connectionManager.connect().then(() => {
 		loadAllTenantOrigins().catch(console.error);
 	}).catch((err) => {

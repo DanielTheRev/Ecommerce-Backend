@@ -12,9 +12,8 @@ import { PushNotificationService } from '@/services/pushNotification.service';
 import { socketManager, ActiveScannerInfo } from './socketManager';
 
 /**
- * Interfaz unificada de servicio Realtime (Patrón Strategy / Adapter)
- * Permite alternar de forma transparente entre Socket.io (monolito / local)
- * y Supabase Realtime Broadcast (Vercel Serverless / Cloud) mediante variable de entorno.
+ * Interfaz unificada de servicio Realtime (Patrón Strategy / Adapter — DIP).
+ * Permite desacoplar a los controladores y servicios del transporte en tiempo real.
  */
 export interface IRealtimeService {
 	notifyNewOrderToAdmins(tenantSlug: string, order: any): Promise<void> | void;
@@ -58,142 +57,16 @@ export interface IRealtimeService {
 }
 
 /**
- * Implementación tradicional basada en Socket.io (Proceso persistente Node.js)
+ * Implementación principal basada en Socket.IO (Proceso persistente Node.js / Ubuntu / AWS) + Expo Push.
  */
 export class SocketRealtimeService implements IRealtimeService {
-	notifyNewOrderToAdmins(tenantSlug: string, order: any): void {
-		socketManager.notifyNewOrderToAdmins(tenantSlug, order);
-	}
-
-	notifyOrderUpdatedToAdmins(
-		tenantSlug: string,
-		order: any,
-		updateType: 'payment' | 'shipping' = 'payment'
-	): void {
-		socketManager.notifyOrderUpdatedToAdmins(tenantSlug, order, updateType);
-	}
-
-	notifyReceiptUploadedToAdmins(tenantSlug: string, order: any): void {
-		socketManager.notifyReceiptUploadedToAdmins(tenantSlug, order);
-	}
-
-	notifyAdminAlert(
-		title: string,
-		message: string,
-		severity: NotificationSeverity = NotificationSeverity.INFO,
-		tenantSlug?: string
-	): void {
-		socketManager.notifyAdminAlert(title, message, severity, tenantSlug);
-	}
-
-	async notifyClient(
-		userId: string,
-		notificationPayload: CreateClientNotificationDto,
-		models?: TenantModels
-	): Promise<void> {
-		await socketManager.notifyClient(userId, notificationPayload, models);
-	}
-
-	notifyAllClients(notificationPayload: CreateClientNotificationDto): void {
-		socketManager.notifyAllClients(notificationPayload);
-	}
-
-	broadcastScannedBarcode(
-		tenantSlug: string,
-		scanData: {
-			barcode: string;
-			product?: any;
-			matchedVariant?: any;
-			quantity?: number;
-			scannedBy?: string;
-			deviceId?: string;
-			deviceName?: string;
-			terminalId?: string;
-		}
-	): void {
-		socketManager.broadcastScannedBarcode(tenantSlug, scanData);
-	}
-
-	notifyScannerStatus(tenantSlug: string, terminalId?: string): void {
-		socketManager.notifyScannerStatus(tenantSlug, terminalId);
-	}
-
-	getActiveScanners(tenantSlug: string, terminalId?: string): ActiveScannerInfo[] {
-		return socketManager.getActiveScanners(tenantSlug, terminalId);
-	}
-}
-
-/**
- * Implementación 100% Serverless basada en Supabase Realtime Broadcast (REST API)
- * Ideal para Vercel Serverless Functions: no mantiene sockets abiertos en el backend,
- * emite mensajes mediante HTTP en ~25ms con autenticación service_role.
- */
-export class SupabaseRealtimeService implements IRealtimeService {
-	private get supabaseUrl(): string {
-		return (process.env.SUPABASE_URL || '').replace(/\/$/, '');
-	}
-
-	private get serviceRoleKey(): string {
-		return (
-			process.env.SUPABASE_SERVICE_ROLE_KEY ||
-			process.env.SUPABASE_SECRET_KEY ||
-			process.env.SUPABASE_SERVICE_KEY ||
-			process.env.SUPABASE_KEY ||
-			''
-		);
-	}
-
-	/**
-	 * Emite un mensaje de Broadcast a Supabase Realtime vía HTTP REST API
-	 */
-	private async broadcast(topic: string, event: string, payload: any): Promise<boolean> {
-		if (!this.supabaseUrl || !this.serviceRoleKey) {
-			console.warn('[SupabaseRealtime] ⚠️ Falta SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY en variables de entorno');
-			return false;
-		}
-
-		try {
-			const cleanTopic = topic.trim().toLowerCase();
-			const url = `${this.supabaseUrl}/realtime/v1/api/broadcast`;
-
-			const response = await fetch(url, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					'apikey': this.serviceRoleKey,
-					'Authorization': `Bearer ${this.serviceRoleKey}`,
-					'User-Agent': 'Vexx-Backend-Realtime/1.0'
-				},
-				body: JSON.stringify({
-					messages: [
-						{
-							topic: cleanTopic,
-							event,
-							payload
-						}
-					]
-				})
-			});
-
-			if (!response.ok) {
-				const errorText = await response.text();
-				console.error(`[SupabaseRealtime] ❌ Error ${response.status} emitiendo a [${cleanTopic}] -> ${event}:`, errorText);
-				return false;
-			}
-
-			return true;
-		} catch (error: any) {
-			console.error(`[SupabaseRealtime] ❌ Excepción de red al emitir a [${topic}]:`, error?.message || error);
-			return false;
-		}
-	}
-
 	private buildNotification(
 		dto: CreateAdminNotificationDto | CreateClientNotificationDto,
-		audience: NotificationAudience
+		audience: NotificationAudience,
+		customId?: string
 	): INotification {
 		return {
-			id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+			id: customId || `notif_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
 			timestamp: new Date(),
 			read: false,
 			audience,
@@ -201,69 +74,67 @@ export class SupabaseRealtimeService implements IRealtimeService {
 		} as INotification;
 	}
 
-	async notifyNewOrderToAdmins(tenantSlug: string, order: any): Promise<void> {
-		const total = order.finance?.total ?? order.total ?? 0;
-		const orderNum = order.orderNumber || (order._id ? String(order._id).slice(-6) : '');
-		const buyerName = order.buyerData?.firstName
-			? `${order.buyerData.firstName} ${order.buyerData.lastName || ''}`.trim()
-			: (order.buyerData?.name || 'Cliente');
-
-		const notification: CreateAdminNotificationDto = {
-			type: NotificationType.NEW_ORDER,
-			title: 'Nueva Orden Recibida',
-			message: `Orden #${orderNum} creada por valor de $${new Intl.NumberFormat('es-AR').format(total)}`,
-			severity: NotificationSeverity.INFO,
-			data: order,
-			actionUrl: `/home/client-orders`
-		};
-
-		const fullNotification = this.buildNotification(notification, NotificationAudience.ADMIN);
-
-		// 1. Emisión en tiempo real a Supabase (Canal de admins del tenant)
-		await this.broadcast(`tenant:${tenantSlug}:admins`, 'admin-notification', fullNotification);
-		console.log(`⚡ [Supabase Realtime] 🛒 Notificación de Nueva Venta emitida a [tenant:${tenantSlug}:admins] | Orden #${orderNum}`);
-
-		// 2. Disparo Push a Dispositivos Móviles (Expo)
-		PushNotificationService.sendAdminPushNotification({
-			tenantSlug,
-			title: `¡Nueva Venta! 🛒 #${orderNum}`,
-			body: `${buyerName} compró por $ ${new Intl.NumberFormat('es-AR').format(total)}`,
-			channelId: 'store_orders',
-			data: { orderId: String(order._id), orderNumber: orderNum, type: 'new_order' }
-		});
-
-		// 3. Emisión simultánea a Socket.io si hay conexiones de socket activas
-		if (socketManager.isInitialized) {
-			socketManager.emitToAdmins(tenantSlug, 'admin-notification', fullNotification);
-			console.log(`🌐 [Socket.io] 🛒 Notificación de Nueva Venta emitida a admins_${tenantSlug}`);
-		}
-	}
-
-	async notifyOrderUpdatedToAdmins(
-		tenantSlug: string,
-		order: any,
-		updateType: 'payment' | 'shipping' = 'payment'
-	): Promise<void> {
+	private formatOrderMeta(order: any) {
 		const total = order.finance?.total ?? order.total ?? 0;
 		const orderNum = order.orderNumber || (order._id ? String(order._id).slice(-6) : '');
 		const formattedTotal = new Intl.NumberFormat('es-AR').format(total);
+		const buyerName = order.buyerData?.firstName
+			? `${order.buyerData.firstName} ${order.buyerData.lastName || ''}`.trim()
+			: (order.buyerData?.name || 'Cliente');
+		return { total, orderNum, formattedTotal, buyerName };
+	}
 
-		const notification: CreateAdminNotificationDto = {
-			type: NotificationType.ORDER_STATUS_CHANGED,
-			title: updateType === 'payment' ? 'Pago Actualizado' : 'Envio Actualizado',
-			message: `La orden #${orderNum} ha cambiado de estado.`,
-			severity: NotificationSeverity.SUCCESS,
-			data: order,
-			actionUrl: `/home/client-orders`
-		};
+	notifyNewOrderToAdmins(tenantSlug: string, order: any): void {
+		const { orderNum, formattedTotal, buyerName } = this.formatOrderMeta(order);
+		const fullNotification = this.buildNotification(
+			{
+				type: NotificationType.NEW_ORDER,
+				title: 'Nueva Orden Recibida',
+				message: `Orden #${orderNum} creada por valor de $${formattedTotal}`,
+				severity: NotificationSeverity.INFO,
+				data: order,
+				actionUrl: `/home/client-orders`
+			},
+			NotificationAudience.ADMIN
+		);
 
-		const fullNotification = this.buildNotification(notification, NotificationAudience.ADMIN);
+		if (socketManager.isInitialized) {
+			socketManager.emitToAdmins(tenantSlug, 'admin-notification', fullNotification);
+			console.log(`🌐 [Socket.io] 🛒 Nueva Venta emitida a admins_${tenantSlug} | Orden #${orderNum}`);
+		}
 
-		// 1. Emisión Supabase
-		await this.broadcast(`tenant:${tenantSlug}:admins`, 'admin-notification', fullNotification);
-		console.log(`⚡ [Supabase Realtime] 🔄 Notificación de Orden #${orderNum} (${updateType}) emitida a [tenant:${tenantSlug}:admins]`);
+		PushNotificationService.sendAdminPushNotification({
+			tenantSlug,
+			title: `¡Nueva Venta! 🛒 #${orderNum}`,
+			body: `${buyerName} compró por $ ${formattedTotal}`,
+			channelId: 'store_orders',
+			data: { orderId: String(order._id), orderNumber: orderNum, type: 'new_order' }
+		});
+	}
 
-		// 2. Disparo Push a Móvil
+	notifyOrderUpdatedToAdmins(
+		tenantSlug: string,
+		order: any,
+		updateType: 'payment' | 'shipping' = 'payment'
+	): void {
+		const { orderNum, formattedTotal } = this.formatOrderMeta(order);
+		const fullNotification = this.buildNotification(
+			{
+				type: NotificationType.ORDER_STATUS_CHANGED,
+				title: updateType === 'payment' ? 'Pago Actualizado' : 'Envio Actualizado',
+				message: `La orden #${orderNum} ha cambiado de estado.`,
+				severity: NotificationSeverity.SUCCESS,
+				data: order,
+				actionUrl: `/home/client-orders`
+			},
+			NotificationAudience.ADMIN
+		);
+
+		if (socketManager.isInitialized) {
+			socketManager.emitToAdmins(tenantSlug, 'admin-notification', fullNotification);
+			console.log(`🌐 [Socket.io] 🔄 Orden #${orderNum} (${updateType}) emitida a admins_${tenantSlug}`);
+		}
+
 		if (updateType === 'payment') {
 			const paymentStatus = order.paymentInfo?.status || order.paymentStatus;
 			const normalizedStatus = String(paymentStatus || '').toLowerCase();
@@ -305,32 +176,26 @@ export class SupabaseRealtimeService implements IRealtimeService {
 				data: { orderId: String(order._id), orderNumber: orderNum, type: 'order_status_changed' }
 			});
 		}
-
-		// 3. Emisión simultánea a Socket.io si hay conexiones de socket activas
-		if (socketManager.isInitialized) {
-			socketManager.emitToAdmins(tenantSlug, 'admin-notification', fullNotification);
-			console.log(`🌐 [Socket.io] 🔄 Notificación de Orden #${orderNum} (${updateType}) emitida a admins_${tenantSlug}`);
-		}
 	}
 
-	async notifyReceiptUploadedToAdmins(tenantSlug: string, order: any): Promise<void> {
-		const total = order.finance?.total ?? order.total ?? 0;
-		const orderNum = order.orderNumber || (order._id ? String(order._id).slice(-6) : '');
-		const formattedTotal = new Intl.NumberFormat('es-AR').format(total);
+	notifyReceiptUploadedToAdmins(tenantSlug: string, order: any): void {
+		const { orderNum, formattedTotal } = this.formatOrderMeta(order);
+		const fullNotification = this.buildNotification(
+			{
+				type: NotificationType.ORDER_STATUS_CHANGED,
+				title: '🧾 Comprobante de Pago Cargado',
+				message: `El cliente cargó un comprobante de pago para la orden #${orderNum}.`,
+				severity: NotificationSeverity.INFO,
+				data: order,
+				actionUrl: `/home/client-orders`
+			},
+			NotificationAudience.ADMIN
+		);
 
-		const notification: CreateAdminNotificationDto = {
-			type: NotificationType.ORDER_STATUS_CHANGED,
-			title: '🧾 Comprobante de Pago Cargado',
-			message: `El cliente cargó un comprobante de pago para la orden #${orderNum}.`,
-			severity: NotificationSeverity.INFO,
-			data: order,
-			actionUrl: `/home/client-orders`
-		};
-
-		const fullNotification = this.buildNotification(notification, NotificationAudience.ADMIN);
-
-		await this.broadcast(`tenant:${tenantSlug}:admins`, 'admin-notification', fullNotification);
-		console.log(`⚡ [Supabase Realtime] 📄 Comprobante subido emitido a [tenant:${tenantSlug}:admins] | Orden #${orderNum}`);
+		if (socketManager.isInitialized) {
+			socketManager.emitToAdmins(tenantSlug, 'admin-notification', fullNotification);
+			console.log(`🌐 [Socket.io] 📄 Comprobante subido emitido a admins_${tenantSlug} | Orden #${orderNum}`);
+		}
 
 		PushNotificationService.sendAdminPushNotification({
 			tenantSlug,
@@ -339,32 +204,28 @@ export class SupabaseRealtimeService implements IRealtimeService {
 			channelId: 'store_orders',
 			data: { orderId: String(order._id), orderNumber: orderNum, type: 'receipt_uploaded' }
 		});
-
-		// 3. Emisión simultánea a Socket.io si hay conexiones de socket activas
-		if (socketManager.isInitialized) {
-			socketManager.emitToAdmins(tenantSlug, 'admin-notification', fullNotification);
-			console.log(`🌐 [Socket.io] 📄 Comprobante subido emitido a admins_${tenantSlug} | Orden #${orderNum}`);
-		}
 	}
 
-	async notifyAdminAlert(
+	notifyAdminAlert(
 		title: string,
 		message: string,
 		severity: NotificationSeverity = NotificationSeverity.INFO,
 		tenantSlug?: string
-	): Promise<void> {
-		const notification: CreateAdminNotificationDto = {
-			type: NotificationType.SYSTEM_ALERT,
-			title,
-			message,
-			severity
-		};
+	): void {
+		const fullNotification = this.buildNotification(
+			{
+				type: NotificationType.SYSTEM_ALERT,
+				title,
+				message,
+				severity
+			},
+			NotificationAudience.ADMIN
+		);
 
-		const fullNotification = this.buildNotification(notification, NotificationAudience.ADMIN);
-		const topic = tenantSlug ? `tenant:${tenantSlug}:admins` : 'global:admins';
-
-		await this.broadcast(topic, 'admin-notification', fullNotification);
-		console.log(`⚡ [Supabase Realtime] 🚨 Alerta de Sistema emitida a [${topic}]: "${title}" - ${message}`);
+		if (socketManager.isInitialized) {
+			socketManager.emitToAdmins(tenantSlug || '', 'admin-notification', fullNotification);
+			console.log(`🌐 [Socket.io] 🚨 Alerta emitida a admins_${tenantSlug || 'global'}: "${title}"`);
+		}
 
 		if (tenantSlug) {
 			PushNotificationService.sendAdminPushNotification({
@@ -375,12 +236,6 @@ export class SupabaseRealtimeService implements IRealtimeService {
 				data: { type: 'system_alert', severity }
 			});
 		}
-
-		// 3. Emisión simultánea a Socket.io si hay conexiones de socket activas
-		if (socketManager.isInitialized) {
-			socketManager.emitToAdmins(tenantSlug || '', 'admin-notification', fullNotification);
-			console.log(`🌐 [Socket.io] 🚨 Alerta de Sistema emitida a admins_${tenantSlug || 'global'}`);
-		}
 	}
 
 	async notifyClient(
@@ -389,53 +244,42 @@ export class SupabaseRealtimeService implements IRealtimeService {
 		models?: TenantModels,
 		tenantSlug?: string
 	): Promise<void> {
-		let notificationId = `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+		let savedId: string | undefined;
 
 		if (models) {
 			const savedNotif = await NotificationService.createClientNotification(models, userId, notificationPayload);
 			if (savedNotif) {
-				notificationId = savedNotif._id.toString();
+				savedId = savedNotif._id.toString();
 			}
 		}
 
-		const finalNotification: INotification = {
-			id: notificationId,
-			timestamp: new Date(),
-			read: false,
-			audience: NotificationAudience.USER,
-			...notificationPayload
-		};
-
-		const slug = tenantSlug;
-		if (!slug) {
+		if (!tenantSlug) {
 			throw new Error('[RealtimeService] tenantSlug es obligatorio para notificar a clientes');
 		}
-		await this.broadcast(`tenant:${slug}:client:${userId}`, 'client-notification', finalNotification);
-		console.log(`⚡ [Supabase Realtime] 👤 Notificación emitida a cliente [tenant:${slug}:client:${userId}]: "${notificationPayload.title}"`);
+		const slug = tenantSlug.trim().toLowerCase();
+
+		const finalNotification = this.buildNotification(notificationPayload, NotificationAudience.USER, savedId);
 
 		if (socketManager.isInitialized) {
 			socketManager.emitToClient(slug, userId, 'client-notification', finalNotification);
+			console.log(`🌐 [Socket.io] 👤 Notificación emitida a [client_${slug}_${userId}]`);
 		}
 	}
 
-	async notifyAllClients(
-		notificationPayload: CreateClientNotificationDto,
-		tenantSlug?: string
-	): Promise<void> {
-		const finalNotification = this.buildNotification(notificationPayload, NotificationAudience.USER);
-		const slug = tenantSlug;
-		if (!slug) {
+	notifyAllClients(notificationPayload: CreateClientNotificationDto, tenantSlug?: string): void {
+		if (!tenantSlug) {
 			throw new Error('[RealtimeService] tenantSlug es obligatorio para notificar a clientes');
 		}
-		await this.broadcast(`tenant:${slug}:clients:all`, 'client-notification', finalNotification);
-		console.log(`⚡ [Supabase Realtime] 👥 Notificación masiva emitida a [tenant:${slug}:clients:all]`);
+		const slug = tenantSlug.trim().toLowerCase();
+		const finalNotification = this.buildNotification(notificationPayload, NotificationAudience.USER);
 
 		if (socketManager.isInitialized) {
 			socketManager.emitToAllClients(slug, 'client-notification', finalNotification);
+			console.log(`🌐 [Socket.io] 👥 Notificación masiva emitida a [clients_${slug}]`);
 		}
 	}
 
-	async broadcastScannedBarcode(
+	broadcastScannedBarcode(
 		tenantSlug: string,
 		scanData: {
 			barcode: string;
@@ -447,47 +291,13 @@ export class SupabaseRealtimeService implements IRealtimeService {
 			deviceName?: string;
 			terminalId?: string;
 		}
-	): Promise<void> {
-		const eventPayload = {
-			barcode: scanData.barcode.trim(),
-			product: scanData.product || null,
-			matchedVariant: scanData.matchedVariant || null,
-			quantity: scanData.quantity || 1,
-			scannedBy: scanData.scannedBy || 'REST Fallback',
-			deviceId: scanData.deviceId || 'rest-api',
-			deviceName: scanData.deviceName || 'Móvil (REST)',
-			terminalId: scanData.terminalId || null,
-			timestamp: new Date().toISOString()
-		};
-
-		if (scanData.terminalId) {
-			const terminalTopic = `tenant:${tenantSlug}:terminal:${scanData.terminalId.trim().toLowerCase()}`;
-			await this.broadcast(terminalTopic, 'pos:barcode_scanned', eventPayload);
-		}
-
-		await this.broadcast(`tenant:${tenantSlug}:pos`, 'pos:barcode_scanned', eventPayload);
-		await this.broadcast(`tenant:${tenantSlug}:admins`, 'pos:barcode_scanned', eventPayload);
-		console.log(`⚡ [Supabase Realtime] 📷 Barcode [${scanData.barcode}] transmitido a terminal [${scanData.terminalId || 'GLOBAL'}]`);
-
+	): void {
 		if (socketManager.isInitialized) {
 			socketManager.broadcastScannedBarcode(tenantSlug, scanData);
 		}
 	}
 
-	async notifyScannerStatus(tenantSlug: string, terminalId?: string): Promise<void> {
-		const payload = {
-			connected: true,
-			scannersCount: 1,
-			terminalId: terminalId || null,
-			timestamp: new Date().toISOString()
-		};
-
-		if (terminalId) {
-			await this.broadcast(`tenant:${tenantSlug}:terminal:${terminalId.trim().toLowerCase()}`, 'pos:scanner_status', payload);
-		}
-		await this.broadcast(`tenant:${tenantSlug}:pos`, 'pos:scanner_status', payload);
-		await this.broadcast(`tenant:${tenantSlug}:admins`, 'pos:scanner_status', payload);
-
+	notifyScannerStatus(tenantSlug: string, terminalId?: string): void {
 		if (socketManager.isInitialized) {
 			socketManager.notifyScannerStatus(tenantSlug, terminalId);
 		}
@@ -501,34 +311,54 @@ export class SupabaseRealtimeService implements IRealtimeService {
 	}
 }
 
+/* ============================================================================
+ * @deprecated LEGACY: SupabaseRealtimeService (Desactivado por migración fuera de Vercel)
+ * Se conserva comentado únicamente como referencia histórica en caso de rollback.
+ *
+ * export class SupabaseRealtimeService implements IRealtimeService {
+ * 	private get supabaseUrl(): string {
+ * 		return (process.env.SUPABASE_URL || '').replace(/\/$/, '');
+ * 	}
+ * 	private get serviceRoleKey(): string {
+ * 		return (
+ * 			process.env.SUPABASE_SERVICE_ROLE_KEY ||
+ * 			process.env.SUPABASE_SECRET_KEY ||
+ * 			process.env.SUPABASE_SERVICE_KEY ||
+ * 			process.env.SUPABASE_KEY ||
+ * 			''
+ * 		);
+ * 	}
+ * 	private async broadcast(topic: string, event: string, payload: any): Promise<boolean> {
+ * 		if (!this.supabaseUrl || !this.serviceRoleKey) return false;
+ * 		const url = `${this.supabaseUrl}/realtime/v1/api/broadcast`;
+ * 		const response = await fetch(url, {
+ * 			method: 'POST',
+ * 			headers: {
+ * 				'Content-Type': 'application/json',
+ * 				'apikey': this.serviceRoleKey,
+ * 				'Authorization': `Bearer ${this.serviceRoleKey}`,
+ * 				'User-Agent': 'Vexx-Backend-Realtime/1.0'
+ * 			},
+ * 			body: JSON.stringify({ messages: [{ topic: topic.trim().toLowerCase(), event, payload }] })
+ * 		});
+ * 		return response.ok;
+ * 	}
+ * }
+ * ============================================================================ */
+
 /**
- * Factory / Dispatcher inteligente:
- * Selecciona la implementación según REALTIME_PROVIDER ('supabase' | 'socketio').
- * SupabaseRealtimeService realiza DUAL DISPATCH por diseño:
- * Emite a Supabase Realtime Broadcast (REST) + Push Notification Expo (Móvil) + Socket.io (si está activo).
+ * Dispatcher único de Realtime:
+ * Opera exclusivamente sobre Socket.IO + Expo Push (sin dependencias de Supabase/Vercel).
  */
 class RealtimeServiceDispatcher implements IRealtimeService {
 	private socketService = new SocketRealtimeService();
-	private supabaseService = new SupabaseRealtimeService();
-
-	private get activeService(): IRealtimeService {
-		const provider = (process.env.REALTIME_PROVIDER || '').trim().toLowerCase();
-		if (provider === 'socketio_only') {
-			return this.socketService;
-		}
-		return this.supabaseService;
-	}
 
 	public get providerName(): string {
-		const provider = (process.env.REALTIME_PROVIDER || '').trim().toLowerCase();
-		if (provider === 'socketio_only') {
-			return 'socketio';
-		}
-		return 'supabase_dual';
+		return 'socketio';
 	}
 
 	async notifyNewOrderToAdmins(tenantSlug: string, order: any): Promise<void> {
-		await this.activeService.notifyNewOrderToAdmins(tenantSlug, order);
+		this.socketService.notifyNewOrderToAdmins(tenantSlug, order);
 	}
 
 	async notifyOrderUpdatedToAdmins(
@@ -536,11 +366,11 @@ class RealtimeServiceDispatcher implements IRealtimeService {
 		order: any,
 		updateType: 'payment' | 'shipping' = 'payment'
 	): Promise<void> {
-		await this.activeService.notifyOrderUpdatedToAdmins(tenantSlug, order, updateType);
+		this.socketService.notifyOrderUpdatedToAdmins(tenantSlug, order, updateType);
 	}
 
 	async notifyReceiptUploadedToAdmins(tenantSlug: string, order: any): Promise<void> {
-		await this.activeService.notifyReceiptUploadedToAdmins(tenantSlug, order);
+		this.socketService.notifyReceiptUploadedToAdmins(tenantSlug, order);
 	}
 
 	async notifyAdminAlert(
@@ -549,7 +379,7 @@ class RealtimeServiceDispatcher implements IRealtimeService {
 		severity: NotificationSeverity = NotificationSeverity.INFO,
 		tenantSlug?: string
 	): Promise<void> {
-		await this.activeService.notifyAdminAlert(title, message, severity, tenantSlug);
+		this.socketService.notifyAdminAlert(title, message, severity, tenantSlug);
 	}
 
 	async notifyClient(
@@ -558,14 +388,14 @@ class RealtimeServiceDispatcher implements IRealtimeService {
 		models?: TenantModels,
 		tenantSlug?: string
 	): Promise<void> {
-		await this.activeService.notifyClient(userId, notificationPayload, models, tenantSlug);
+		await this.socketService.notifyClient(userId, notificationPayload, models, tenantSlug);
 	}
 
 	async notifyAllClients(
 		notificationPayload: CreateClientNotificationDto,
 		tenantSlug?: string
 	): Promise<void> {
-		await this.activeService.notifyAllClients(notificationPayload, tenantSlug);
+		this.socketService.notifyAllClients(notificationPayload, tenantSlug);
 	}
 
 	async broadcastScannedBarcode(
@@ -581,15 +411,15 @@ class RealtimeServiceDispatcher implements IRealtimeService {
 			terminalId?: string;
 		}
 	): Promise<void> {
-		await this.activeService.broadcastScannedBarcode(tenantSlug, scanData);
+		this.socketService.broadcastScannedBarcode(tenantSlug, scanData);
 	}
 
 	async notifyScannerStatus(tenantSlug: string, terminalId?: string): Promise<void> {
-		await this.activeService.notifyScannerStatus(tenantSlug, terminalId);
+		this.socketService.notifyScannerStatus(tenantSlug, terminalId);
 	}
 
 	getActiveScanners(tenantSlug: string, terminalId?: string): ActiveScannerInfo[] {
-		return this.activeService.getActiveScanners(tenantSlug, terminalId);
+		return this.socketService.getActiveScanners(tenantSlug, terminalId);
 	}
 }
 

@@ -1,58 +1,62 @@
+import dotenv from 'dotenv';
+import path from 'path';
+import mongoose from 'mongoose';
 import { Role } from '@/interfaces/user.interface';
 import { User } from '@/models/User.model';
-import { UserService } from '@/services/user.service';
-import mongoose from 'mongoose';
 
-const adminUsers = [
-	{
-		name: 'Daniel Larrosa',
-		email: 'larrosadaniel@vura.com.ar',
-		password: '@Unarefacil1'
-	}
-];
+dotenv.config({
+	path: path.resolve(process.cwd(), `.env.${process.env.NODE_ENV || 'development'}`)
+});
 
 const poblateAdminUsers = async () => {
+	const mongoURI = process.env.MONGODB_URI;
+	const adminEmail = process.env.SEED_ADMIN_EMAIL;
+	const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+	const adminName = process.env.SEED_ADMIN_NAME || 'Admin';
+
+	if (!mongoURI) {
+		throw new Error('MONGODB_URI no está definida en las variables de entorno.');
+	}
+	if (!adminEmail || !adminPassword) {
+		throw new Error('SEED_ADMIN_EMAIL y SEED_ADMIN_PASSWORD son obligatorios.');
+	}
+
 	try {
-		// Conectar a MongoDB
-		const mongoURI = 'mongodb+srv://larrosadaniel2894_db_user:okpGpKg5sqj8AxRc@nexocommersedb-prod.uxj0bni.mongodb.net';
 		await mongoose.connect(mongoURI);
 		console.log('✅ Conectado a MongoDB');
 
-		// Limpiar la colección existente
-		// await User.deleteMany({ role: 'admin' });
-		// console.log('🗑️ Productos existentes eliminados');
-
-		// Insertar productos de prueba
-		for (const AdminUser of adminUsers) {
-			const user = await User.findOne({ email: AdminUser.email }).select('+password');
-			if (user) {
-				user.password = AdminUser.password;
-				user.role = Role.admin;
-				await user.save();
-				continue;
-			}
-			const newUser = new User(AdminUser);
+		const user = await User.findOne({ email: adminEmail }).select('+password');
+		if (user) {
+			user.password = adminPassword;
+			user.role = Role.admin;
+			await user.save();
+		} else {
+			const newUser = new User({
+				name: adminName,
+				email: adminEmail,
+				password: adminPassword,
+				role: Role.admin
+			});
 			await newUser.save();
 		}
 
-		// Mostrar algunos usuarios creados
 		console.log('\n📦 Usuarios creados:');
 		const createdAdminUsers = await User.find({ role: Role.admin });
-		createdAdminUsers.forEach((user, index) => {
-			console.log(`${index + 1}. ${user.name}; ${user.email}; ${user.role}`);
+		createdAdminUsers.forEach((createdUser, index) => {
+			console.log(`${index + 1}. ${createdUser.name}; ${createdUser.email}; ${createdUser.role}`);
 		});
 
 		console.log('\n🎉 ¡Base de datos poblada exitosamente!');
 	} catch (error) {
 		console.error('❌ Error al poblar la base de datos:', error);
+		process.exitCode = 1;
 	} finally {
 		await mongoose.connection.close();
 		console.log('🔒 Conexión cerrada');
-		process.exit(0);
+		process.exit();
 	}
 };
 
-// Ejecutar solo si se llama directamente
 if (require.main === module) {
 	poblateAdminUsers();
 }
